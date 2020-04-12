@@ -1,4 +1,6 @@
+import { IWobserverPlugin } from '../../wobserver.plugins/iwobserver.plugin'
+
 export interface IWobserver{
     addPC(pc: RTCPeerConnection): void
-    addPlugin(): void
+    addPlugin(plugin: IWobserverPlugin): void
 }
