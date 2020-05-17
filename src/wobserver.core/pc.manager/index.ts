@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { IWobPeerConnection } from '../dto/wob.peer.connection'
+import { IWobPeerConnection } from '../dto/iwob.peer.connection'
 class PCManager {
     private readonly pcList!: IWobPeerConnection[]
 
