@@ -1,10 +1,9 @@
 import { interval, Observable, Subscription } from 'rxjs'
-import { IIntervalWorker } from './interface/index'
 
-class IntervalWorker implements IIntervalWorker {
+class IntervalWorker {
     private observable!: Observable<number>
 
-    public IntervalWorker(intervalInMs: number = 1000) {
+    constructor(intervalInMs: number = 1000) {
         this.observable = interval(intervalInMs)
     }
 

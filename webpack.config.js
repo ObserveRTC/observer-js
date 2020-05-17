@@ -5,8 +5,7 @@ const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 
 module.exports = {
     entry: {
-        'wobserver-lib': './build/index.js',
-        'wobserver-lib.min': './build/index.js',
+        'wobserver-lib': './build/index.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),

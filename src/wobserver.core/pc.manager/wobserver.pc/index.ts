@@ -8,14 +8,20 @@ class WobserverPC {
     constructor(id: string, pc: RTCPeerConnection) {
         this.id = id
         this.pc = pc
-    }
-
-    public observer() {
-        console.warn('working ', new Date(), this.id)
+        this.observer = this.observer.bind(this)
     }
 
     public addSubscriber(subscriber: Subscription) {
         this.subscriber = subscriber
+    }
+
+    public removeSubscriber() {
+        this.subscriber?.unsubscribe()
+    }
+
+
+    public observer() {
+        console.warn('working ', new Date(), this.id)
     }
 }
 
