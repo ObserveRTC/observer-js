@@ -26,7 +26,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
-    "build-library": "webpack --mode=development"
+    "build-library": "npm run build && webpack --mode=development"
   },
   "license": "MIT"
 }
