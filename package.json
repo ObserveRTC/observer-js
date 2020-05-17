@@ -6,6 +6,7 @@
   "dependencies": {
     "loglevel": "^1.6.7",
     "loglevel-plugin-prefix": "^0.8.4",
+    "rxjs": "^6.5.5",
     "uuid": "^8.0.0"
   },
   "devDependencies": {
