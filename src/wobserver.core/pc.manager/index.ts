@@ -1,22 +1,17 @@
+import { Subscription } from 'rxjs'
 import { v4 as uuidv4 } from 'uuid'
 import IntervalWorker from '../interval.worker/index'
-import { IWobserverPeerConnectionDto } from './interface'
+import WobserverPC from './wobserver.pc'
 
 class PCManager {
     private readonly intervalWorker: IntervalWorker = new IntervalWorker()
-    private readonly pcList!: IWobserverPeerConnectionDto[]
+    private readonly pcList!: WobserverPC[]
 
-    public add(pc: RTCPeerConnection) {
-        const curPC = {
-            id: uuidv4(),
-            pc
-        } as IWobserverPeerConnectionDto
+    public addPC(pc: RTCPeerConnection) {
+        const curPC = new WobserverPC(uuidv4(), pc)
+        const subscription = this.intervalWorker.subscribe(curPC.observer)
+        curPC.addSubscriber(subscription)
         this.pcList.push(curPC)
-
-    }
-
-    private observer() {
-        console.warn('I am a observer', new Date())
     }
 }
 

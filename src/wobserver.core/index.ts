@@ -12,7 +12,7 @@ class Wobserver implements IWobserver {
     }
 
     public addPC(pc: RTCPeerConnection): void {
-        this.pcManager.add(pc)
+        this.pcManager.addPC(pc)
     }
 
     public addPlugin(plugin: IWobserverPlugin): void {
