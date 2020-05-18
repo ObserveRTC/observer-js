@@ -17,7 +17,7 @@ class Wobserver {
     }
 
     public addPlugin(plugin: IWobserverPlugin): void {
-        // pass
+        this.pcManager.attachPlugin(plugin)
     }
 
 }

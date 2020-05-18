@@ -5,6 +5,10 @@ class StatsParser implements IWobserverPlugin{
         // not implemented
     }
 
+    execute(): void {
+        console.warn('i am executing')
+    }
+
 }
 
 export default StatsParser
