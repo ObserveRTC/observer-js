@@ -1,3 +1,4 @@
+import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import { WobserverPlugin } from '../index'
 
 class StatsParser extends WobserverPlugin {
@@ -5,9 +6,9 @@ class StatsParser extends WobserverPlugin {
     public async receiveStats(sample: any): Promise<any> {
         // not implemented
     }
-    public async execute(pc: RTCPeerConnection): Promise<any> {
-        const receiverStats = await this.receiverStats(pc)
-        const senderStats = await this.senderStats(pc)
+    public async execute(wobserverPC: WobserverPC): Promise<any> {
+        const receiverStats = await this.receiverStats(wobserverPC?.getPc())
+        const senderStats = await this.senderStats(wobserverPC?.getPc())
         return {
             receiverStats,
             senderStats,

@@ -9,9 +9,13 @@ class WobserverPC {
         this.pc = pc
     }
 
+    public getPc() {
+        return this.pc
+    }
+
     public async execute(pluginList: WobserverPlugin[]): Promise<any> {
         for (const curPlugin of pluginList) {
-            const result = await curPlugin?.execute(this.pc)
+            const result = await curPlugin?.execute(this)
             console.warn('--->', result)
         }
     }
