@@ -2,10 +2,7 @@ import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import { WobserverPlugin } from '../index'
 
 class StatsParser extends WobserverPlugin {
-
-    public async receiveStats(sample: any): Promise<any> {
-        // not implemented
-    }
+    private readonly optionals = ['certificate', 'codec'] as string[]
     public async execute(wobserverPC: WobserverPC): Promise<any> {
         const receiverStats = await this.receiverStats(wobserverPC?.getPc())
         const senderStats = await this.senderStats(wobserverPC?.getPc())
@@ -27,7 +24,7 @@ class StatsParser extends WobserverPlugin {
                 statsList.push(value)
             }
         }
-        return statsList
+        return statsList.filter( (item: RTCStats) => !this.optionals.includes(item?.type) )
     }
 
     private async senderStats(pc: RTCPeerConnection): Promise<any> {
@@ -42,7 +39,7 @@ class StatsParser extends WobserverPlugin {
                 statsList.push(value)
             }
         }
-        return statsList
+        return statsList.filter( (item: RTCStats) => !this.optionals.includes(item?.type) )
     }
 
 }
