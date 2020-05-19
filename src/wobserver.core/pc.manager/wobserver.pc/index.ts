@@ -11,6 +11,7 @@ class WobserverPC {
         this.id = id
         this.pc = pc
         this.observer = this.observer.bind(this)
+        this.resolveAsync = this.resolveAsync.bind(this)
     }
 
     public addSubscriber(subscriber: Subscription) {
@@ -27,12 +28,14 @@ class WobserverPC {
 
     public observer() {
         console.warn('working ', new Date(), this.id)
-        console.warn('-->', this.plugins[0])
-        this.plugins?.[0]?.execute(this.pc).then( stats => {
-            console.warn('->', stats)
-        }).catch(err => {
-            console.warn('->', err)
+        this.resolveAsync().catch(err => {
+            console.error(err)
         })
+    }
+
+    private async resolveAsync(): Promise<any> {
+        const result = await this.plugins?.[0]?.execute(this.pc)
+        console.warn('--->', result)
     }
 }
 

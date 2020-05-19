@@ -6,29 +6,36 @@ class StatsParser implements IWobserverPlugin{
     }
 
     async execute(pc: RTCPeerConnection): Promise<any> {
-        const senderStats = await this.senderStats(pc)
         const receiverStats = await this.receiverStats(pc)
-    }
-
-
-    private async senderStats(pc: RTCPeerConnection) {
-        const senders = pc?.getSenders()
-        for (const curSender of senders) {
-            const stats: any = await curSender.getStats()
-            for (const [key, value] of stats?.entries()) {
-                console.warn('->', 'sender stats', key, value)
-            }
+        const senderStats = await this.senderStats(pc)
+        return {
+            receiverStats,
+            senderStats,
         }
     }
 
     private async receiverStats(pc: RTCPeerConnection) {
         const receivers = pc?.getReceivers()
+        const statsList = []
         for (const curReceiver of receivers) {
             const stats: any = await curReceiver.getStats()
-            for (const [key, value] of stats?.entries()) {
-                console.warn('->', 'sender stats', key, value)
+            for (const value of stats?.values()) {
+                statsList.push(value)
             }
         }
+        return statsList
+    }
+
+    private async senderStats(pc: RTCPeerConnection): Promise<any> {
+        const senders = pc?.getSenders()
+        const statsList = []
+        for (const curSender of senders) {
+            const stats: any = await curSender.getStats()
+            for (const value of stats?.values()) {
+                statsList.push(value)
+            }
+        }
+        return statsList
     }
 
 }
