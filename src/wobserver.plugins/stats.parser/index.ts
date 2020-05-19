@@ -1,11 +1,9 @@
-import { IWobserverPlugin } from '../iwobserver.plugin'
-
-class StatsParser implements IWobserverPlugin{
-    receiveStats(sample: any): void {
+import { WobserverPlugin } from '../index'
+class StatsParser implements WobserverPlugin{
+    public async receiveStats(sample: any): Promise<any> {
         // not implemented
     }
-
-    async execute(pc: RTCPeerConnection): Promise<any> {
+    public async execute(pc: RTCPeerConnection): Promise<any> {
         const receiverStats = await this.receiverStats(pc)
         const senderStats = await this.senderStats(pc)
         return {
@@ -14,7 +12,7 @@ class StatsParser implements IWobserverPlugin{
         }
     }
 
-    private async receiverStats(pc: RTCPeerConnection) {
+    private async receiverStats(pc: RTCPeerConnection): Promise<any> {
         const receivers = pc?.getReceivers()
         const statsList = []
         for (const curReceiver of receivers) {

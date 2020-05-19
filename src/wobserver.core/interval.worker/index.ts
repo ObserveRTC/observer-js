@@ -12,7 +12,7 @@ class IntervalWorker {
         return subscription
     }
 
-    public unsubscribe(subscriber: Subscription): void {
+    public unsubscribe(subscriber?: Subscription): void {
         subscriber?.unsubscribe()
     }
 

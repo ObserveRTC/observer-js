@@ -1,21 +1,24 @@
 import { v4 as uuidv4 } from 'uuid'
-import { IWobserverPlugin } from '../../wobserver.plugins/iwobserver.plugin'
-import IntervalWorker from '../interval.worker/index'
+import logger from '../../wobserver.logger'
+import { WobserverPlugin } from '../../wobserver.plugins'
 import WobserverPC from './wobserver.pc'
 
 class PCManager {
     private pcList: WobserverPC[] = []
-
-    public addPC(pc: RTCPeerConnection, intervalWorker: IntervalWorker) {
+    public addPC(pc: RTCPeerConnection) {
         const curPC = new WobserverPC(uuidv4(), pc)
-        const subscription = intervalWorker?.subscribe(curPC.observer)
-        curPC.addSubscriber(subscription)
         this.pcList.push(curPC)
     }
 
-    public attachPlugin(plugin: IWobserverPlugin) {
+    public attachPlugin(plugin: WobserverPlugin) {
         for (const curPc of this.pcList) {
             curPc.attachPlugin(plugin)
+        }
+    }
+
+    public worker() {
+        for (const curPc of this.pcList) {
+            curPc.execute().catch(err => logger.error(err))
         }
     }
 }

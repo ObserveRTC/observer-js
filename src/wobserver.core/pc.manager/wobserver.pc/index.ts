@@ -1,41 +1,25 @@
-import { Subscription } from 'rxjs'
-import { IWobserverPlugin } from '../../../wobserver.plugins/iwobserver.plugin'
+import { WobserverPlugin } from '../../../wobserver.plugins'
 
 class WobserverPC {
     private readonly id!: string
-    private pc!: RTCPeerConnection
-    private subscriber: Subscription | undefined
-    private plugins: IWobserverPlugin[] = []
+    private readonly pc!: RTCPeerConnection
+    private plugins: WobserverPlugin[] = []
 
     constructor(id: string, pc: RTCPeerConnection) {
         this.id = id
         this.pc = pc
-        this.observer = this.observer.bind(this)
-        this.resolveAsync = this.resolveAsync.bind(this)
     }
 
-    public addSubscriber(subscriber: Subscription) {
-        this.subscriber = subscriber
-    }
-
-    public removeSubscriber() {
-        this.subscriber?.unsubscribe()
-    }
-
-    public attachPlugin(plugin: IWobserverPlugin) {
+    public attachPlugin(plugin: WobserverPlugin) {
         this.plugins?.push(plugin)
     }
 
-    public observer() {
-        console.warn('working ', new Date(), this.id)
-        this.resolveAsync().catch(err => {
-            console.error(err)
-        })
-    }
-
-    private async resolveAsync(): Promise<any> {
-        const result = await this.plugins?.[0]?.execute(this.pc)
-        console.warn('--->', result)
+    public async execute(): Promise<any> {
+        console.warn('->', this.id)
+        /*for (const curPlugin of this.plugins) {
+            const result = await curPlugin?.execute(this.pc)
+            console.warn('--->', result)
+        }*/
     }
 }
 
