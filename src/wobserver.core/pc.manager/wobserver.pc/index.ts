@@ -27,6 +27,12 @@ class WobserverPC {
 
     public observer() {
         console.warn('working ', new Date(), this.id)
+        console.warn('-->', this.plugins[0])
+        this.plugins?.[0]?.execute(this.pc).then( stats => {
+            console.warn('->', stats)
+        }).catch(err => {
+            console.warn('->', err)
+        })
     }
 }
 

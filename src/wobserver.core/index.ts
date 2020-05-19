@@ -1,5 +1,6 @@
 import logger from '../wobserver.logger'
 import { IWobserverPlugin } from '../wobserver.plugins/iwobserver.plugin'
+import StatsParser from './../wobserver.plugins/stats.parser/index'
 import IntervalWorker from './interval.worker'
 import PCManager from './pc.manager'
 
@@ -18,6 +19,11 @@ class Wobserver {
 
     public addPlugin(plugin: IWobserverPlugin): void {
         this.pcManager.attachPlugin(plugin)
+    }
+
+    public addPluginManual(): void {
+        const statsParser = new StatsParser()
+        this.pcManager.attachPlugin(statsParser)
     }
 
 }
