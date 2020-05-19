@@ -9,7 +9,7 @@ class Wobserver {
     private intervalWorker = new IntervalWorker(2000)
     private subscriber: Subscription | undefined
 
-    public initialize() {
+    constructor() {
         // todo add more logic here
         logger.debug('initialized')
     }
@@ -25,7 +25,8 @@ class Wobserver {
     public startWorker() {
         // remove any existing running worker
         this.stopWorker()
-        this.subscriber = this.intervalWorker.subscribe(this.pcManager.worker.bind(this.pcManager))
+        const worker = this.pcManager.worker.bind(this.pcManager)
+        this.subscriber = this.intervalWorker.subscribe(worker)
     }
 
     public stopWorker() {
