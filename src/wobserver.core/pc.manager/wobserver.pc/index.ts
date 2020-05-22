@@ -28,10 +28,6 @@ class WobserverPC {
             }
         }
     }
-
-    public getStats(): any {
-        return this.statsQueue.pool()
-    }
 }
 
 export default WobserverPC
