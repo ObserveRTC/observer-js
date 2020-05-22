@@ -1,5 +1,4 @@
 import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
-import TimeUtils from '../../wobserver.helper/time.utils/time.utils'
 import { WobserverPlugin } from '../index'
 
 class StatsParser extends WobserverPlugin {
