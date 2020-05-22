@@ -6,7 +6,7 @@ import PCManager from './pc.manager'
 
 class Wobserver {
     private pcManager: PCManager = new PCManager()
-    private intervalWorker = new IntervalWorker(2000)
+    private intervalWorker = new IntervalWorker(1000)
     private subscriber: Subscription | undefined
 
     constructor() {
