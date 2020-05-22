@@ -17,14 +17,19 @@ class WobserverPC {
         return this.pc
     }
 
+    public getPcId() {
+        return this.id
+    }
+
+    public getStatsQueue() {
+        return this.statsQueue
+    }
+
     public async execute(pluginList: WobserverPlugin[]): Promise<any> {
         for (const curPlugin of pluginList) {
             const result = await curPlugin?.execute(this)
-            if (result && curPlugin instanceof StatsParser) {
+            if (curPlugin instanceof StatsParser && result) {
                 this.statsQueue.add(result)
-                console.warn(result)
-            } else {
-                logger.warn('ignore plugin execution. something is not right!')
             }
         }
     }
