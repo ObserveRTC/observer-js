@@ -1,7 +1,5 @@
-import logger from '../../../wobserver.logger'
 import { WobserverPlugin } from '../../../wobserver.plugins'
 import StatsParser from '../../../wobserver.plugins/stats.parser'
-import StatsSender from '../../../wobserver.plugins/stats.sender'
 import Queue from '../../wobserver.datastructure/queue'
 
 class WobserverPC {
@@ -32,10 +30,10 @@ class WobserverPC {
             if (curPlugin instanceof StatsParser && result) {
                 this.statsQueue.add(result)
             }
-            if (curPlugin instanceof StatsSender && result) {
-                await curPlugin.execute(result)
-            }
         }
+    }
+    public dispose() {
+        this.statsQueue.clear()
     }
 }
 

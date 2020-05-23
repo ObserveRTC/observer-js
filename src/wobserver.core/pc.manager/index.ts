@@ -26,6 +26,14 @@ class PCManager {
             curPc.execute(this.plugins).catch(err => logger.error(err))
         }
     }
+
+    public dispose() {
+        for (const curPc of this.pcList) {
+            curPc?.dispose()
+        }
+        this.pcList = []
+        this.plugins = []
+    }
 }
 
 export default PCManager

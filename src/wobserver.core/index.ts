@@ -25,12 +25,17 @@ class Wobserver {
     public startWorker() {
         // remove any existing running worker
         this.stopWorker()
+
         const worker = this.pcManager.worker.bind(this.pcManager)
         this.subscriber = this.intervalWorker.subscribe(worker)
     }
 
     public stopWorker() {
         this.intervalWorker.unsubscribe(this.subscriber)
+    }
+
+    public dispose() {
+        this.pcManager.dispose()
     }
 
 }

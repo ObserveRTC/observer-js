@@ -2,7 +2,7 @@ import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import { WobserverPlugin } from '../index'
 
 class StatsParser extends WobserverPlugin {
-    private readonly optionals = ['certificate', 'codec'] as string[]
+    private readonly optionals = ['certificate', 'codec', 'transport'] as string[]
     public async execute(wobserverPC: WobserverPC): Promise<any> {
         const [receiverStats, senderStats] = await Promise.all([
             this.receiverStats(wobserverPC?.getPc()),

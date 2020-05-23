@@ -1,5 +1,5 @@
 class Queue {
-    private readonly q: any[] = []
+    private q: any[] = []
     private readonly maxSize = 300
     public add(value: any) {
         this.q.push(value)
@@ -24,6 +24,10 @@ class Queue {
 
     public size(): number {
         return this.q.length
+    }
+
+    public clear() {
+        this.q = []
     }
 }
 
