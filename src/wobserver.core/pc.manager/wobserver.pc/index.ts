@@ -1,6 +1,7 @@
 import logger from '../../../wobserver.logger'
 import { WobserverPlugin } from '../../../wobserver.plugins'
 import StatsParser from '../../../wobserver.plugins/stats.parser'
+import StatsSender from '../../../wobserver.plugins/stats.sender'
 import Queue from '../../wobserver.datastructure/queue'
 
 class WobserverPC {
@@ -30,6 +31,9 @@ class WobserverPC {
             const result = await curPlugin?.execute(this)
             if (curPlugin instanceof StatsParser && result) {
                 this.statsQueue.add(result)
+            }
+            if (curPlugin instanceof StatsSender && result) {
+                await curPlugin.execute(result)
             }
         }
     }
