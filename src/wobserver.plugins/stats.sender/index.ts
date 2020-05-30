@@ -11,7 +11,7 @@ class StatsSender extends WobserverPlugin {
         if (!serverAddress) {
             throw new Error('websocker server address is required')
         }
-        // this.webSocket = new WebSocket(serverAddress)
+        this.webSocket = new WebSocket(serverAddress)
     }
 
     async execute(pc: WobserverPC): Promise<any> {
@@ -32,7 +32,7 @@ class StatsSender extends WobserverPlugin {
             return
         }
         logger.warn('sending message to server', payload)
-        // this.webSocket?.send(JSON.stringify(payload))
+        this.webSocket?.send(JSON.stringify(payload))
     }
 }
 
