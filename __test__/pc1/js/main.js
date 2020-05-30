@@ -10,11 +10,20 @@
 
 const startButton = document.getElementById('startButton');
 const callButton = document.getElementById('callButton');
+const startCollectionButton = document.getElementById('startCollectionButton');
+const stopCollectionButton = document.getElementById('stopCollectionButton');
 const hangupButton = document.getElementById('hangupButton');
+
+
 callButton.disabled = true;
+startCollectionButton.disabled = true;
+stopCollectionButton.disabled = true;
 hangupButton.disabled = true;
+
 startButton.addEventListener('click', start);
 callButton.addEventListener('click', call);
+startCollectionButton.addEventListener('click', startCollection);
+stopCollectionButton.addEventListener('click', stopCollection);
 hangupButton.addEventListener('click', hangup);
 
 let startTime;
@@ -70,6 +79,20 @@ async function start() {
   }
 }
 
+async function startCollection() {
+  console.warn('i am called', 'start collection')
+  startCollectionButton.disabled = true;
+  stopCollectionButton.disabled = false;
+  integrator.startCollection()
+}
+
+async function stopCollection() {
+  console.warn('i am called', 'stop collection')
+  startCollectionButton.disabled = false;
+  stopCollectionButton.disabled = true;
+  integrator.stopCollection()
+}
+
 function getSelectedSdpSemantics() {
   const sdpSemanticsSelect = document.querySelector('#sdpSemantics');
   const option = sdpSemanticsSelect.options[sdpSemanticsSelect.selectedIndex];
@@ -78,6 +101,8 @@ function getSelectedSdpSemantics() {
 
 async function call() {
   callButton.disabled = true;
+  startCollectionButton.disabled = false;
+  stopCollectionButton.disabled = true;
   hangupButton.disabled = false;
   console.log('Starting call');
   startTime = window.performance.now();
@@ -215,6 +240,8 @@ function hangup() {
   pc2.close();
   pc1 = null;
   pc2 = null;
+  startCollectionButton.disabled = true;
+  stopCollectionButton.disabled = true;
   hangupButton.disabled = true;
   callButton.disabled = false;
 }
