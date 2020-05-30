@@ -1,0 +1,10 @@
+{
+  "name": "wobserver-test",
+  "version": "0.0.1",
+  "dependencies": {
+    "@observertc/wobserver-lib": "git@github.com:ObserveRTC/webextrapp.git"
+  },
+  "repository": {
+    "url": "git@github.com:ObserveRTC/webextrapp.git"
+  }
+}

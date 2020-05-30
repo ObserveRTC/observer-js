@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/wobserver-lib",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/wobserver-lib.js",
   "dependencies": {
@@ -26,8 +26,9 @@
     "build": "tsc",
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
-    "build-library": "npm run build && webpack --mode=development && cp -r ./dist/wobserver-lib.* ./__test__/pc1/dist/",
-    "run-demo": "pushd __test__/pc1 &&  python2 -m SimpleHTTPServer 8080 && popd"
+    "build-library": "npm run build && webpack --mode=development",
+    "publish-library": "npm publish",
+    "run-demo": "pushd __test__/pc1 &&  python2 -m SimpleHTTPServer 9090 && popd"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
