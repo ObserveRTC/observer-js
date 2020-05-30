@@ -2,13 +2,17 @@
 Extractor Development Toolkits for WebRTC Samples
 
 
-# How to run
+# Build library locally
 
-## Install dependencies
-- Install typescript globally
-`npm install -g typescript`
-- Install package dependencies `npm ci`
-- Build the library `npm run build-library`
+- ### Install dependencies
+  - Make sure we have type script installed in the system
+    - npm install -g typescript`
+  - Install package dependencies 
+    - `npm ci`
+  - Build the library 
+    - `npm run build-library`
+
+  Once build is complete it will cr
 
 
 ## Publish the package

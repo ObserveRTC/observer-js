@@ -3,13 +3,12 @@
   "version": "0.0.3",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/wobserver-lib.js",
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "loglevel": "^1.6.7",
     "loglevel-plugin-prefix": "^0.8.4",
     "rxjs": "^6.5.5",
-    "uuid": "^8.0.0"
-  },
-  "devDependencies": {
+    "uuid": "^8.0.0",
     "@types/uuid": "^7.0.3",
     "@types/webrtc": "0.0.26",
     "clean-webpack-plugin": "^3.0.0",
