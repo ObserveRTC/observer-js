@@ -35,6 +35,7 @@ class Wobserver {
     }
 
     public dispose() {
+        this.stopWorker()
         this.pcManager.dispose()
     }
 
