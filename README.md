@@ -16,12 +16,9 @@ Extractor Development Toolkits for WebRTC Samples
 
 - ### Publish the package
 
-  - 
-
-```
-    npm login --registry=https://npm.pkg.github.com
-```
-
-```
-    npm publish
-```
+  - We are using github package manager to publish the library
+  - Goto the `package.json` and update the version
+  - Login to GitHub package registry using your credentials
+    - ​    `npm login --registry=https://npm.pkg.github.com`
+  - Publish the build `webextrapp-lib.js` package
+    - `npm publish`
