@@ -80,14 +80,12 @@ async function start() {
 }
 
 async function startCollection() {
-  console.warn('i am called', 'start collection')
   startCollectionButton.disabled = true;
   stopCollectionButton.disabled = false;
   integrator.startCollection()
 }
 
 async function stopCollection() {
-  console.warn('i am called', 'stop collection')
   startCollectionButton.disabled = false;
   stopCollectionButton.disabled = true;
   integrator.stopCollection()
@@ -236,6 +234,7 @@ function onIceStateChange(pc, event) {
 
 function hangup() {
   console.log('Ending call');
+  stopCollection().catch(null);
   pc1.close();
   pc2.close();
   pc1 = null;
