@@ -5,12 +5,12 @@ const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 
 module.exports = {
     entry: {
-        'wobserver-lib': './build/index.js'
+        'webextrapp-lib': './build/index.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        library: 'Wobserver',
+        library: 'WebextraApp',
         umdNamedDefine: true,
         libraryExport: "default",
         libraryTarget: "var"

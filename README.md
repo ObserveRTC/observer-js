@@ -12,10 +12,12 @@ Extractor Development Toolkits for WebRTC Samples
   - Build the library 
     - `npm run build-library`
 
-  Once build is complete it will cr
+  Once build is complete it will create `webextrapp-lib.js` library in the `dist` folder. 
 
+- ### Publish the package
 
-## Publish the package
+  - 
+
 ```
     npm login --registry=https://npm.pkg.github.com
 ```

@@ -1,8 +1,8 @@
 {
-  "name": "@ObserveRTC/wobserver-lib",
+  "name": "@ObserveRTC/webextrapp-lib",
   "version": "0.0.3",
   "description": "Extractor Development Toolkits for WebRTC Samples",
-  "main": "dist/wobserver-lib.js",
+  "main": "dist/webextrapp-lib.js",
   "dependencies": {},
   "devDependencies": {
     "loglevel": "^1.6.7",
