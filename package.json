@@ -25,7 +25,7 @@
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
     "build-library": "npm run build && webpack --mode=development",
-    "publish-library": "npm publish",
+    "publish-library": "npm run build-library && npm publish",
     "run-demo": "pushd __test__/pc1 &&  python2 -m SimpleHTTPServer 9090 && popd"
   },
   "publishConfig": {
