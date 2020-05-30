@@ -1,7 +1,7 @@
 {
   "name": "wobserver-test",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "dependencies": {
-    "@observertc/webextrapp-lib": "0.0.3"
+    "@observertc/webextrapp-lib": "0.0.4"
   }
 }
