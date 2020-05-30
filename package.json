@@ -1,5 +1,5 @@
 {
-  "name": "wobserver-lib",
+  "name": "@ObserveRTC/wobserver-lib",
   "version": "0.0.2",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/wobserver-lib.js",
