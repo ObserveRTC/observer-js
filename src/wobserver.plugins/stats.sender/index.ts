@@ -3,8 +3,9 @@ import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import logger from '../../wobserver.logger'
 import { WobserverPlugin } from '../index'
 
-class StatsSender extends WobserverPlugin{
+class StatsSender extends WobserverPlugin {
     private readonly webSocket!: WebSocket
+
     constructor(serverAddress: string) {
         super()
         if (!serverAddress) {
@@ -23,7 +24,7 @@ class StatsSender extends WobserverPlugin{
         } as StatsPayload
 
         await this.sendMessage(payload)
-        return Promise.resolve(undefined)
+        return
     }
 
     private async sendMessage(payload?: StatsPayload): Promise<any> {
