@@ -3,5 +3,11 @@
   "version": "0.0.2",
   "dependencies": {
     "@observertc/webextrapp-lib": "0.0.6"
+  },
+  "scripts": {
+    "start-server": "http-server -p 9090"
+  },
+  "devDependencies": {
+    "http-server": "^0.12.3"
   }
 }
