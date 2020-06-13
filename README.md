@@ -38,4 +38,11 @@ Extractor Development Toolkits for WebRTC Samples
 
 - ### How to run demo
   - `npm run run-demo` and access the server from http://localhost:9090
- 
+
+
+
+ ## Run demo using docker
+
+
+  - Build and run the docker 
+    - ` docker-compose up --build `

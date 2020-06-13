@@ -5,5 +5,5 @@ WORKDIR /usr/src/app
 COPY __test__/pc1 .
 RUN npm install
 
-CMD [ "npm", "run" ]
+CMD [ "npm", "run", "start-server" ]
 
