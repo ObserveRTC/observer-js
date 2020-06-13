@@ -45,7 +45,7 @@ export interface RemoteCandidate {
     priority: number
     protocol: 'udp' | 'tcp'
     timestamp: number
-    transportId: 'string'
+    transportId: string
     type: 'remote-candidate'
 }
 

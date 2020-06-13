@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/webextrapp-lib",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/webextrapp-lib.js",
   "dependencies": {},
@@ -25,7 +25,8 @@
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
     "build-library": "npm run build && webpack --mode=development",
-    "publish-library": "npm run build-library && npm publish",
+    "build-and-copy-library": "npm run build && webpack --mode=development",
+    "publish-library": "npm run build-library && cp -r ./dist/wobserver-lib.* ./__test__/pc1/node_modules/@observertc/webextrapp-lib/dist",
     "run-demo": "pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd"
   },
   "publishConfig": {
