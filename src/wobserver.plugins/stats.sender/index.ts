@@ -1,4 +1,4 @@
-import { StatsPayload } from '../../schema/sender.payload'
+import { PeerConnectionSample } from '../../schema/sender.payload'
 import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import logger from '../../wobserver.logger'
 import { WobserverPlugin } from '../index'
@@ -21,13 +21,13 @@ class StatsSender extends WobserverPlugin {
             peerConnectionId: pcId,
             receiverStats: stats?.receiverStats,
             senderStats: stats?.senderStats
-        } as StatsPayload
+        } as PeerConnectionSample
 
         await this.sendMessage(payload)
         return
     }
 
-    private async sendMessage(payload?: StatsPayload): Promise<any> {
+    private async sendMessage(payload?: PeerConnectionSample): Promise<any> {
         if (!payload) {
             return
         }

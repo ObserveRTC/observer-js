@@ -172,7 +172,7 @@ export interface RemoteInboundRTP {
     type: 'remote-inbound-rtp'
 }
 
-export interface StatsPayload {
+export interface PeerConnectionSample {
     peerConnectionId: string
     receiverStats: [
         CandidatePair |
