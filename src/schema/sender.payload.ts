@@ -172,22 +172,19 @@ export interface RemoteInboundRTP {
     type: 'remote-inbound-rtp'
 }
 
-export interface PeerConnectionSample {
-    peerConnectionId: string
-    receiverStats: [
-        CandidatePair |
+export interface ObserverRTCStats {
+    rtcStats: CandidatePair |
         RemoteCandidate |
         LocalCandidate |
         Track |
-        InboundRTP
-    ],
-    senderStats: [
+        InboundRTP |
         MediaSource |
-        CandidatePair |
-        RemoteCandidate |
-        LocalCandidate |
-        Track |
         OutboundRTP |
         RemoteInboundRTP
-    ]
+}
+
+export interface PeerConnectionSample {
+    peerConnectionId: string
+    receiverStats: [ObserverRTCStats],
+    senderStats: [ObserverRTCStats]
 }

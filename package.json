@@ -25,8 +25,8 @@
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
     "build-library": "npm run build && webpack --mode=development",
-    "build-and-copy-library": "npm run build && webpack --mode=development",
-    "publish-library": "npm run build-library && cp -r ./dist/wobserver-lib.* ./__test__/pc1/node_modules/@observertc/webextrapp-lib/dist",
+    "build-and-copy-library": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/node_modules/@observertc/webextrapp-lib/dist",
+    "publish-library": "npm run build-library && npm publish",
     "run-demo": "pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd"
   },
   "publishConfig": {

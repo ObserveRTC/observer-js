@@ -17,22 +17,22 @@ class StatsSender extends WobserverPlugin {
     async execute(pc: WobserverPC): Promise<any> {
         const stats = pc.getStatsQueue().pool()
         const pcId = pc.getPcId()
-        const payload = {
+        const samples = {
             peerConnectionId: pcId,
             receiverStats: stats?.receiverStats,
             senderStats: stats?.senderStats
         } as PeerConnectionSample
 
-        await this.sendMessage(payload)
+        await this.sendMessage(samples)
         return
     }
 
-    private async sendMessage(payload?: PeerConnectionSample): Promise<any> {
-        if (!payload) {
+    private async sendMessage(samples?: PeerConnectionSample): Promise<any> {
+        if (!samples) {
             return
         }
-        logger.warn('sending message to server', payload)
-        this.webSocket?.send(JSON.stringify(payload))
+        logger.warn('sending samples to server', samples)
+        this.webSocket?.send(JSON.stringify(samples))
     }
 }
 
