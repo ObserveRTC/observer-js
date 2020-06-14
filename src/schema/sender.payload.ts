@@ -64,6 +64,10 @@ export interface LocalCandidate {
     type: 'local-candidate'
 }
 
+export interface ICECandidate {
+    candidate : LocalCandidate | RemoteCandidate
+}
+
 export interface Track {
     detached: boolean
     ended: boolean
@@ -172,10 +176,15 @@ export interface RemoteInboundRTP {
     type: 'remote-inbound-rtp'
 }
 
+export interface ObserveRTCCIceStats {
+    localCandidates: [ICECandidate]
+    remoteCandidates: [ICECandidate]
+    iceCandidatePair: [CandidatePair]
+}
+
 export interface ObserveRTCStats {
-    rtcStats: CandidatePair |
-        RemoteCandidate |
-        LocalCandidate |
+    rtcStats:
+        CandidatePair |
         Track |
         InboundRTP |
         MediaSource |
@@ -185,6 +194,7 @@ export interface ObserveRTCStats {
 
 export interface PeerConnectionSample {
     peerConnectionId: string
-    receiverStats: [ObserveRTCStats],
+    receiverStats: [ObserveRTCStats]
     senderStats: [ObserveRTCStats]
+    iceStats: [ObserveRTCCIceStats]
 }
