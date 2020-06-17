@@ -45,4 +45,4 @@ Extractor Development Toolkits for WebRTC Samples
 
 
   - Build and run the docker 
-    - ` docker-compose up --build `
+    - `npm run local-demo`
