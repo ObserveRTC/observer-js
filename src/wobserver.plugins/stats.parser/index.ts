@@ -11,8 +11,6 @@ class StatsParser extends WobserverPlugin {
         const iceStats = await this.getIceStats(rawReceiverStats, rawSenderStats)
         const receiverStats = await this.filterStats(rawReceiverStats)
         const senderStats = await this.filterStats(rawSenderStats)
-
-        console.warn(iceStats, rawReceiverStats, rawSenderStats)
         return {
             iceStats,
             receiverStats,
