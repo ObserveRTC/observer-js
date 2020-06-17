@@ -12,6 +12,7 @@ class StatsParser extends WobserverPlugin {
         const receiverStats = await this.filterStats(rawReceiverStats)
         const senderStats = await this.filterStats(rawSenderStats)
 
+        console.warn(iceStats, rawReceiverStats, rawSenderStats)
         return {
             iceStats,
             receiverStats,
@@ -50,9 +51,9 @@ class StatsParser extends WobserverPlugin {
     }
 
     private async getIceStats(receiverStats: any, senderStats: any): Promise<any> {
-        const localCandidates = receiverStats.filter( (item: any) => 'local-candidate' === item.type )
-        const remoteCandidates = receiverStats.filter( (item: any) => 'remote-candidate' === item.type )
-        const iceCandidatePair = receiverStats.filter( (item: any) => 'candidate-pair' === item.type )
+        const localCandidates = [...receiverStats.filter( (item: any) => 'local-candidate' === item.type ), ...senderStats.filter( (item: any) => 'local-candidate' === item.type )]
+        const remoteCandidates = [...receiverStats.filter( (item: any) => 'remote-candidate' === item.type ), ...senderStats.filter( (item: any) => 'remote-candidate' === item.type )]
+        const iceCandidatePair = [...receiverStats.filter( (item: any) => 'candidate-pair' === item.type ), ...senderStats.filter( (item: any) => 'candidate-pair' === item.type )]
         return {
             iceCandidatePair,
             localCandidates,

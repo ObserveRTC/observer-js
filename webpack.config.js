@@ -2,6 +2,7 @@ const path = require('path');
 const webpack = require('webpack');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
+const { version } = require('./package.json')
 
 module.exports = {
     entry: {
@@ -38,9 +39,13 @@ module.exports = {
     },
     plugins: [
         new webpack.ProgressPlugin(),
+        new webpack.DefinePlugin({
+            VERSION: version
+        }),
         new CleanWebpackPlugin({
             dry: true,
             verbose: true
-        }),
+        })
     ],
+
 };

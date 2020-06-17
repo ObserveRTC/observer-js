@@ -27,7 +27,9 @@
     "build-library": "npm run build && webpack --mode=development",
     "build-and-copy-library": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/node_modules/@observertc/webextrapp-lib/dist",
     "publish-library": "npm run build-library && npm publish",
-    "run-demo": "pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd"
+    "run-demo": "pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
+    "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/js",
+    "run-local-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"

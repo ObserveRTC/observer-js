@@ -1,9 +1,6 @@
 {
   "name": "wobserver-test",
   "version": "0.0.2",
-  "dependencies": {
-    "@observertc/webextrapp-lib": "0.0.8"
-  },
   "scripts": {
     "start-server": "http-server -p 9090"
   },
