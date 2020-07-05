@@ -2,7 +2,8 @@
   "name": "wobserver-test",
   "version": "0.0.2",
   "scripts": {
-    "start-server": "http-server -p 9090"
+    "start-server": "npm run generatecertificate && http-server -S -C ssl/server.crt -K ssl/server.key -p 9090",
+    "generatecertificate": "mkdir -p ssl && cd ssl && openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -keyout server.key -out server.crt -passin pass:v2ZIZj2jKUap -subj '/CN=localhost/O=Local/C=FI' && cp server.crt ca.crt"
   },
   "devDependencies": {
     "http-server": "^0.12.3"
