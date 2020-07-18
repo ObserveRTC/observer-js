@@ -17,11 +17,15 @@ class StatsSender extends WobserverPlugin {
     async execute(pc: WobserverPC): Promise<any> {
         const stats = pc.getStatsQueue().pool()
         const pcId = pc.getPcId()
+        const browserId = pc.getBrowserId()
+        const timeZoneOffsetInMinute = pc.getTimeZoneOffsetInMinute()
         const samples = {
+            browserId,
             iceStats : stats?.iceStats,
             peerConnectionId: pcId,
             receiverStats: stats?.receiverStats,
             senderStats: stats?.senderStats,
+            timeZoneOffsetInMinute,
         } as PeerConnectionSample
 
         await this.sendMessage(samples)

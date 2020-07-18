@@ -8,6 +8,11 @@ class TimeUtils {
         }
         return window.performance.now() + window.performance.timing.navigationStart
     }
+
+    public static getTimeZoneOffsetInMinute(): number {
+        const currentTime: number = (new Date()).getTimezoneOffset()
+        return currentTime
+    }
 }
 
 export default TimeUtils
