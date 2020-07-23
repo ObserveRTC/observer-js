@@ -11,10 +11,10 @@ module.exports = {
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        library: 'WebextraApp',
+        library: 'callstats',
         umdNamedDefine: true,
         libraryExport: "default",
-        libraryTarget: "var"
+        libraryTarget: "umd"
     },
     resolve: {
         extensions: ['.ts', '.tsx', '.js']
