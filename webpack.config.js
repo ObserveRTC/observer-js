@@ -2,16 +2,19 @@ const path = require('path');
 const webpack = require('webpack');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
-const { version } = require('./package.json')
+const {version, libraryName, exportCallstats} = require('./package.json')
+
+const library = process.env.LIBRARY_NAME ? `${process.env.LIBRARY_NAME}` : `${libraryName}`
+const exportCallStats = process.env.CALLSTATS ? `${process.env.CALLSTATS}` : `${exportCallstats}`
 
 module.exports = {
     entry: {
-        'webextrapp-lib': './build/index.js'
+        'webextrapp-lib': exportCallStats === 'true' ? './build/callstats.js' : './build/default.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        library: 'callstats',
+        library: library,
         umdNamedDefine: true,
         libraryExport: "default",
         libraryTarget: "umd"

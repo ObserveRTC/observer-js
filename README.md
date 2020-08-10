@@ -14,6 +14,25 @@ Extractor Development Toolkits for WebRTC Samples
 
   Once build is complete it will create `webextrapp-lib.js` library in the `dist` folder. 
 
+  - ***The library can now take two environment variables***
+
+    - `LIBRARY_NAME`
+    - `CALLSTATS`
+
+  - ***And, the can be passed as during build time***
+
+    - ```shell
+      process.env.LIBRARY_NAME
+      process.env.CALLSTATS
+      ```
+
+    - Or, from package.json
+
+      - ```json
+        "exportCallstats": true,
+        "libraryName": "callstats",
+        ```
+
 - ### Publish the package
 
   - We are using github package manager to publish the library

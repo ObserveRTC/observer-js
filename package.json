@@ -1,9 +1,11 @@
 {
   "name": "@ObserveRTC/webextrapp-lib",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/webextrapp-lib.js",
   "dependencies": {},
+  "exportCallstats": true,
+  "libraryName": "callstats",
   "devDependencies": {
     "@types/fingerprintjs2": "^2.0.0",
     "@types/uuid": "^8.0.0",
