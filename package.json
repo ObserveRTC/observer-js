@@ -4,8 +4,9 @@
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/webextrapp-lib.js",
   "dependencies": {},
-  "exportCallstats": true,
-  "libraryName": "callstats",
+  "exportCallstats": false,
+  "libraryName": "WebextraApp",
+  "websocketURL": "wss://meet.cogint.ai:7879/ws/86ed98c6-b001-48bb-b31e-da638b979c72",
   "devDependencies": {
     "@types/fingerprintjs2": "^2.0.0",
     "@types/uuid": "^8.0.0",
@@ -33,7 +34,8 @@
     "publish-library": "npm run build-library && npm publish",
     "run-demo": "pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
     "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/js",
-    "local-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up"
+    "local-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up webextra-app",
+    "proxy-server": "docker-compose down && docker-compose build --no-cache && docker-compose up proxy-server"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"

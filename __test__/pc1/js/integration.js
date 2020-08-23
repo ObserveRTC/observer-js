@@ -21,7 +21,6 @@ class Integrator {
     }
 }
 
-// const wsServerURL = 'ws://localhost:8088/ws/86ed98c6-b001-48bb-b31e-da638b979c72'
 const wsServerURL = 'wss://meet.cogint.ai:7879/ws/86ed98c6-b001-48bb-b31e-da638b979c72'
 let integrator = new Integrator(wsServerURL);
 

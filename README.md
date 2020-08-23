@@ -18,12 +18,14 @@ Extractor Development Toolkits for WebRTC Samples
 
     - `LIBRARY_NAME`
     - `CALLSTATS`
+    - `WEBSOCKET_URL`
 
   - ***And, the can be passed as during build time***
 
     - ```shell
-      process.env.LIBRARY_NAME
-      process.env.CALLSTATS
+      process.env.LIBRARY_NAME ( WebextraApp, or callstats )
+      process.env.CALLSTATS ( true if we are using for callstats library )
+      process.env.WEBSOCKET_URL
       ```
 
     - Or, from package.json
@@ -31,6 +33,7 @@ Extractor Development Toolkits for WebRTC Samples
       - ```json
         "exportCallstats": true,
         "libraryName": "callstats",
+        "websocketURL": "wss://meet.cogint.ai:7879/ws/86ed98c6-b001-48bb-b31e-da638b979c72",
         ```
 
 - ### Publish the package
@@ -55,13 +58,15 @@ Extractor Development Toolkits for WebRTC Samples
   - Install the package
     - `npm install`
 
-- ### How to run demo
+ ## Run demo using docker
+
+  - Build and run the docker 
   - `npm run run-demo` and access the server from http://localhost:9090
 
 
+ ##### Change websocket server address in the demo application
 
- ## Run demo using docker
-
-
-  - Build and run the docker 
-    - `npm run local-demo`
+  - Goto /__test__/pc1/js/integration.js#L24
+  - Change the current websocket server address
+  - Rebuild docker and run the test demo app again
+    - `npm run run-demo` and access the server from http://localhost:9090
