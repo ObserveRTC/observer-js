@@ -3,6 +3,7 @@ import logger from '../wobserver.logger'
 import { WobserverPlugin } from '../wobserver.plugins'
 import IntervalWorker from './interval.worker'
 import PCManager from './pc.manager'
+import WobserverPC from './pc.manager/wobserver.pc'
 
 class Wobserver {
     private pcManager: PCManager = new PCManager()
@@ -16,6 +17,14 @@ class Wobserver {
 
     public addPC(pc: RTCPeerConnection): void {
         this.pcManager.addPC(pc)
+    }
+
+    public removePC(pc: WobserverPC): void {
+        this.pcManager.removePC(pc)
+    }
+
+    public getPCList(): WobserverPC[] {
+        return this.pcManager.getPCList()
     }
 
     public attachPlugin(plugin: WobserverPlugin): void {

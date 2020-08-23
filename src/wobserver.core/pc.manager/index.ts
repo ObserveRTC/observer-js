@@ -12,6 +12,16 @@ class PCManager {
         this.pcList.push(curPC)
     }
 
+    public removePC(pc: WobserverPC) {
+        if (!pc)return
+        this.pcList = this.pcList.filter( (currentPC: WobserverPC) => currentPC.getPcId() !== pc.getPcId() )
+        pc.dispose()
+    }
+
+    public getPCList(): WobserverPC[] {
+        return this.pcList
+    }
+
     public attachPlugin(plugin: WobserverPlugin) {
         // if this plugin already attached omit
         if ( this.plugins.find(item => item.id === plugin.id) ) {
