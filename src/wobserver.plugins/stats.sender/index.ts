@@ -1,17 +1,24 @@
+import ReconnectingWebSocket from 'reconnecting-websocket'
 import { PeerConnectionSample } from '../../schema/sender.payload'
 import WobserverPC from '../../wobserver.core/pc.manager/wobserver.pc'
 import logger from '../../wobserver.logger'
 import { WobserverPlugin } from '../index'
 
-class StatsSender extends WobserverPlugin {
-    private readonly webSocket!: WebSocket
 
+class StatsSender extends WobserverPlugin {
+    private readonly webSocket!: ReconnectingWebSocket
     constructor(serverAddress: string) {
         super()
         if (!serverAddress) {
             throw new Error('websocker server address is required')
         }
-        this.webSocket = new WebSocket(serverAddress)
+        const options = {
+            connectionTimeout: 5000,
+            debug: true,
+            maxEnqueuedMessages: 1000,
+            maxRetries: 50,
+        }
+        this.webSocket = new ReconnectingWebSocket(serverAddress, [], options)
     }
 
     async execute(pc: WobserverPC): Promise<any> {

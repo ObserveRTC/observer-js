@@ -63,7 +63,7 @@ Extractor Development Toolkits for WebRTC Samples
  ## Run demo using docker
 
   - Build and run the docker 
-  - `npm run run-demo` and access the server from http://localhost:9090
+  - `npm run local-docker-demo` and access the server from http://localhost:9090
 
 
  ##### Change websocket server address in the demo application
@@ -71,4 +71,4 @@ Extractor Development Toolkits for WebRTC Samples
   - Goto [integration.js](__test__/pc1/js/integration.js#L24) and change server address
   - Change the current websocket server address
   - Rebuild docker and run the test demo app again
-    - `npm run run-demo` and access the server from http://localhost:9090
+    - `npm run local-docker-demo` and access the server from http://localhost:9090
