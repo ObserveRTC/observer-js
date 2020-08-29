@@ -14,7 +14,6 @@ class StatsSender extends WobserverPlugin {
         }
         const options = {
             connectionTimeout: 5000,
-            debug: true,
             maxEnqueuedMessages: 1000,
             maxRetries: 50,
         }
