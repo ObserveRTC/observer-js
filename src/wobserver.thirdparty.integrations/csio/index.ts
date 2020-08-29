@@ -128,7 +128,6 @@ class callstats extends WobServerThridParty {
       }
 
     public addNewFabric(pc: any, remoteId: any, fabricUsage: any, conferenceId: any, fabricAttributes: any) {
-        console.log('********* callstats addNewFabric ', pc, remoteId)
         try {
             this.wobserver.addPC(pc)
         } catch (e) {
@@ -138,37 +137,30 @@ class callstats extends WobServerThridParty {
     }
 
     public sendFabricEvent(pc: any, fabricEvent: any, conferenceId: any, eventData: any) {
-        console.log('********* callstats sendFabricEvent ')
         return { status: 'success'}
     }
 
     public sendCustomEvent(pc: any, conferenceId: any, eventList: any) {
-        console.log('********* callstats sendCustomEvent ')
         return { status: 'success'}
     }
 
     public sendCustomStats(pc: any, conferenceId: any, stats: any) {
-        console.log('********* callstats sendCustomStats ')
         return { status: 'success'}
     }
 
     public  sendUserFeedback(conferenceId: any, feedback: any, callback: any) {
-        console.log('********* callstats sendUserFeedback ')
         return { status: 'success'}
     }
 
     public associateMstWithUserID(pc: any, remoteId: any, conferenceId: any, ssrc: any, usage: any, videoTag: any) {
-        console.log('********* callstats associateMstWithUserID ')
         return { status: 'success'}
     }
 
     public reportError(pc: any, conferenceId: any, functionName: any, domError: any, localSDP: any, remoteSDP: any) {
-        console.log('********* callstats reportError ')
         return { status: 'success'}
     }
 
     public  attachWifiStatsHandler(getWifiStatsMethod: any) {
-        console.log('********* callstats attachWifiStatsHandler ')
         return { status: 'success'}
     }
 }
