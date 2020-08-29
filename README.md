@@ -49,14 +49,16 @@ Extractor Development Toolkits for WebRTC Samples
 
 3. You can now use the build library in Jitsi project that will collect stats from Jitsi conference and send stats to provided `wsServer` endpoint
 
-- ### Install package
 
-  - Add the package in your package.json
-    - `"@observertc/webextrapp-lib": "0.1.0"`
-  - Create `.npmrc` in the project folder and add our registry
-    - `@observertc:registry=https://npm.pkg.github.com/`
-  - Install the package
-    - `npm install`
+
+### Install core library package from package registry and user it in custom integration(s)
+
+- Add the package in your package.json
+  - `"@observertc/webextrapp-lib": "0.1.0"`
+- Create `.npmrc` in the project folder and add our registry
+  - `@observertc:registry=https://npm.pkg.github.com/`
+- Install the package
+  - `npm install`
 
  ## Run demo using docker
 
