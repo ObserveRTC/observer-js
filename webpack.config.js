@@ -2,7 +2,7 @@ const path = require('path');
 const webpack = require('webpack');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
-const libraryConfig = require('./library.config/config.json')
+const libraryConfig = require('./library.config/index.json')
 const {version} = require('./package.json')
 
 const libraryName = `${libraryConfig.libraryName}`

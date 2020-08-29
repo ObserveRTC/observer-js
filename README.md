@@ -14,27 +14,6 @@ Extractor Development Toolkits for WebRTC Samples
 
   Once build is complete it will create `webextrapp-lib.js` library in the `dist` folder. 
 
-  - ***The library can now take two environment variables***
-
-    - `LIBRARY_NAME`
-    - `CALLSTATS`
-    - `WEBSOCKET_URL`
-
-  - ***And, the can be passed as during build time***
-
-    - ```shell
-      process.env.LIBRARY_NAME ( WebextraApp, or callstats )
-      process.env.CALLSTATS ( true if we are using for callstats library )
-      process.env.WEBSOCKET_URL
-      ```
-
-    - Or, from package.json
-
-      - ```json
-        "exportCallstats": true,
-        "libraryName": "callstats",
-        "websocketURL": "wss://meet.cogint.ai:7879/ws/86ed98c6-b001-48bb-b31e-da638b979c72",
-        ```
 
 - ### Publish the package
 
@@ -47,12 +26,33 @@ Extractor Development Toolkits for WebRTC Samples
 
 
 
-## Use the library in a project
+## Use the library for jitsi
+
+1. Change the configuration file JSON from [library.config/index.json](library.config/index.json). A sample configuration file for Jitsi is given bellow
+
+   ```json
+   {
+     "exportCallstats": true,
+     "libraryName": "callstats",
+     "poolingIntervalMs": 1000,
+     "debug": false,
+     "wsServer": {
+       "URL": "wss://meet.cogint.ai:7879/ws/",
+       "UUID": "86ed98c6-b001-48bb-b31e-da638b979c72"
+     }
+   }
+   ```
+
+2. Run `npm run build-library` to build the library. 
+
+   - If the build is successful, it will generate the library inside `dist` folder.
+
+3. You can now use the build library in Jitsi project that will collect stats from Jitsi conference and send stats to provided `wsServer` endpoint
 
 - ### Install package
 
   - Add the package in your package.json
-    - `"@observertc/webextrapp-lib": "0.0.3"`
+    - `"@observertc/webextrapp-lib": "0.1.0"`
   - Create `.npmrc` in the project folder and add our registry
     - `@observertc:registry=https://npm.pkg.github.com/`
   - Install the package
