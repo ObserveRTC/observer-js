@@ -1,9 +1,15 @@
 import Wobserver from '../../wobserver.core'
+import BrowserUtils from '../../wobserver.helper/browser.utils'
 import StatsParser from '../../wobserver.plugins/stats.parser'
 import StatsSender from '../../wobserver.plugins/stats.sender'
 import { WobServerThridParty } from '../index'
-const serverURL = 'wss://meet.cogint.ai:7879/ws/86ed98c6-b001-48bb-b31e-da638b979c72'
 
+// @ts-ignore
+const wsServerUrl = WS_SERVER_URL || null
+// @ts-ignore
+const wsServerUuid = WS_SERVER_UUID || null
+
+// tslint:disable-next-line:class-name
 class callstats extends WobServerThridParty {
     public readonly errors = {
         appConnectivityError: 'appConnectivityError',
@@ -108,6 +114,7 @@ class callstats extends WobServerThridParty {
 
     public initialize(appId: any, appSecret: any, userId: any, initCallback: any) {
         console.log('******** callstats initialization ', appId, appSecret)
+        const serverURL = BrowserUtils.parseWsServerUrl(wsServerUrl, wsServerUuid)
         this.statsParser = new StatsParser()
         this.statsSender = new StatsSender(serverURL)
         this.wobserver = new Wobserver()

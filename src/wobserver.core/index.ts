@@ -1,5 +1,4 @@
 import { Subscription } from 'rxjs'
-import logger from '../wobserver.logger'
 import { WobserverPlugin } from '../wobserver.plugins'
 import IntervalWorker from './interval.worker'
 import PCManager from './pc.manager'
@@ -7,12 +6,13 @@ import WobserverPC from './pc.manager/wobserver.pc'
 
 class Wobserver {
     private pcManager: PCManager = new PCManager()
-    private intervalWorker = new IntervalWorker(1000)
+    // @ts-ignore
+    private intervalWorker = new IntervalWorker(parseInt(POOLING_INTERVAL_MS, 10))
     private subscriber: Subscription | undefined
 
     constructor() {
-        // todo add more logic here
-        logger.debug('initialized')
+        // @ts-ignore
+        console.info('using library version', LIBRARY_VERSION)
     }
 
     public addPC(pc: RTCPeerConnection): void {

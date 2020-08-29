@@ -1,0 +1,10 @@
+{
+  "exportCallstats": false,
+  "libraryName": "WebextraApp",
+  "poolingIntervalMs": 1000,
+  "debug": true,
+  "wsServer": {
+    "URL": "wss://meet.cogint.ai:7879/ws/",
+    "UUID": "86ed98c6-b001-48bb-b31e-da638b979c72"
+  }
+}

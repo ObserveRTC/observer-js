@@ -1,8 +1,15 @@
 import * as Logger from 'loglevel'
 
+// @ts-ignore
+const debug = DEBUG === true ? true : false
 function initLogger(name: string, prefix: any) {
     const result = Logger.getLogger(name)
-    result.enableAll()
+    if (debug) {
+        result.enableAll()
+    } else {
+        result.setLevel(4)
+    }
+
     if (!prefix) return result
     // @ts-ignore
     result.prefix = prefix

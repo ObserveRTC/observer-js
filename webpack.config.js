@@ -2,19 +2,21 @@ const path = require('path');
 const webpack = require('webpack');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
-const {version, libraryName, exportCallstats} = require('./package.json')
+const libraryConfig = require('./library.config/config.json')
+const {version} = require('./package.json')
 
-const library = process.env.LIBRARY_NAME ? `${process.env.LIBRARY_NAME}` : `${libraryName}`
-const exportCallStats = process.env.CALLSTATS ? `${process.env.CALLSTATS}` : `${exportCallstats}`
+const libraryName = `${libraryConfig.libraryName}`
+const exportCallStats = `${libraryConfig.exportCallstats}`
 
 module.exports = {
     entry: {
-        'webextrapp-lib': exportCallStats === 'true' ? './build/callstats.js' : './build/default.js'
+        'webextrapp-lib': exportCallStats === 'true' ?
+            './build/callstats.js' : './build/default.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        library: library,
+        library: libraryName,
         umdNamedDefine: true,
         libraryExport: "default",
         libraryTarget: "umd"
@@ -43,12 +45,15 @@ module.exports = {
     plugins: [
         new webpack.ProgressPlugin(),
         new webpack.DefinePlugin({
-            VERSION: version
+            LIBRARY_VERSION: JSON.stringify(version),
+            DEBUG: JSON.stringify(libraryConfig.debug),
+            POOLING_INTERVAL_MS: JSON.stringify(libraryConfig.poolingIntervalMs),
+            WS_SERVER_URL: JSON.stringify(libraryConfig.wsServer.URL),
+            WS_SERVER_UUID: JSON.stringify(libraryConfig.wsServer.UUID)
         }),
         new CleanWebpackPlugin({
             dry: true,
             verbose: true
         })
     ],
-
 };
