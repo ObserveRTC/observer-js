@@ -12,6 +12,10 @@ class ObserverPC extends ObserverBasePC {
         super()
         this.userConfig = userConfig
     }
+
+    public getPeerConnection(): RTCPeerConnection {
+        return this.userConfig?.pc
+    }
 }
 
 export default ObserverPC
