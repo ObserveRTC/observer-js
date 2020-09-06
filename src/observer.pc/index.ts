@@ -6,6 +6,13 @@ export interface IUserConfig {
     userId?: string
 }
 
+export interface IObserverStats {
+    iceStats: any
+    receiverStats: any
+    senderStats: any
+}
+
+
 class ObserverPC extends ObserverBasePC {
     private readonly userConfig!: IUserConfig
     constructor(userConfig: IUserConfig) {
@@ -15,6 +22,12 @@ class ObserverPC extends ObserverBasePC {
 
     public getPeerConnection(): RTCPeerConnection {
         return this.userConfig?.pc
+    }
+
+    public async runPlugins(pluginList: any[]) {
+        for (const curPlugin of pluginList) {
+            await this.runPlugin(curPlugin)
+        }
     }
 }
 

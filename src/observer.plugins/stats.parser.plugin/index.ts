@@ -1,11 +1,12 @@
-import ObserverPC from '../../observer.pc'
+import ObserverPC, { IObserverStats } from '../../observer.pc'
 import { ObserverPluginBase } from '../base.plugin'
+
 
 class StatsParser extends ObserverPluginBase {
     private readonly blackList = [
         'certificate', 'codec', 'transport', 'local-candidate', 'remote-candidate', 'candidate-pair'] as string[]
 
-    public async execute(observerPC: ObserverPC): Promise<any> {
+    public async execute(observerPC: ObserverPC): Promise<IObserverStats> {
         const [rawReceiverStats, rawSenderStats] = await Promise.all([
             this.receiverStats(observerPC?.getPeerConnection()),
             this.senderStats(observerPC?.getPeerConnection())
@@ -17,7 +18,7 @@ class StatsParser extends ObserverPluginBase {
             iceStats,
             receiverStats,
             senderStats,
-        }
+        } as IObserverStats
     }
 
     private async receiverStats(pc: RTCPeerConnection): Promise<any> {
