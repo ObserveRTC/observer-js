@@ -24,7 +24,7 @@ class ObserverPC extends ObserverBasePC {
         return this.userConfig?.pc
     }
 
-    public async runPlugins(pluginList: any[]) {
+    public async run(pluginList: any[]) {
         for (const curPlugin of pluginList) {
             await this.runPlugin(curPlugin)
         }
