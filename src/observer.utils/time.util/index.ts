@@ -1,5 +1,5 @@
-class TimeUtils {
-    public static getCurrent() {
+class TimeUtil {
+    public static getCurrent(): number {
         if (!window || !window.performance || !window.performance.now) {
             return Date.now()
         }
@@ -15,4 +15,4 @@ class TimeUtils {
     }
 }
 
-export default TimeUtils
+export default TimeUtil

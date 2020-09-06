@@ -1,7 +1,7 @@
 import * as Logger from 'loglevel'
 
 // @ts-ignore
-const debug = DEBUG === true ? true : false
+const debug = DEBUG === true
 function initLogger(name: string, prefix: any) {
     const result = Logger.getLogger(name)
     if (debug) {
@@ -27,5 +27,5 @@ function initLogger(name: string, prefix: any) {
     result.error = (...args) => original.error((typeof prefix === 'function' ? prefix() : prefix), ...args)
     return result
 }
-const logger = initLogger('webextrapp', () => `${new Date().toISOString()}`)
+const logger = initLogger('ObserverRTC', () => `${new Date().toISOString()}`)
 export default logger

@@ -2,7 +2,7 @@
   "compilerOptions": {
     /* Basic Options */
     // "incremental": true,                   /* Enable incremental compilation */
-    "target": "ES2016",
+    "target": "ES6",
     /* Specify ECMAScript target version: 'ES3' (default), 'ES5', 'ES2015', 'ES2016', 'ES2017', 'ES2018', 'ES2019' or 'ESNEXT'. */
     "module": "commonjs",
     /* Specify module code generation: 'none', 'commonjs', 'amd', 'system', 'umd', 'es2015', or 'ESNext'. */
@@ -83,5 +83,7 @@
     /* Include modules imported with '.json' extension */
     "forceConsistentCasingInFileNames": true
     /* Disallow inconsistently-cased references to the same file. */
+
+    "experimentalDecorators": true
   }
 }

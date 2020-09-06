@@ -1,6 +1,6 @@
 import * as Fingerprint2 from 'fingerprintjs2'
 
-class BrowserUtils {
+class BrowserUtil {
     public static async getBrowserId(): Promise<string> {
         return new Promise((resolve, _) => {
             Fingerprint2.get({ }, (components: any[]) => {
@@ -23,4 +23,4 @@ class BrowserUtils {
     }
 }
 
-export default BrowserUtils
+export default BrowserUtil
