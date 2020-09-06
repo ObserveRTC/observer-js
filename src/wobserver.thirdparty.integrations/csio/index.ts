@@ -113,7 +113,7 @@ class callstats extends WobServerThridParty {
     wobserver: any
 
     public initialize(appId: any, appSecret: any, userId: any, initCallback: any) {
-        console.log('******** callstats initialization ', appId, appSecret)
+        console.log('******** callstats initialization ', appId, appSecret, userId)
         const serverURL = BrowserUtils.parseWsServerUrl(wsServerUrl, wsServerUuid)
         this.statsParser = new StatsParser()
         this.statsSender = new StatsSender(serverURL)
@@ -128,8 +128,12 @@ class callstats extends WobServerThridParty {
       }
 
     public addNewFabric(pc: any, remoteId: any, fabricUsage: any, conferenceId: any, fabricAttributes: any) {
+        // @ts-ignore
+        const callId = APP?.conference?.roomName
+        // @ts-ignore
+        const userId = APP?.conference?.getLocalDisplayName()
         try {
-            this.wobserver.addPC(pc)
+            this.wobserver.addPC(pc, callId, userId)
         } catch (e) {
             console.log('******** addpc error', e)
         }

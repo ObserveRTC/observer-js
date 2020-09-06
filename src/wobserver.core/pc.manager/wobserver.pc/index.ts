@@ -11,9 +11,14 @@ class WobserverPC {
     private readonly timeZoneOffsetInMinute: number
     private browserId!: string
 
-    constructor(id: string, pc: RTCPeerConnection) {
+    private readonly userId?: string
+    private readonly callId?: string
+
+    constructor(id: string, pc: RTCPeerConnection, callId?: string, userId?: string) {
         this.id = id
         this.pc = pc
+        this.callId = callId
+        this.userId = userId
         this.timeZoneOffsetInMinute = TimeUtils.getTimeZoneOffsetInMinute()
         BrowserUtils.getBrowserId().then( currentBrowserId => this.browserId = currentBrowserId)
     }
@@ -32,6 +37,14 @@ class WobserverPC {
 
     public getBrowserId() {
         return this.browserId
+    }
+
+    public getCallId() {
+        return this.callId
+    }
+
+    public getUserId() {
+        return this.userId
     }
 
     public getTimeZoneOffsetInMinute() {

@@ -15,8 +15,8 @@ class Wobserver {
         console.info('using library version', LIBRARY_VERSION)
     }
 
-    public addPC(pc: RTCPeerConnection): void {
-        this.pcManager.addPC(pc)
+    public addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void {
+        this.pcManager.addPC(pc, callId, userId)
     }
 
     public removePC(pc: WobserverPC): void {

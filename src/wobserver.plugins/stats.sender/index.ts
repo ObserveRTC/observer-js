@@ -24,14 +24,18 @@ class StatsSender extends WobserverPlugin {
         const stats = pc.getStatsQueue().pool()
         const pcId = pc.getPcId()
         const browserId = pc.getBrowserId()
+        const callId = pc.getCallId()
+        const userId = pc.getUserId()
         const timeZoneOffsetInMinute = pc.getTimeZoneOffsetInMinute()
         const samples = {
             browserId,
+            callId,
             iceStats : stats?.iceStats,
             peerConnectionId: pcId,
             receiverStats: stats?.receiverStats,
             senderStats: stats?.senderStats,
             timeZoneOffsetInMinute,
+            userId,
         } as PeerConnectionSample
 
         await this.sendMessage(samples)
