@@ -7,7 +7,9 @@ class PCManager {
     private pcList: WobserverPC[] = []
     private plugins: WobserverPlugin[] = []
 
-    public addPC(pc: RTCPeerConnection, callId?: string, userId?: string) {
+    public addPC(pc: RTCPeerConnection,
+                 callId?: string,
+                 userId?: string) {
         const curPC = new WobserverPC(uuidv4(), pc, callId, userId)
         this.pcList.push(curPC)
     }

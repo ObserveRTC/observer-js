@@ -8,11 +8,12 @@ class Wobserver {
     private pcManager: PCManager = new PCManager()
     // @ts-ignore
     private intervalWorker = new IntervalWorker(parseInt(POOLING_INTERVAL_MS, 10))
-    private subscriber: Subscription | undefined
+    private subscriberList: Subscription[]
 
     constructor() {
         // @ts-ignore
         console.info('using library version', LIBRARY_VERSION)
+        this.subscriberList = []
     }
 
     public addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void {
@@ -31,20 +32,10 @@ class Wobserver {
         this.pcManager.attachPlugin(plugin)
     }
 
-    public startWorker() {
-        // remove any existing running worker
-        this.stopWorker()
-
-        const worker = this.pcManager.worker.bind(this.pcManager)
-        this.subscriber = this.intervalWorker.subscribe(worker)
-    }
-
-    public stopWorker() {
-        this.intervalWorker.unsubscribe(this.subscriber)
-    }
-
     public dispose() {
-        this.stopWorker()
+        for (const currentSubscriber of this.subscriberList) {
+            this.intervalWorker.unsubscribe(currentSubscriber)
+        }
         this.pcManager.dispose()
     }
 
