@@ -2,10 +2,10 @@ import ReconnectingWebSocket from 'reconnecting-websocket'
 import logger from '../../observer.logger'
 import ObserverPC from '../../observer.pc'
 import { PeerConnectionSample } from '../../schema/sender.payload'
-import { ObserverPluginBase } from '../base.plugin'
+import { ObserverPlugin } from '../base.plugin'
 
 
-class StatsSender extends ObserverPluginBase {
+class StatsSender extends ObserverPlugin {
     private readonly webSocket!: ReconnectingWebSocket
     constructor(serverAddress: string) {
         super()

@@ -1,8 +1,8 @@
 import ObserverPC, { IObserverStats } from '../../observer.pc'
-import { ObserverPluginBase } from '../base.plugin'
+import { ObserverPlugin } from '../base.plugin'
 
 
-class StatsParser extends ObserverPluginBase {
+class StatsParser extends ObserverPlugin {
     private readonly blackList = [
         'certificate', 'codec', 'transport', 'local-candidate', 'remote-candidate', 'candidate-pair'] as string[]
 
