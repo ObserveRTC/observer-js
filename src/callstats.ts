@@ -1,2 +1,2 @@
-import callstats from './wobserver.thirdparty.integrations/csio'
+const callstats = 'todo'
 export default callstats

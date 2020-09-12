@@ -1,19 +1,18 @@
 class Integrator {
     constructor(websocketServer = '') {
-        this.statsParser = new WebextraApp.StatsParser()
-        this.statsSender = new WebextraApp.StatsSender(websocketServer)
+        this.statsParser = new ObserverRTC.StatsParser()
+        this.statsSender = new ObserverRTC.StatsSender(websocketServer)
         this.init()
     }
     init() {
-        this.wobserver = new WebextraApp.init()
+        this.wobserver = new ObserverRTC.init()
+        this.wobserver.attachPlugin(this.statsParser)
+        this.wobserver.attachPlugin(this.statsSender)
     }
 
     startCollection() {
-        this.wobserver.attachPlugin(this.statsParser)
-        this.wobserver.attachPlugin(this.statsSender)
         this.wobserver.addPC(pc1)
         this.wobserver.addPC(pc2)
-        this.wobserver.startWorker()
     }
 
     stopCollection() {

@@ -9,7 +9,7 @@ const exportCallStats = `${libraryConfig.exportCallstats}`
 
 module.exports = {
     entry: {
-        'webextrapp-lib': exportCallStats === 'true' ?
+        'observer-lib': exportCallStats === 'true' ?
             './build/callstats.js' : './build/default.js'
     },
     output: {

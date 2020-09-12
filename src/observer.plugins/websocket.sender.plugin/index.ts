@@ -20,9 +20,17 @@ class StatsSender extends ObserverPlugin {
         this.webSocket = new ReconnectingWebSocket(serverAddress, [], options)
     }
 
-    async execute(observerPC: ObserverPC): Promise<any> {
+    public async execute(observerPC: ObserverPC): Promise<any> {
+        const stats = observerPC?.statsDb?.pool()
         const samples: PeerConnectionSample = {
-
+            browserId: observerPC?.browserId,
+            callId: observerPC?.userConfig?.callId,
+            iceStats: stats?.iceStats,
+            peerConnectionId: observerPC?.id,
+            receiverStats: stats?.receiverStats,
+            senderStats: stats?.senderStats,
+            timeZoneOffsetInMinute: observerPC?.timeZoneOffsetInMinute,
+            userId: observerPC?.userConfig?.userId
         } as PeerConnectionSample
         await this.sendMessage(samples)
     }
@@ -32,7 +40,7 @@ class StatsSender extends ObserverPlugin {
             return
         }
         logger.warn('sending samples to server', samples)
-        this.webSocket?.send(JSON.stringify(samples))
+        // this.webSocket?.send(JSON.stringify(samples))
     }
 }
 

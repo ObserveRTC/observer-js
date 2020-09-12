@@ -7,7 +7,7 @@ class IntervalWorker {
     constructor(intervalInMs: number = 1000) {
         intervalInMs = Math.max(this.minIntervalInMs, intervalInMs)
         intervalInMs = Math.min(this.maxIntervalInMs, intervalInMs)
-        this.observable = interval(intervalInMs)
+            this.observable = interval(intervalInMs)
     }
 
     public subscribe(observer: any): Subscription {

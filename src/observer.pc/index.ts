@@ -1,3 +1,4 @@
+import { Subscription } from 'rxjs'
 import { ObserverPlugin } from '../observer.plugins/base.plugin'
 import StatsParser from '../observer.plugins/stats.parser.plugin'
 import ObserverBasePC from './base.pc'
@@ -16,20 +17,10 @@ export interface IObserverStats {
 
 
 class ObserverPC extends ObserverBasePC {
-    private readonly userConfig!: IUserConfig
+    public readonly userConfig!: IUserConfig
     constructor(userConfig: IUserConfig) {
         super()
         this.userConfig = userConfig
-    }
-
-    public getPeerConnection(): RTCPeerConnection {
-        return this.userConfig?.pc
-    }
-
-    public async run(pluginList: any[]) {
-        for (const curPlugin of pluginList) {
-            await this.runPlugin(curPlugin)
-        }
     }
 
     protected async runPlugin(currentPlugin: ObserverPlugin) {
@@ -37,6 +28,29 @@ class ObserverPC extends ObserverBasePC {
         if (currentPlugin instanceof StatsParser && result) {
             this.statsDb.add(result)
         }
+    }
+
+    public getPeerConnection(): RTCPeerConnection {
+        return this.userConfig?.pc
+    }
+
+    public async run(pluginList: any[]): Promise<any> {
+        for (const curPlugin of pluginList) {
+            await this.runPlugin(curPlugin)
+        }
+    }
+
+    public addSubscription(subscription: Subscription): void {
+        this.subscription = subscription
+    }
+
+    public removeSubscription(): void {
+        this.subscription?.unsubscribe()
+    }
+
+    public dispose(): void {
+        this.statsDb.clear()
+        this.subscription?.unsubscribe()
     }
 }
 

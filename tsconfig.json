@@ -81,7 +81,7 @@
     /* Advanced Options */
     "resolveJsonModule": true,
     /* Include modules imported with '.json' extension */
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
     /* Disallow inconsistently-cased references to the same file. */
 
     "experimentalDecorators": true

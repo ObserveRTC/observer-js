@@ -1,8 +1,8 @@
 {
-  "exportCallstats": true,
-  "libraryName": "callstats",
+  "exportCallstats": false,
+  "libraryName": "ObserverRTC",
   "poolingIntervalMs": 1000,
-  "debug": false,
+  "debug": true,
   "wsServer": {
     "URL": "wss://observer.rtc.help:7880/ws/",
     "UUID": "86ed98c6-b001-48bb-b31e-da638b979c72"

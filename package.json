@@ -1,8 +1,8 @@
 {
-  "name": "@ObserveRTC/webextrapp-lib",
-  "version": "0.1.1",
+  "name": "@ObserveRTC/observer-lib",
+  "version": "0.2.0",
   "description": "Extractor Development Toolkits for WebRTC Samples",
-  "main": "dist/webextrapp-lib.js",
+  "main": "dist/observer-lib.js",
   "dependencies": {},
   "devDependencies": {
     "@types/fingerprintjs2": "^2.0.0",
@@ -30,9 +30,8 @@
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
     "build-library": "npm run build && webpack --mode=production",
-    "build-and-copy-library": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/node_modules/@observertc/webextrapp-lib/dist",
     "publish-library": "npm run build-library && npm publish",
-    "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/webextrapp-lib.* ./__test__/pc1/js",
+    "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/observer-lib.* ./__test__/pc1/js",
     "local-demo": "npm run build-local-test && pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
     "local-docker-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up webextra-app",
     "proxy-server": "docker-compose down && docker-compose build --no-cache && docker-compose up proxy-server"
