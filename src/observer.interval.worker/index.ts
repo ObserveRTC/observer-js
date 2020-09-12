@@ -18,7 +18,6 @@ class IntervalWorker {
     public unsubscribe(subscriber?: Subscription) {
         subscriber?.unsubscribe()
     }
-
 }
 
 export default IntervalWorker

@@ -1,5 +1,5 @@
-import ObserverPC, { IObserverStats } from '../../observer.pc'
-import { ObserverPlugin } from '../base.plugin'
+import ObserverPC, { IObserverStats } from '../../../observer.pc'
+import { ObserverPlugin } from '../../base.plugin'
 
 
 class StatsParser extends ObserverPlugin {

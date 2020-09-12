@@ -1,7 +1,8 @@
 import { Subscription } from 'rxjs'
 import { ObserverPlugin } from '../observer.plugins/base.plugin'
-import StatsParser from '../observer.plugins/stats.parser.plugin'
+import StatsParser from '../observer.plugins/public/stats.parser.plugin'
 import ObserverBasePC from './base.pc'
+import PCState from './pc.state'
 
 export interface IUserConfig {
     pc: RTCPeerConnection
@@ -35,6 +36,7 @@ class ObserverPC extends ObserverBasePC {
     }
 
     public async run(pluginList: any[]): Promise<any> {
+        // run through all plugins
         for (const curPlugin of pluginList) {
             await this.runPlugin(curPlugin)
         }
@@ -46,11 +48,12 @@ class ObserverPC extends ObserverBasePC {
 
     public removeSubscription(): void {
         this.subscription?.unsubscribe()
+        this.subscription = undefined
     }
 
     public dispose(): void {
+        this.removeSubscription()
         this.statsDb.clear()
-        this.subscription?.unsubscribe()
     }
 }
 

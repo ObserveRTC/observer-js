@@ -16,7 +16,7 @@ class Integrator {
     }
 
     stopCollection() {
-        this.wobserver.dispose()
+        this.wobserver.disposePC()
     }
 }
 

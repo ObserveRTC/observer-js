@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import Queue from '../../observer.db/in.memory.queue'
 import BrowserUtil from '../../observer.utils/browser.util'
 import TimeUtil from '../../observer.utils/time.util'
+import PCState from '../pc.state'
 
 export default abstract class ObserverBasePC {
     public readonly id: string = uuidv4()
@@ -10,6 +11,7 @@ export default abstract class ObserverBasePC {
     public subscription?: Subscription
     public statsDb: Queue = new Queue()
     public browserId?: string
+    public pcState: PCState = new PCState()
     protected constructor() {
         BrowserUtil.getBrowserId().then(value => this.browserId = value)
     }
