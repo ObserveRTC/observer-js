@@ -1,7 +1,7 @@
 import { Subscription } from 'rxjs'
 import { v4 as uuidv4 } from 'uuid'
 import Queue from '../../observer.db/in.memory.queue'
-import BrowserUtil from '../../observer.utils/browser.util'
+import observerSingleton from '../../observer.singleton'
 import TimeUtil from '../../observer.utils/time.util'
 import PCState from '../pc.state'
 
@@ -13,7 +13,7 @@ export default abstract class ObserverBasePC {
     public browserId?: string
     public pcState: PCState = new PCState()
     protected constructor() {
-        BrowserUtil.getBrowserId().then(value => this.browserId = value)
+        observerSingleton.getBrowserId().then(value => this.browserId = value)
     }
 
     public abstract getPeerConnection(): RTCPeerConnection

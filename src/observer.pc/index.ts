@@ -2,7 +2,6 @@ import { Subscription } from 'rxjs'
 import { ObserverPlugin } from '../observer.plugins/base.plugin'
 import StatsParser from '../observer.plugins/public/stats.parser.plugin'
 import ObserverBasePC from './base.pc'
-import PCState from './pc.state'
 
 export interface IUserConfig {
     pc: RTCPeerConnection

@@ -5,9 +5,10 @@ class Integrator {
         this.init()
     }
     init() {
-        this.wobserver = new ObserverRTC.init()
-        this.wobserver.attachPlugin(this.statsParser)
-        this.wobserver.attachPlugin(this.statsSender)
+        this.wobserver = new ObserverRTC.Builder()
+            .attachPlugin(this.statsParser)
+            .attachPlugin(this.statsSender)
+            .build()
     }
 
     startCollection() {

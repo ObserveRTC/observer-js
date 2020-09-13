@@ -4,8 +4,8 @@ import ObserverPC, { IUserConfig } from '../observer.pc'
 import { ObserverPlugin } from '../observer.plugins/base.plugin'
 import ConnectionMonitor from '../observer.plugins/internal/connection.monitor.plugin'
 
-abstract class IObserverManager {
-    public abstract addPC(pc: RTCPeerConnection, callId: string, userId: string): void
+abstract class IObserver {
+    public abstract addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void
     public abstract resumePC(currentPC: ObserverPC): void
     public abstract pausePC(currentPC: ObserverPC): void
     public abstract attachPlugin(plugin: ObserverPlugin): void
@@ -13,7 +13,7 @@ abstract class IObserverManager {
     public abstract getPcList(): ObserverPC[]
 }
 
-class ObserverManager implements IObserverManager{
+class Observer implements IObserver{
     private pcList: ObserverPC[] = []
     private pluginList: ObserverPlugin[] = [
         // internal plugins
@@ -36,7 +36,7 @@ class ObserverManager implements IObserverManager{
         this.pluginList.push(plugin)
     }
 
-    public addPC(pc: RTCPeerConnection, callId: string, userId: string) {
+    public addPC(pc: RTCPeerConnection, callId?: string, userId?: string) {
         const userConfig = {
             callId,
             pc,
@@ -87,4 +87,4 @@ class ObserverManager implements IObserverManager{
 
 }
 
-export default ObserverManager
+export default Observer

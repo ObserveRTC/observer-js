@@ -1,16 +1,16 @@
 import { ObserverPlugin } from '../../observer.plugins/base.plugin'
-import ObserverManager from '../index'
+import Observer from '../index'
 
-class ObserverManagerBuilder {
-    private readonly instance: ObserverManager = new ObserverManager()
-    attachPlugin(plugin: ObserverPlugin): ObserverManager {
+class ObserverBuilder {
+    private readonly instance: Observer = new Observer()
+    attachPlugin(plugin: ObserverPlugin): ObserverBuilder {
         this.instance.attachPlugin(plugin)
-        return this.instance
+        return this
     }
 
-    build(): ObserverManager {
+    build(): Observer {
         return this.instance
     }
 }
 // not using currently
-export default ObserverManagerBuilder
+export default ObserverBuilder

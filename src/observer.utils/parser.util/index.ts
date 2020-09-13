@@ -9,4 +9,4 @@ class ParserUtil {
     }
 }
 
-export default BrowserUtil
+export default ParserUtil

@@ -13,5 +13,4 @@ class BrowserUtil {
         })
     }
 }
-
 export default BrowserUtil

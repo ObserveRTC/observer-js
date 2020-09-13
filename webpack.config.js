@@ -5,16 +5,16 @@ const libraryConfig = require('./library.config/index.json')
 const {version} = require('./package.json')
 
 const libraryName = `${libraryConfig.libraryName}`
-const exportCallStats = `${libraryConfig.exportCallstats}`
 
 module.exports = {
     entry: {
-        'observer-lib': exportCallStats === 'true' ?
-            './build/callstats.js' : './build/default.js'
+        'observer-lib': libraryName === 'callstats' ?
+            './build/jitsi.js' : './build/default.js'
     },
     output: {
         path: path.resolve(__dirname, 'dist'),
-        filename: exportCallStats === 'true' ? 'observer.min.js': '[name].js',
+        filename: '[name].js',
+        //filename: libraryName === 'jitsi' ? 'observer.min.js': '[name].js',
         library: libraryName,
         umdNamedDefine: true,
         libraryExport: "default",

@@ -14,6 +14,7 @@ class StatsSender extends ObserverPlugin {
         }
         const options = {
             connectionTimeout: 5000,
+            debug: true,
             maxEnqueuedMessages: 500,
             maxRetries: 50,
         }
@@ -40,7 +41,7 @@ class StatsSender extends ObserverPlugin {
             return
         }
         logger.warn('sending samples to server', samples)
-        // this.webSocket?.send(JSON.stringify(samples))
+        this.webSocket?.send(JSON.stringify(samples))
     }
 }
 

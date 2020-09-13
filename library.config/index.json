@@ -1,6 +1,5 @@
 {
-  "exportCallstats": false,
-  "libraryName": "ObserverRTC",
+  "libraryName": "callstats",
   "poolingIntervalMs": 1000,
   "debug": true,
   "wsServer": {
