@@ -12,7 +12,7 @@ Extractor Development Toolkits for WebRTC Samples
   - Build the library 
     - `npm run build-library`
 
-  Once build is complete it will create `webextrapp-lib.js` library in the `dist` folder. 
+  Once build is complete it will create `observer-lib.js` library in the `dist` folder. 
 
 
 - ### Publish the package
@@ -21,7 +21,7 @@ Extractor Development Toolkits for WebRTC Samples
   - Goto the `package.json` and update the version
   - Login to GitHub package registry using your credentials
     - ​    `npm login --registry=https://npm.pkg.github.com`
-  - Publish the build `webextrapp-lib.js` package
+  - Publish the build `observer-lib.js` package
     - `npm publish`
 
 
@@ -32,7 +32,6 @@ Extractor Development Toolkits for WebRTC Samples
 
    ```json
    {
-     "exportCallstats": true,
      "libraryName": "callstats",
      "poolingIntervalMs": 1000,
      "debug": false,
@@ -45,16 +44,16 @@ Extractor Development Toolkits for WebRTC Samples
 
 2. Run `npm run build-library` to build the library. 
 
-   - If the build is successful, it will generate the library inside `dist` folder.
+   - If the build is successful, it will generate the library `observer.min.js inside `dist` folder.
 
 3. You can now use the build library in Jitsi project that will collect stats from Jitsi conference and send stats to provided `wsServer` endpoint
 
 
 
 ### Install core library package from package registry and user it in custom integration(s)
-
+``
 - Add the package in your package.json
-  - `"@observertc/webextrapp-lib": "0.1.1"`
+  - `"@observertc/observer-lib": "0.2.0"`
 - Create `.npmrc` in the project folder and add our registry
   - `@observertc:registry=https://npm.pkg.github.com/`
 - Install the package

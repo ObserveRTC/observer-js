@@ -14,7 +14,7 @@ module.exports = {
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        //filename: libraryName === 'jitsi' ? 'observer.min.js': '[name].js',
+        filename: libraryName === 'callstats' ? 'observer.min.js': '[name].js',
         library: libraryName,
         umdNamedDefine: true,
         libraryExport: "default",
