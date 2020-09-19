@@ -1,4 +1,6 @@
+import logger from '../../../observer.logger'
 import ObserverPC, { IObserverStats } from '../../../observer.pc'
+import StatsMap from '../../../schema/v20200114/stats.map'
 import { ObserverPlugin } from '../../base.plugin'
 
 
@@ -42,7 +44,28 @@ class StatsParser extends ObserverPlugin {
         for (const currentStats of sendRecvStats) {
             const stats: any = await currentStats.getStats()
             for (const value of stats?.values()) {
-                statsList.push(value)
+                switch (value.type) {
+                    case 'inbound-rtp':
+                        logger.warn('->', value, StatsMap.inboundRTPStatElement(value))
+                        statsList.push(StatsMap.inboundRTPStatElement(value))
+                        break
+                    case 'media-source':
+                        logger.warn('->', value, StatsMap.mediaSource(value))
+                        statsList.push(StatsMap.mediaSource(value))
+                        break
+                    case 'outbound-rtp':
+                        logger.warn('->', value, StatsMap.outboundRTPStatElement(value))
+                        statsList.push(StatsMap.outboundRTPStatElement(value))
+                        break
+                    case 'remote-inbound-rtp':
+                        logger.warn('->', value, StatsMap.remoteInboundRTPStatElement(value))
+                        statsList.push(StatsMap.remoteInboundRTPStatElement(value))
+                        break
+                    case 'track':
+                        logger.warn('->', value, StatsMap.track(value))
+                        statsList.push(StatsMap.remoteInboundRTPStatElement(value))
+                        break
+                }
             }
         }
         return statsList
@@ -52,16 +75,23 @@ class StatsParser extends ObserverPlugin {
         const localCandidates = [
             ...receiverStats.filter( (item: any) => 'local-candidate' === item.type ),
             ...senderStats.filter( (item: any) => 'local-candidate' === item.type )]
+
         const remoteCandidates = [
             ...receiverStats.filter( (item: any) => 'remote-candidate' === item.type ),
             ...senderStats.filter( (item: any) => 'remote-candidate' === item.type )]
+
         const iceCandidatePair = [
             ...receiverStats.filter( (item: any) => 'candidate-pair' === item.type ),
             ...senderStats.filter( (item: any) => 'candidate-pair' === item.type )]
+
+
+        logger.warn('$->', iceCandidatePair, StatsMap.candidatePair(iceCandidatePair) )
+        logger.warn('$->', localCandidates, StatsMap.localCandidate(localCandidates) )
+        logger.warn('$->', remoteCandidates, StatsMap.remoteCandidate(remoteCandidates) )
         return {
-            iceCandidatePair,
-            localCandidates,
-            remoteCandidates,
+            iceCandidatePair: StatsMap.candidatePair(iceCandidatePair),
+            localCandidates:  StatsMap.localCandidate(localCandidates),
+            remoteCandidates: StatsMap.remoteCandidate(remoteCandidates),
         }
     }
 

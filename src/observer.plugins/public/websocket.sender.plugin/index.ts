@@ -40,8 +40,8 @@ class StatsSender extends ObserverPlugin {
         if (!samples) {
             return
         }
-        logger.warn('sending samples to server', samples)
-        this.webSocket?.send(JSON.stringify(samples))
+        // logger.warn('sending samples to server', samples)
+        // this.webSocket?.send(JSON.stringify(samples))
     }
 }
 
