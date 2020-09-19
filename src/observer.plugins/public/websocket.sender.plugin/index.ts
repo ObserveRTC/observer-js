@@ -1,7 +1,7 @@
 import ReconnectingWebSocket from 'reconnecting-websocket'
 import logger from '../../../observer.logger'
 import ObserverPC from '../../../observer.pc'
-import { PeerConnectionSample } from '../../../schema/sender.payload'
+import { PeerConnectionSample } from '../../../schema/legacy'
 import { ObserverPlugin } from '../../base.plugin'
 
 
