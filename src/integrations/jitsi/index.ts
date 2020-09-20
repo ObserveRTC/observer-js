@@ -7,7 +7,11 @@ import ParserUtil from '../../observer.utils/parser.util'
 // @ts-ignore
 const wsServerUrl = WS_SERVER_URL || null
 // @ts-ignore
-const wsServerUuid = WS_SERVER_UUID || null
+const serviceUUID = SERVICE_UUID || null
+// @ts-ignore
+const mediaUnitId = MEDIA_UNIT_ID || null
+// @ts-ignore
+const statsVersion = STATS_VERSION || null
 
 // tslint:disable-next-line:class-name
 class callstats {
@@ -108,7 +112,7 @@ class callstats {
         sendonly: 'sendonly',
         sendrecv: 'sendrecv',
     }
-    private readonly serverURL: string = ParserUtil.parseWsServerUrl(wsServerUrl, wsServerUuid)
+    private readonly serverURL: string = ParserUtil.parseWsServerUrl(wsServerUrl, serviceUUID, mediaUnitId, statsVersion)
     private readonly statsParser: StatsParser = new StatsParser()
     private readonly statsSender: StatsSender = new StatsSender(
         this.serverURL

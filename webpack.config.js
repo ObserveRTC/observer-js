@@ -42,7 +42,9 @@ module.exports = {
             DEBUG: JSON.stringify(libraryConfig.debug),
             POOLING_INTERVAL_MS: JSON.stringify(libraryConfig.poolingIntervalMs),
             WS_SERVER_URL: JSON.stringify(libraryConfig.wsServer.URL),
-            WS_SERVER_UUID: JSON.stringify(libraryConfig.wsServer.UUID)
+            SERVICE_UUID: JSON.stringify(libraryConfig.wsServer.ServiceUUID),
+            MEDIA_UNIT_ID: JSON.stringify(libraryConfig.wsServer.MediaUnitID),
+            STATS_VERSION: JSON.stringify(libraryConfig.wsServer.StatsVersion)
         }),
         new CleanWebpackPlugin({
             dry: true,
