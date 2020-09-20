@@ -174,7 +174,7 @@ export interface OutboundRTPStatElement {
     qpSum?:                              number
     qualityLimitationReason?:            QualityLimitationReason
     qualityLimitationResolutionChanges?: number
-    remoteid?:                           string
+    remoteId?:                           string
     retransmittedBytesSent?:             number
     retransmittedPacketsSent?:           number
     ssrc?:                               number

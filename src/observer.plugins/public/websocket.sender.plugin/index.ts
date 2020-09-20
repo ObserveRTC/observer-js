@@ -1,5 +1,4 @@
 import ReconnectingWebSocket from 'reconnecting-websocket'
-import logger from '../../../observer.logger'
 import ObserverPC from '../../../observer.pc'
 import { PeerConnectionSample } from '../../../schema/legacy'
 import { ObserverPlugin } from '../../base.plugin'
@@ -41,7 +40,7 @@ class StatsSender extends ObserverPlugin {
             return
         }
         // logger.warn('sending samples to server', samples)
-        // this.webSocket?.send(JSON.stringify(samples))
+        this.webSocket?.send(JSON.stringify(samples))
     }
 }
 

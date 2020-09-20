@@ -17,7 +17,7 @@ class StatsMap{
             port,
             priority,
             protocol,
-            transportID
+            transportId
         } = candidate as LocalCandidateElement
 
         return {
@@ -30,7 +30,7 @@ class StatsMap{
             port,
             priority,
             protocol,
-            transportID
+            transportId
         } as LocalCandidateElement
     }
 
@@ -44,7 +44,7 @@ class StatsMap{
             port,
             priority,
             protocol,
-            transportID
+            transportId
         } = candidate as RemoteCandidateElement
 
         return {
@@ -56,7 +56,7 @@ class StatsMap{
             port,
             priority,
             protocol,
-            transportID
+            transportId
         } as RemoteCandidateElement
     }
 
@@ -68,17 +68,17 @@ class StatsMap{
             consentRequestsSent,
             currentRoundTripTime,
             id,
-            localCandidateID,
+            localCandidateId,
             nominated,
             priority,
-            remoteCandidateID,
+            remoteCandidateId,
             requestsReceived,
             requestsSent,
             responsesReceived,
             responsesSent,
             state,
             totalRoundTripTime,
-            transportID,
+            transportId,
             writable
         } = candidatePair as CandidatePairElement
 
@@ -89,17 +89,17 @@ class StatsMap{
             consentRequestsSent,
             currentRoundTripTime,
             id,
-            localCandidateID,
+            localCandidateId,
             nominated,
             priority,
-            remoteCandidateID,
+            remoteCandidateId,
             requestsReceived,
             requestsSent,
             responsesReceived,
             responsesSent,
             state,
             totalRoundTripTime,
-            transportID,
+            transportId,
             writable
         } as CandidatePairElement
     }
@@ -113,7 +113,7 @@ class StatsMap{
             mediaType,
             totalAudioEnergy,
             totalSamplesDuration,
-            trackIdentifier,
+            trackId,
             width
         } = stats as MediaSourceElement
 
@@ -125,7 +125,7 @@ class StatsMap{
             mediaType: mediaType || stats.kind,
             totalAudioEnergy,
             totalSamplesDuration,
-            trackIdentifier,
+            trackI: trackId || stats.trackIdentifier,
             width
         } as MediaSourceElement
     }
@@ -193,7 +193,7 @@ class StatsMap{
     public static outboundRTPStatElement(stats?: any): OutboundRTPStatElement {
         const {
             bytesSent,
-            codecID,
+            codecId,
             encoderImplementation,
             firCount,
             framesEncoded,
@@ -201,7 +201,7 @@ class StatsMap{
             id,
             isRemote,
             keyFramesEncoded,
-            mediaSourceID,
+            mediaSourceId,
             mediaType,
             nackCount,
             packetsSent,
@@ -209,20 +209,20 @@ class StatsMap{
             qpSum,
             qualityLimitationReason,
             qualityLimitationResolutionChanges,
-            remoteID,
+            remoteId,
             retransmittedBytesSent,
             retransmittedPacketsSent,
             ssrc,
             totalEncodedBytesTarget,
             totalEncodeTime,
             totalPacketSendDelay,
-            trackID,
-            transportID
+            trackId,
+            transportId
         } = stats as OutboundRTPStatElement
 
         return {
             bytesSent,
-            codecID,
+            codecId,
             encoderImplementation,
             firCount,
             framesEncoded,
@@ -230,7 +230,7 @@ class StatsMap{
             id,
             isRemote,
             keyFramesEncoded,
-            mediaSourceID,
+            mediaSourceId,
             mediaType: mediaType || stats.kind,
             nackCount,
             packetsSent,
@@ -238,41 +238,41 @@ class StatsMap{
             qpSum,
             qualityLimitationReason,
             qualityLimitationResolutionChanges,
-            remoteID,
+            remoteId,
             retransmittedBytesSent,
             retransmittedPacketsSent,
             ssrc,
             totalEncodeTime,
             totalEncodedBytesTarget,
             totalPacketSendDelay,
-            trackID,
-            transportID
+            trackId,
+            transportId
         } as OutboundRTPStatElement
     }
 
     public static remoteInboundRTPStatElement(stats?: any): RemoteInboundRTPStatElement {
         const {
-            codecID,
+            codecId,
             id,
             jitter,
-            localID,
+            localId,
             mediaType,
             packetsLost,
             roundTripTime,
             ssrc,
-            transportID
+            transportId
         } = stats as RemoteInboundRTPStatElement
 
         return {
-            codecID,
+            codecId,
             id,
             jitter,
-            localID,
+            localId,
             mediaType: mediaType || stats.kind,
             packetsLost,
             roundTripTime,
             ssrc,
-            transportID
+            transportId
         } as RemoteInboundRTPStatElement
     }
     public static track(stats?: any): TrackElement {
@@ -289,7 +289,7 @@ class StatsMap{
             insertedSamplesForDeceleration,
             jitterBufferDelay,
             jitterBufferEmittedCount,
-            mediaSourceID,
+            mediaSourceId,
             mediaType,
             remoteSource,
             removedSamplesForAcceleration,
@@ -311,7 +311,7 @@ class StatsMap{
             insertedSamplesForDeceleration,
             jitterBufferDelay,
             jitterBufferEmittedCount,
-            mediaSourceID,
+            mediaSourceId,
             mediaType: mediaType || stats.kind,
             remoteSource,
             removedSamplesForAcceleration,
