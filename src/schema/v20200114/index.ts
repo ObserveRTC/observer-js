@@ -5,13 +5,12 @@
 //   const peerConnectionSample = Convert.toPeerConnectionSample(json);
 
 export interface PeerConnectionSample {
-    browserID?:              string
+    browserId?:              string
     callId?:                 string
-    customData?:             string
     iceStats?:               IceStats
-    peerConnectionID:        string
-    receiverStats?:          SendRecvStats
-    senderStats?:            SendRecvStats
+    peerConnectionId?:       string
+    receiverStats?:          ReceiverStats
+    senderStats?:            ReceiverStats
     timestamp?:              number
     timeZoneOffsetInMinute?: number
     userId?:                 string
@@ -30,17 +29,17 @@ export interface CandidatePairElement {
     consentRequestsSent?:      number
     currentRoundTripTime?:     number
     id?:                       string
-    localCandidateID?:         string
+    localCandidateId?:         string
     nominated?:                boolean
     priority?:                 number
-    remoteCandidateID?:        string
+    remoteCandidateId?:        string
     requestsReceived?:         number
     requestsSent?:             number
     responsesReceived?:        number
     responsesSent?:            number
     state?:                    State
     totalRoundTripTime?:       number
-    transportID?:              string
+    transportId?:              string
     writable?:                 boolean
 }
 
@@ -63,7 +62,7 @@ export interface LocalCandidateElement {
     port?:          number
     priority?:      number
     protocol?:      Protocol
-    transportID?:   string
+    transportId?:   string
 }
 
 export enum CandidateType {
@@ -99,10 +98,10 @@ export interface RemoteCandidateElement {
     port?:          number
     priority?:      number
     protocol?:      Protocol
-    transportID?:   string
+    transportId?:   string
 }
 
-export interface SendRecvStats {
+export interface ReceiverStats {
     inboundRTPStats?:       InboundRTPStatElement[]
     mediaSources?:          MediaSourceElement[]
     outboundRTPStats?:      OutboundRTPStatElement[]
@@ -153,13 +152,13 @@ export interface MediaSourceElement {
     mediaType?:            MediaType
     totalAudioEnergy?:     number
     totalSamplesDuration?: number
-    trackIdentifier?:      string
+    trackId?:              string
     width?:                number
 }
 
 export interface OutboundRTPStatElement {
     bytesSent?:                          number
-    codecID?:                            string
+    codecId?:                            string
     encoderImplementation?:              string
     firCount?:                           number
     framesEncoded?:                      number
@@ -167,7 +166,7 @@ export interface OutboundRTPStatElement {
     id?:                                 string
     isRemote?:                           boolean
     keyFramesEncoded?:                   number
-    mediaSourceID?:                      string
+    mediaSourceId?:                      string
     mediaType?:                          MediaType
     nackCount?:                          number
     packetsSent?:                        number
@@ -175,15 +174,15 @@ export interface OutboundRTPStatElement {
     qpSum?:                              number
     qualityLimitationReason?:            QualityLimitationReason
     qualityLimitationResolutionChanges?: number
-    remoteID?:                           string
+    remoteid?:                           string
     retransmittedBytesSent?:             number
     retransmittedPacketsSent?:           number
     ssrc?:                               number
     totalEncodedBytesTarget?:            number
     totalEncodeTime?:                    number
     totalPacketSendDelay?:               number
-    trackID?:                            string
-    transportID?:                        string
+    trackId?:                            string
+    transportId?:                        string
 }
 
 export enum QualityLimitationReason {
@@ -195,15 +194,15 @@ export enum QualityLimitationReason {
 }
 
 export interface RemoteInboundRTPStatElement {
-    codecID?:       string
+    codecId?:       string
     id?:            string
     jitter?:        number
-    localID?:       string
+    localId?:       string
     mediaType?:     MediaType
     packetsLost?:   number
     roundTripTime?: number
     ssrc?:          number
-    transportID?:   string
+    transportId?:   string
 }
 
 export interface TrackElement {
@@ -219,7 +218,7 @@ export interface TrackElement {
     insertedSamplesForDeceleration?: number
     jitterBufferDelay?:              number
     jitterBufferEmittedCount?:       number
-    mediaSourceID?:                  string
+    mediaSourceId?:                  string
     mediaType?:                      MediaType
     remoteSource?:                   boolean
     removedSamplesForAcceleration?:  number
