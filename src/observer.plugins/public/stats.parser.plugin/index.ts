@@ -1,5 +1,6 @@
 import logger from '../../../observer.logger'
 import ObserverPC, { IObserverStats } from '../../../observer.pc'
+import { IceStats, ReceiverStats } from '../../../schema/v20200114'
 import StatsMap from '../../../schema/v20200114/stats.map'
 import { ObserverPlugin } from '../../base.plugin'
 
@@ -39,60 +40,55 @@ class StatsParser extends ObserverPlugin {
         return this.getStats(senders)
     }
 
-    private async getStats(sendRecvStats: RTCRtpSender[] | RTCRtpReceiver[]): Promise<any> {
+    private async getStats(sendRecvStats: RTCRtpSender[] | RTCRtpReceiver[]): Promise<ReceiverStats> {
         const statsList = []
         for (const currentStats of sendRecvStats) {
             const stats: any = await currentStats.getStats()
             for (const value of stats?.values()) {
-                switch (value.type) {
-                    case 'inbound-rtp':
-                        logger.warn('->', value, StatsMap.inboundRTPStatElement(value))
-                        statsList.push(StatsMap.inboundRTPStatElement(value))
-                        break
-                    case 'media-source':
-                        logger.warn('->', value, StatsMap.mediaSource(value))
-                        statsList.push(StatsMap.mediaSource(value))
-                        break
-                    case 'outbound-rtp':
-                        logger.warn('->', value, StatsMap.outboundRTPStatElement(value))
-                        statsList.push(StatsMap.outboundRTPStatElement(value))
-                        break
-                    case 'remote-inbound-rtp':
-                        logger.warn('->', value, StatsMap.remoteInboundRTPStatElement(value))
-                        statsList.push(StatsMap.remoteInboundRTPStatElement(value))
-                        break
-                    case 'track':
-                        logger.warn('->', value, StatsMap.track(value))
-                        statsList.push(StatsMap.remoteInboundRTPStatElement(value))
-                        break
-                }
+                statsList.push(value)
             }
         }
-        return statsList
+        const inboundRTPStats = statsList.filter(stats => stats?.value === 'inbound-rtp')
+            .map(stats => StatsMap.inboundRTPStatElement(stats))
+        const mediaSources = statsList.filter(stats => stats?.value === 'media-source')
+            .map(stats => StatsMap.mediaSource(stats))
+        const outboundRTPStats = statsList.filter(stats => stats?.value === 'outbound-rtp')
+            .map(stats => StatsMap.outboundRTPStatElement(stats))
+        const remoteInboundRTPStats = statsList.filter(stats => stats?.value === 'remote-inbound-rtp')
+            .map(stats => StatsMap.remoteInboundRTPStatElement(stats))
+        const tracks = statsList.filter(stats => stats?.value === 'track')
+            .map(stats => StatsMap.track(stats))
+
+        return {
+            inboundRTPStats,
+            mediaSources,
+            outboundRTPStats,
+            remoteInboundRTPStats,
+            tracks
+        } as ReceiverStats
     }
 
-    private async getIceStats(receiverStats: any, senderStats: any): Promise<any> {
+    private async getIceStats(receiverStats: any, senderStats: any): Promise<IceStats> {
         const localCandidates = [
             ...receiverStats.filter( (item: any) => 'local-candidate' === item.type ),
             ...senderStats.filter( (item: any) => 'local-candidate' === item.type )]
+            .map( stats => StatsMap.localCandidate(stats) )
 
         const remoteCandidates = [
             ...receiverStats.filter( (item: any) => 'remote-candidate' === item.type ),
-            ...senderStats.filter( (item: any) => 'remote-candidate' === item.type )]
+            ...senderStats.filter( (item: any) => 'remote-candidate' === item.type ) ]
+            .map( stats => StatsMap.remoteCandidate(stats) )
 
-        const iceCandidatePair = [
+        const candidatePairs = [
             ...receiverStats.filter( (item: any) => 'candidate-pair' === item.type ),
-            ...senderStats.filter( (item: any) => 'candidate-pair' === item.type )]
+            ...senderStats.filter( (item: any) => 'candidate-pair' === item.type ) ]
+            .map( stats => StatsMap.candidatePair(stats) )
 
-
-        logger.warn('$->', iceCandidatePair, StatsMap.candidatePair(iceCandidatePair) )
-        logger.warn('$->', localCandidates, StatsMap.localCandidate(localCandidates) )
-        logger.warn('$->', remoteCandidates, StatsMap.remoteCandidate(remoteCandidates) )
         return {
-            iceCandidatePair: StatsMap.candidatePair(iceCandidatePair),
-            localCandidates:  StatsMap.localCandidate(localCandidates),
-            remoteCandidates: StatsMap.remoteCandidate(remoteCandidates),
-        }
+            candidatePairs,
+            localCandidates,
+            remoteCandidates,
+        } as IceStats
     }
 
     private filterStats(statsList: any): Promise<any> {
