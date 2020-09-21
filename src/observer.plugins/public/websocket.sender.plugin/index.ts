@@ -1,6 +1,8 @@
 import ReconnectingWebSocket from 'reconnecting-websocket'
+import logger from '../../../observer.logger'
 import ObserverPC from '../../../observer.pc'
-import { PeerConnectionSample } from '../../../schema/legacy'
+import TimeUtil from '../../../observer.utils/time.util'
+import { PeerConnectionSample } from '../../../schema/v20200114'
 import { ObserverPlugin } from '../../base.plugin'
 
 
@@ -30,6 +32,7 @@ class StatsSender extends ObserverPlugin {
             receiverStats: stats?.receiverStats,
             senderStats: stats?.senderStats,
             timeZoneOffsetInMinute: observerPC?.timeZoneOffsetInMinute,
+            timestamp: TimeUtil.getCurrent(),
             userId: observerPC?.userConfig?.userId
         } as PeerConnectionSample
         await this.sendMessage(samples)
@@ -39,7 +42,7 @@ class StatsSender extends ObserverPlugin {
         if (!samples) {
             return
         }
-        // logger.warn('sending samples to server', samples)
+        logger.warn('sending samples to server', samples)
         this.webSocket?.send(JSON.stringify(samples))
     }
 }
