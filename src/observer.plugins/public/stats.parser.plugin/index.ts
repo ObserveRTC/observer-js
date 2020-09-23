@@ -1,4 +1,3 @@
-import logger from '../../../observer.logger'
 import ObserverPC, { IObserverStats } from '../../../observer.pc'
 import { IceStats, ReceiverStats } from '../../../schema/v20200114'
 import StatsMap from '../../../schema/v20200114/stats.map'
