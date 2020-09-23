@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/webextrapp-lib",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/webextrapp-lib.js",
   "dependencies": {},
@@ -43,5 +43,11 @@
   "repository": {
     "url": "git@github.com:ObserveRTC/webextrapp.git"
   },
-  "license": "MIT"
+  "license": "Apache-2.0",
+  "licenses": [
+    {
+      "type": "Apache-2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0"
+    }
+  ]
 }
