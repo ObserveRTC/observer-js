@@ -31,7 +31,7 @@
     "debug": "ts-node src/index.ts",
     "build-library": "npm run build && webpack --mode=production",
     "publish-library": "npm run build-library && npm publish",
-    "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/observer-lib.* ./__test__/pc1/js",
+    "build-local-test": "npm run build && webpack --mode=development && cp -r ./dist/observer.* ./__test__/pc1/js",
     "local-demo": "npm run build-local-test && pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
     "local-docker-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up webextra-app",
     "proxy-server": "docker-compose down && docker-compose build --no-cache && docker-compose up proxy-server"
