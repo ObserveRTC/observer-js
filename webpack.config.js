@@ -9,6 +9,8 @@ const buildDetails = (name = '') => {
     switch (name) {
         case 'callstats':
             return {entry: './build/jitsi.js', filename: 'observer.min.js'}
+        case 'TokBox':
+            return {entry: './build/tokbox.js', filename: 'observer.min.js'}
     }
     return {entry: './build/default.js', filename: `${name}.js`}
 }

@@ -1,5 +1,5 @@
 {
-  "libraryName": "callstats",
+  "libraryName": "TokBox",
   "poolingIntervalMs": 1000,
   "debug": true,
   "wsServer": {

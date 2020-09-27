@@ -125,7 +125,7 @@ class StatsMap{
             mediaType: mediaType || stats.kind,
             totalAudioEnergy,
             totalSamplesDuration,
-            trackI: trackId || stats.trackIdentifier,
+            trackId: trackId || stats.trackIdentifier,
             width
         } as MediaSourceElement
     }
