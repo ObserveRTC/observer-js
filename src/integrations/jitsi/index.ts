@@ -23,7 +23,6 @@ class Jitsi {
     private observer!: Observer
 
     public initialize(appId: any, appSecret: any, userId: any, initCallback: any) {
-        console.log('******** callstats initialization ', appId, appSecret)
         this.observer = new ObserverBuilder()
             .attachPlugin(this.statsParser)
             .attachPlugin(this.statsSender)
@@ -37,8 +36,12 @@ class Jitsi {
     }
 
     public addNewFabric(pc: any, remoteId: any, fabricUsage: any, conferenceId: any, fabricAttributes: any) {
+        // @ts-ignore
+        const callId = APP?.conference?.roomName
+        // @ts-ignore
+        const userId = APP?.conference?.getLocalDisplayName()
         try {
-            this.observer.addPC(pc)
+            this.observer.addPC(pc, callId, userId)
         } catch (e) {
             console.log('******** addpc error', e)
         }

@@ -1,0 +1,10 @@
+{
+  "name": "opentok-test-app",
+  "version": "0.0.1",
+  "scripts": {
+    "start-server": "http-server -p 9090"
+  },
+  "devDependencies": {
+    "http-server": "^0.12.3"
+  }
+}
