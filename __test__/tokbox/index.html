@@ -1,0 +1,44 @@
+<html>
+<body>
+<script src="observer.min.js"></script>
+<script src="https://static.opentok.com/v2/js/opentok.js" charset="utf-8"></script>
+<script charset="utf-8">
+    const apiKey = 'api-key';
+    const sessionId = 'session-id';
+    const token = 'token';
+
+    // connect to session
+    const session = OT.initSession(apiKey, sessionId);
+    const publisherId = `publisher-id-${Math.round(Math.random()*1000)}`
+    const publisherName = `pallab-${Math.round(Math.random()*1000)}`
+    // create publisher
+    const publisher = OT.initPublisher(publisherId,{name: publisherName});
+    session.connect(token, function (err) {
+        // publish publisher
+        session.publish(publisher);
+    })
+
+
+    // create subscriber
+    session.on('streamCreated', function (event) {
+        session.subscribe(event.stream);
+    });
+</script>
+<p>open another tab and they should connect each other</p>
+</body>
+<link href="https://fonts.googleapis.com/css?family=Muli" rel="stylesheet">
+<style>
+    body {
+        font-family: Muli, Arial;
+    }
+
+    strong {
+        color: #09c;
+    }
+
+    .OT_publisher {
+        float: left;
+        margin-right: 5px;
+    }
+</style>
+</html>
