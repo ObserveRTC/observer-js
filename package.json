@@ -27,10 +27,14 @@
   },
   "scripts": {
     "build": "tsc",
+    "build-library": "npm run build",
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
-    "build-library": "npm run build && webpack --mode=production",
-    "publish-library": "npm run build-library && npm publish",
+
+    "build-library-dev": "webpack  --config webpack/dev/webpack.config.js --mode=development",
+    "build-library-prod": "webpack --config webpack/prod/webpack.config.js --mode=production",
+    "publish-library": "npm run build-library-prod && npm pack" ,
+
     "build-local-test": "npm run build && webpack --mode=development",
     "local-demo": "npm run build-local-test && cp -r ./dist/observer.* ./__test__/pc1/js && pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
     "local-tokbox-demo": "npm run build-local-test && cp -r ./dist/observer.* ./__test__/tokbox && pushd __test__/tokbox && npm install && python2 -m SimpleHTTPServer 9090 && popd",
@@ -42,6 +46,5 @@
   },
   "repository": {
     "url": "git@github.com:ObserveRTC/webextrapp.git"
-  },
-  "license": "MIT"
+  }
 }

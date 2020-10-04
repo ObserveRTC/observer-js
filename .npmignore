@@ -10,4 +10,5 @@ webpack.*
 tsconfig.*
 tslint.*
 nodemon.*
-library.config/
+project.config/
+
