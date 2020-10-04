@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/observer-lib.js",
   "dependencies": {},
@@ -33,13 +33,8 @@
 
     "build-library-dev": "webpack  --config webpack/dev/webpack.config.js --mode=development",
     "build-library-prod": "webpack --config webpack/prod/webpack.config.js --mode=production",
-    "publish-library": "npm run build-library-prod && npm publish",
-
-    "build-local-test": "npm run build && webpack --mode=development",
-    "local-demo": "npm run build-local-test && cp -r ./dist/observer.* ./__test__/pc1/js && pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
-    "local-tokbox-demo": "npm run build-local-test && cp -r ./dist/observer.* ./__test__/tokbox && pushd __test__/tokbox && npm install && python2 -m SimpleHTTPServer 9090 && popd",
-    "local-docker-demo": "npm run build-local-test && docker-compose down && docker-compose build --no-cache && docker-compose up webextra-app",
-    "proxy-server": "docker-compose down && docker-compose build --no-cache && docker-compose up proxy-server"
+    "publish-npm-library": "npm run build-library-prod && npm publish",
+    "publish-cdn-library": "npm run build-library-dev && npm run build-library-prod"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"

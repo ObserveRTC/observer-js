@@ -29,7 +29,7 @@ module.exports = {
         ],
     },
     optimization: {
-        minimize: true
+        minimize: true,
     },
     plugins: [
         new webpack.ProgressPlugin(),
