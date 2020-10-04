@@ -9,10 +9,11 @@ Extractor Development Toolkits for WebRTC Samples
     - npm install -g typescript`
   - Install package dependencies 
     - `npm ci`
-  - Build the library 
-    - `npm run build-library`
+  - Build the library
+    - `npm run build-library-dev` ( developer version )
+    - `npm run build-library-prod` ( production version )
 
-  Once build is complete it will create `observer-lib.js` library in the `dist` folder. 
+  Once build is complete it will create `observer.js` ( developer) or `observer.min.js` ( production ) library in the `dist` folder. 
 
 
 - ### Publish the package
@@ -21,34 +22,8 @@ Extractor Development Toolkits for WebRTC Samples
   - Goto the `package.json` and update the version
   - Login to GitHub package registry using your credentials
     - ​    `npm login --registry=https://npm.pkg.github.com`
-  - Publish the build `observer-lib.js` package
-    - `npm publish`
-
-
-
-## Use the library for jitsi
-
-1. Change the configuration file JSON from [library.config/index.json](library.config/index.json). A sample configuration file for Jitsi is given bellow
-
-   ```json
-   {
-     "libraryName": "callstats",
-     "poolingIntervalMs": 1000,
-     "debug": false,
-     "wsServer": {
-       "URL": "wss://meet.cogint.ai:7879/ws/",
-       "UUID": "86ed98c6-b001-48bb-b31e-da638b979c72"
-     }
-   }
-   ```
-
-2. Run `npm run build-library` to build the library. 
-
-   - If the build is successful, it will generate the library `observer.min.js inside `dist` folder.
-
-3. You can now use the build library in Jitsi project that will collect stats from Jitsi conference and send stats to provided `wsServer` endpoint
-
-
+  - Publish the package
+    - `npm run publish-npm-library`
 
 ### Install core library package from package registry and user it in custom integration(s)
 ``
@@ -61,13 +36,17 @@ Extractor Development Toolkits for WebRTC Samples
 
  ## Run demo using docker
 
-  - Build and run the docker 
-  - `npm run local-docker-demo` and access the server from http://localhost:9090
+  - Goto `example-demo` folder from `__test__`
+   - `cd __test__/example-demo`
+  - Install npm dependency
+   - `npm install`
+  - Run the demo
+   - `npm run start-server` and access the server from http://localhost:9090
 
 
  ##### Change websocket server address in the demo application
 
-  - Goto [integration.js](__test__/pc1/js/integration.js#L24) and change server address
+  - Goto [integration.js](__test__/example-demo/js/integration.js#L24) and change server address
   - Change the current websocket server address
   - Rebuild docker and run the test demo app again
     - `npm run local-docker-demo` and access the server from http://localhost:9090
