@@ -21,7 +21,7 @@ class Observer implements IObserver{
     ]
 
     // @ts-ignore
-    private intervalWorker: IntervalWorker = new IntervalWorker(parseInt(POOLING_INTERVAL_MS ? POOLING_INTERVAL_MS : 1000 , 10))
+    private intervalWorker: IntervalWorker = new IntervalWorker(parseInt(typeof POOLING_INTERVAL_MS === 'undefined' ? 1000 : POOLING_INTERVAL_MS, 10))
 
     constructor() {
         // @ts-ignore

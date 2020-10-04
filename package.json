@@ -34,7 +34,7 @@
     "build-library-dev": "webpack  --config webpack/dev/webpack.config.js --mode=development",
     "build-library-prod": "webpack --config webpack/prod/webpack.config.js --mode=production",
     "publish-npm-library": "npm run build-library-prod && npm publish",
-    "publish-cdn-library": "npm run build-library-dev && npm run build-library-prod"
+    "publish-cdn-library": "npm run build-library && npm run build-library-dev && npm run build-library-prod"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"

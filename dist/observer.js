@@ -318,7 +318,7 @@ class Observer {
             new connection_monitor_plugin_1.default(),
         ];
         // @ts-ignore
-        this.intervalWorker = new observer_interval_worker_1.default(parseInt(POOLING_INTERVAL_MS ? POOLING_INTERVAL_MS : 1000, 10));
+        this.intervalWorker = new observer_interval_worker_1.default(parseInt(typeof POOLING_INTERVAL_MS === 'undefined' ? 1000 : POOLING_INTERVAL_MS, 10));
         // @ts-ignore
         console.info('using library version', "0.2.2");
     }
