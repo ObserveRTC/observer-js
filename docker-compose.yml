@@ -6,11 +6,3 @@ services:
         container_name: 'webextra-app'
         ports:
             - 9090:9090
-
-    proxy-server:
-        build:
-            context: ./proxy-server
-        container_name: 'proxy-server'
-        ports:
-            - 7878:7878
-            - 7879:7879
