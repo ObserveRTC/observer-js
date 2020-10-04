@@ -6,5 +6,8 @@
   },
   "devDependencies": {
     "http-server": "^0.12.3"
+  },
+  "dependencies": {
+    "@observertc/observer-lib": "^0.2.1"
   }
 }
