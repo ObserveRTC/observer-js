@@ -1,7 +1,6 @@
 const path = require('path');
 const webpack = require('webpack');
 const {CleanWebpackPlugin} = require('clean-webpack-plugin');
-const libraryConfig = require('../../project.config/core')
 const {version} = require('../../package.json')
 
 module.exports = {
@@ -9,7 +8,7 @@ module.exports = {
         'observer-lib': './build/default.js'
     },
     output: {
-        path: path.resolve(__dirname, '../../', 'dist', 'core'),
+        path: path.resolve(__dirname, '../../', 'dist'),
         filename: "observer.min.js",
         library: "ObserverRTC",
         umdNamedDefine: true,
@@ -35,7 +34,7 @@ module.exports = {
         new webpack.ProgressPlugin(),
         new webpack.DefinePlugin({
             LIBRARY_VERSION: JSON.stringify(version),
-            DEBUG: JSON.stringify(libraryConfig.debug),
+            DEBUG: JSON.stringify(false),
         }),
         new CleanWebpackPlugin({
             dry: true,
