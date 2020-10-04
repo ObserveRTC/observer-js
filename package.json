@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/observer-lib.js",
   "dependencies": {},
@@ -33,7 +33,7 @@
 
     "build-library-dev": "webpack  --config webpack/dev/webpack.config.js --mode=development",
     "build-library-prod": "webpack --config webpack/prod/webpack.config.js --mode=production",
-    "publish-library": "npm run build-library-prod && npm pack" ,
+    "publish-library": "npm run build-library-prod && npm publish",
 
     "build-local-test": "npm run build && webpack --mode=development",
     "local-demo": "npm run build-local-test && cp -r ./dist/observer.* ./__test__/pc1/js && pushd __test__/pc1 && npm install && python2 -m SimpleHTTPServer 9090 && popd",
