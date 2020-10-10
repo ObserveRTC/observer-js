@@ -514,7 +514,7 @@ class Observer {
         // @ts-ignore
         this.intervalWorker = new observer_interval_worker_1.default(parseInt(typeof POOLING_INTERVAL_MS === 'undefined' ? 1000 : POOLING_INTERVAL_MS, 10));
         // @ts-ignore
-        console.info('using library version', "0.2.2");
+        console.info('using library version', "0.2.5");
     }
     attachPlugin(plugin) {
         if (this.pluginList.find(item => item.id === plugin.id)) {
@@ -756,9 +756,10 @@ class ConnectionMonitor extends base_plugin_1.ObserverPlugin {
         this.expiredLimit = 10 * 1000; // 10 second
     }
     isExpired(pcState) {
-        if ((pcState === null || pcState === void 0 ? void 0 : pcState.currentState) !== 'closed') {
+        if (!((pcState === null || pcState === void 0 ? void 0 : pcState.currentState) in ['closed', 'failed'])) {
             return false;
         }
+        // connection state is either in closed, or failed state now
         const now = time_util_1.default.getCurrent();
         return now - (pcState === null || pcState === void 0 ? void 0 : pcState.lastUpdate) > this.expiredLimit;
     }
