@@ -8,9 +8,10 @@ import { ObserverPlugin } from '../../base.plugin'
 class ConnectionMonitor extends ObserverPlugin {
     private readonly expiredLimit = 10 * 1000 // 10 second
     public isExpired(pcState: PCState): boolean {
-        if (pcState?.currentState !== 'closed') {
+        if (!(pcState?.currentState in ['closed', 'failed'])) {
             return false
         }
+        // connection state is either in closed, or failed state now
         const now = TimeUtil.getCurrent()
         return now - pcState?.lastUpdate > this.expiredLimit
     }
