@@ -6,7 +6,7 @@ const {readFileSync} = require('fs')
 
 module.exports = {
     entry: {
-        'observer-lib': './build/default.js'
+        'observer-lib': './build/index.js'
     },
     output: {
         path: path.resolve(__dirname, '../../', 'dist'),
