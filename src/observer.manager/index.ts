@@ -20,12 +20,12 @@ class Observer implements IObserver{
         new ConnectionMonitor(),
     ]
 
-    // @ts-ignore
-    private intervalWorker: IntervalWorker = new IntervalWorker(parseInt(typeof POOLING_INTERVAL_MS === 'undefined' ? 1000 : POOLING_INTERVAL_MS, 10))
+    private intervalWorker: IntervalWorker
 
-    constructor() {
+    constructor(poolingInterval: number = 1000) {
         // @ts-ignore
         console.info('using library version', LIBRARY_VERSION)
+        this.intervalWorker   = new IntervalWorker(poolingInterval)
     }
 
     public attachPlugin(plugin: ObserverPlugin): void {

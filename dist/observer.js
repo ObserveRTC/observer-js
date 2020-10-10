@@ -506,16 +506,15 @@ const connection_monitor_plugin_1 = __importDefault(__webpack_require__(/*! ../o
 class IObserver {
 }
 class Observer {
-    constructor() {
+    constructor(poolingInterval = 1000) {
         this.pcList = [];
         this.pluginList = [
             // internal plugins
             new connection_monitor_plugin_1.default(),
         ];
         // @ts-ignore
-        this.intervalWorker = new observer_interval_worker_1.default(parseInt(typeof POOLING_INTERVAL_MS === 'undefined' ? 1000 : POOLING_INTERVAL_MS, 10));
-        // @ts-ignore
-        console.info('using library version', "0.2.7");
+        console.info('using library version', "0.2.8");
+        this.intervalWorker = new observer_interval_worker_1.default(poolingInterval);
     }
     attachPlugin(plugin) {
         if (this.pluginList.find(item => item.id === plugin.id)) {
