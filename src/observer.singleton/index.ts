@@ -2,7 +2,7 @@ import logger from '../observer.logger'
 import BrowserUtil from '../observer.utils/browser.util'
 
 class ObserverSingleton {
-    private browserId: string = ''
+    public browserId: string = ''
     public async getBrowserId(): Promise<string> {
         if (this.browserId) {
             return this.browserId

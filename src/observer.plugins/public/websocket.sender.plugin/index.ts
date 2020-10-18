@@ -1,8 +1,9 @@
 import ReconnectingWebSocket from 'reconnecting-websocket'
 import logger from '../../../observer.logger'
 import ObserverPC from '../../../observer.pc'
+import observerSingleton from '../../../observer.singleton'
 import TimeUtil from '../../../observer.utils/time.util'
-import { PeerConnectionSample } from '../../../schema/v20200114'
+import { PeerConnectionSample, UserMediaError } from '../../../schema/v20200114'
 import { ObserverPlugin } from '../../base.plugin'
 import SenderOptimizer from './stats.sender.optimize'
 
@@ -44,6 +45,16 @@ class StatsSender extends ObserverPlugin {
         await this.sendMessage(samples)
     }
 
+    public async sendUserMediaError(errorMessage?: string) {
+        logger.warn('yaaa!', errorMessage)
+        const sample: PeerConnectionSample = {
+            browserId: await observerSingleton.getBrowserId(),
+            timeZoneOffsetInMinute: TimeUtil.getTimeZoneOffsetInMinute(),
+            timestamp: TimeUtil.getCurrent(),
+            userMediaErrors: [{ message: errorMessage } as UserMediaError]
+        } as PeerConnectionSample
+        await this.sendMessage(sample)
+    }
     private async sendMessage(samples?: PeerConnectionSample): Promise<any> {
         if (!samples) {
             return

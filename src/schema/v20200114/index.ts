@@ -11,6 +11,7 @@ export interface PeerConnectionSample {
     peerConnectionId?:       string
     receiverStats?:          ReceiverStats
     senderStats?:            ReceiverStats
+    userMediaErrors?:        UserMediaError[]
     timestamp?:              number
     timeZoneOffsetInMinute?: number
     userId?:                 string
@@ -225,6 +226,10 @@ export interface TrackElement {
     samplesDuration?:                number
     silentConcealedSamples?:         number
     totalSamplesReceived?:           number
+}
+
+export interface UserMediaError {
+    message?: string
 }
 
 // Converts JSON strings to/from your types
