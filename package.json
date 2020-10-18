@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "0.2.11",
+  "version": "0.3.0",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "build/index.js",
   "types": "build/index.d.ts",

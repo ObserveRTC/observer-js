@@ -4,6 +4,7 @@ import ObserverPC from '../../../observer.pc'
 import TimeUtil from '../../../observer.utils/time.util'
 import { PeerConnectionSample } from '../../../schema/v20200114'
 import { ObserverPlugin } from '../../base.plugin'
+import SenderOptimizer from './stats.sender.optimize'
 
 
 class StatsSender extends ObserverPlugin {
@@ -23,7 +24,10 @@ class StatsSender extends ObserverPlugin {
     }
 
     public async execute(observerPC: ObserverPC): Promise<any> {
-        const stats = observerPC?.statsDb?.pool()
+        const previousStats = observerPC?.sendStatsDB?.pool()
+        const currentStats = observerPC?.collectStatsDb?.pool()
+        // apply plugin specific sender optimization
+        const stats = SenderOptimizer.getStatsForSending(previousStats, currentStats)
         const samples: PeerConnectionSample = {
             browserId: observerPC?.browserId,
             callId: observerPC?.userConfig?.callId,
@@ -35,6 +39,8 @@ class StatsSender extends ObserverPlugin {
             timestamp: TimeUtil.getCurrent(),
             userId: observerPC?.userConfig?.userId
         } as PeerConnectionSample
+        // add last sent stats
+        observerPC.sendStatsDB.add(currentStats)
         await this.sendMessage(samples)
     }
 

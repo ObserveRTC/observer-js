@@ -1,6 +1,7 @@
 class Queue {
     private q: any[] = []
-    private readonly maxSize = 120
+    // just remember last 10 records
+    private readonly maxSize = 10
     public add(value: any) {
         this.q.push(value)
         if (this.size() > this.maxSize) {

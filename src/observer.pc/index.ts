@@ -26,7 +26,7 @@ class ObserverPC extends ObserverBasePC {
     protected async runPlugin(currentPlugin: ObserverPlugin) {
         const result = await currentPlugin?.execute(this)
         if (currentPlugin instanceof StatsParser && result) {
-            this.statsDb.add(result)
+            this.collectStatsDb.add(result)
         }
     }
 
@@ -52,7 +52,8 @@ class ObserverPC extends ObserverBasePC {
 
     public dispose(): void {
         this.removeSubscription()
-        this.statsDb.clear()
+        this.collectStatsDb.clear()
+        this.sendStatsDB.clear()
     }
 }
 
