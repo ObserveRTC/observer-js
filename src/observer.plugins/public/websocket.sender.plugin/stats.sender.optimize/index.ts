@@ -1,18 +1,22 @@
 import logger from '../../../../observer.logger'
 import { IObserverStats } from '../../../../observer.pc'
+import { LocalCandidateElement, RemoteCandidateElement } from '../../../../schema/v20200114'
 
 class SenderOptimizer {
+    private static isEqual(previousCandidate: LocalCandidateElement[] | RemoteCandidateElement[] = [],
+                             currentCandidate: LocalCandidateElement[] | RemoteCandidateElement[] = []): boolean {
+        return currentCandidate
+            .every(candidate => previousCandidate
+                .some(item => item.id === candidate.id))
+    }
     public static getStatsForSending(previousStats: IObserverStats, currentStats: IObserverStats): IObserverStats {
-        const previousIceStats = previousStats?.iceStats
-        const currentIceStats = currentStats?.iceStats
-        const retval = { ...currentStats}
-        if (JSON.stringify(previousIceStats?.localCandidates) === JSON.stringify(currentIceStats?.localCandidates)) {
-            delete currentStats?.iceStats?.localCandidates
+        const retval = JSON.parse(JSON.stringify(currentStats))
+        if (this.isEqual(previousStats?.iceStats?.localCandidates, currentStats?.iceStats?.localCandidates)) {
+            delete retval?.iceStats?.localCandidates
         }
-        if (JSON.stringify(previousIceStats?.remoteCandidates) === JSON.stringify(currentIceStats?.remoteCandidates)) {
-            delete currentStats?.iceStats?.remoteCandidates
+        if (this.isEqual(previousStats?.iceStats?.remoteCandidates, currentStats?.iceStats?.remoteCandidates)) {
+            delete retval?.iceStats?.remoteCandidates
         }
-        logger.warn(retval)
         return retval
     }
 }

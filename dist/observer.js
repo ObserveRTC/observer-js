@@ -518,7 +518,7 @@ class Observer {
         ];
         this.userMediaHandler = new observer_usermediahandler_1.default();
         // @ts-ignore
-        console.info('using library version', "0.3.0");
+        console.info('using library version', "0.3.1");
         this.intervalWorker = new observer_interval_worker_1.default(poolingInterval);
         this.userMediaHandler.overrideUserMedia(this);
     }
@@ -998,24 +998,22 @@ exports.default = StatsSender;
 
 "use strict";
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-const observer_logger_1 = __importDefault(__webpack_require__(/*! ../../../../observer.logger */ "./build/observer.logger/index.js"));
 class SenderOptimizer {
+    static isEqual(previousCandidate = [], currentCandidate = []) {
+        return currentCandidate
+            .every(candidate => previousCandidate
+            .some(item => item.id === candidate.id));
+    }
     static getStatsForSending(previousStats, currentStats) {
-        var _a, _b;
-        const previousIceStats = previousStats === null || previousStats === void 0 ? void 0 : previousStats.iceStats;
-        const currentIceStats = currentStats === null || currentStats === void 0 ? void 0 : currentStats.iceStats;
-        const retval = Object.assign({}, currentStats);
-        if (JSON.stringify(previousIceStats === null || previousIceStats === void 0 ? void 0 : previousIceStats.localCandidates) === JSON.stringify(currentIceStats === null || currentIceStats === void 0 ? void 0 : currentIceStats.localCandidates)) {
-            (_a = currentStats === null || currentStats === void 0 ? void 0 : currentStats.iceStats) === null || _a === void 0 ? true : delete _a.localCandidates;
+        var _a, _b, _c, _d, _e, _f;
+        const retval = JSON.parse(JSON.stringify(currentStats));
+        if (this.isEqual((_a = previousStats === null || previousStats === void 0 ? void 0 : previousStats.iceStats) === null || _a === void 0 ? void 0 : _a.localCandidates, (_b = currentStats === null || currentStats === void 0 ? void 0 : currentStats.iceStats) === null || _b === void 0 ? void 0 : _b.localCandidates)) {
+            (_c = retval === null || retval === void 0 ? void 0 : retval.iceStats) === null || _c === void 0 ? true : delete _c.localCandidates;
         }
-        if (JSON.stringify(previousIceStats === null || previousIceStats === void 0 ? void 0 : previousIceStats.remoteCandidates) === JSON.stringify(currentIceStats === null || currentIceStats === void 0 ? void 0 : currentIceStats.remoteCandidates)) {
-            (_b = currentStats === null || currentStats === void 0 ? void 0 : currentStats.iceStats) === null || _b === void 0 ? true : delete _b.remoteCandidates;
+        if (this.isEqual((_d = previousStats === null || previousStats === void 0 ? void 0 : previousStats.iceStats) === null || _d === void 0 ? void 0 : _d.remoteCandidates, (_e = currentStats === null || currentStats === void 0 ? void 0 : currentStats.iceStats) === null || _e === void 0 ? void 0 : _e.remoteCandidates)) {
+            (_f = retval === null || retval === void 0 ? void 0 : retval.iceStats) === null || _f === void 0 ? true : delete _f.remoteCandidates;
         }
-        observer_logger_1.default.warn(retval);
         return retval;
     }
 }
