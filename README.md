@@ -28,11 +28,25 @@ Extractor Development Toolkits for WebRTC Samples
 ### Install core library package from package registry and user it in custom integration(s)
 ``
 - Add the package in your package.json
-  - `"@observertc/observer-lib": "0.2.0"`
+  - `"@observertc/observer-lib": "0.3.1"`
 - Create `.npmrc` in the project folder and add our registry
   - `@observertc:registry=https://npm.pkg.github.com/`
 - Install the package
   - `npm install`
+
+### You can just use the latest version of the library from GitHub directly in your HTML/JavaScript
+
+- Developer version
+
+```html
+<script src="https://observertc.github.io/webextrapp/dist/observer.js"></script>
+```
+
+- Production version
+
+```html
+<script src="https://observertc.github.io/webextrapp/dist/observer.min.js"></script>
+```
 
  ## Run demo using docker
 
