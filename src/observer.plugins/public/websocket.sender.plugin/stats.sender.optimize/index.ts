@@ -1,4 +1,3 @@
-import logger from '../../../../observer.logger'
 import { IObserverStats } from '../../../../observer.pc'
 import { LocalCandidateElement, RemoteCandidateElement } from '../../../../schema/v20200114'
 

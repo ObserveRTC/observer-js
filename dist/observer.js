@@ -518,7 +518,7 @@ class Observer {
         ];
         this.userMediaHandler = new observer_usermediahandler_1.default();
         // @ts-ignore
-        console.info('using library version', "0.3.1");
+        console.info('using library version', "0.3.2");
         this.intervalWorker = new observer_interval_worker_1.default(poolingInterval);
         this.userMediaHandler.overrideUserMedia(this);
     }
