@@ -1,31 +1,23 @@
 import * as Logger from 'loglevel'
 
 // @ts-ignore
-const debug = DEBUG === true
-function initLogger(name: string, prefix: any) {
-    const result = Logger.getLogger(name)
-    if (debug) {
-        result.enableAll()
+const initLogger = (prefix: string, dev? = true) => {
+    const _logger = Logger.getLogger(prefix)
+    _logger.methodFactory = (methodName: string, logLevel: Logger.LogLevelNumbers, loggerName: string) => {
+        const originalFactory = Logger.methodFactory
+        const rawMethod = originalFactory(methodName, logLevel, loggerName)
+        // tslint:disable-next-line:only-arrow-functions
+        return function () {
+            return rawMethod(`${prefix} ${new Date().toUTCString()}`, ...arguments)
+        }
+    }
+    if (dev) {
+        _logger.enableAll()
     } else {
-        result.setLevel(4)
+        _logger.setLevel(4)
     }
-
-    if (!prefix) return result
-    // @ts-ignore
-    result.prefix = prefix
-    const original = {
-        debug: result.debug.bind(result),
-        error: result.error.bind(result),
-        info: result.info.bind(result),
-        trace: result.trace.bind(result),
-        warn: result.warn.bind(result),
-    }
-    result.trace = (...args) => original.trace((typeof prefix === 'function' ? prefix() : prefix), ...args)
-    result.debug = (...args) => original.debug((typeof prefix === 'function' ? prefix() : prefix), ...args)
-    result.info = (...args) => original.info((typeof prefix === 'function' ? prefix() : prefix), ...args)
-    result.warn = (...args) => original.warn((typeof prefix === 'function' ? prefix() : prefix), ...args)
-    result.error = (...args) => original.error((typeof prefix === 'function' ? prefix() : prefix), ...args)
-    return result
+    return _logger
 }
-const logger = initLogger('ObserverRTC', () => `${new Date().toISOString()}`)
+
+const logger = initLogger('ObserverRTC')
 export default logger

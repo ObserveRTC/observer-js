@@ -1,23 +1,19 @@
 class Integrator {
     constructor(websocketServer = '') {
-        this.statsParser = new ObserverRTC.StatsParser()
-        this.statsSender = new ObserverRTC.StatsSender(websocketServer)
         this.init()
     }
     init(poolingInterval = 1000) {
-        this.wobserver = new ObserverRTC.Builder(poolingInterval)
-            .attachPlugin(this.statsParser)
-            .attachPlugin(this.statsSender)
+        this.observer = new ObserverRTC.Builder()
             .build()
     }
 
     startCollection() {
-        this.wobserver.addPC(pc1)
-        this.wobserver.addPC(pc2)
+        this.observer.addPC(pc1)
+        this.observer.addPC(pc2)
     }
 
     stopCollection() {
-        this.wobserver.disposePC()
+        this.observer.dispose()
     }
 }
 

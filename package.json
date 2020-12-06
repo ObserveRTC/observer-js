@@ -1,6 +1,6 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -9,12 +9,13 @@
     "@types/uuid": "^8.0.0",
     "@types/webrtc": "0.0.26",
     "@types/ws": "^7.2.6",
+    "comlink": "^4.3.0",
+    "comlink-loader": "^2.0.0",
     "fingerprintjs2": "^2.1.0",
     "loglevel": "^1.6.8",
-    "rxjs": "^6.5.5",
+    "reconnecting-websocket": "^4.4.0",
     "uuid": "^8.1.0",
-    "ws": "^7.3.1",
-    "reconnecting-websocket": "^4.4.0"
+    "ws": "^7.3.1"
   },
   "devDependencies": {
     "clean-webpack-plugin": "^3.0.0",
@@ -32,7 +33,6 @@
     "build-library": "npm run build",
     "watch": "tsc -w",
     "debug": "ts-node src/index.ts",
-
     "build-library-dev": "npm run build-library && webpack --config webpack/dev/webpack.config.js --mode=development",
     "build-library-prod": "npm run build-library && webpack --config webpack/prod/webpack.config.js --mode=production",
     "publish-npm-library": "npm run build-library-prod && npm publish",
