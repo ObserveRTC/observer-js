@@ -1,21 +1,25 @@
+// @ts-ignore
 import logger from '../../observer.logger'
-import { greet } from '../../web.workers/index.worker'
+import { getThing } from '../../web.workers/index.worker' // make sure the file name ends with .worker.ts
 import Observer from '../api'
 import { PCDetails } from './peer'
+
 
 interface ObserverStats {
     stats: any
     details: PCDetails
 }
 class Collector {
+    private inst: any
     constructor(private readonly observer: Observer) {
         this.run = this.run.bind(this)
         this.runAsync = this.runAsync.bind(this)
         this.demo = this.demo.bind(this)
+
     }
 
     async demo() {
-        console.log(await greet('dog'))
+        console.log(await getThing())
     }
 
     private async runAsync(): Promise<any> {

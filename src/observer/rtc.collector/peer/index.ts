@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import observerSingleton from '../../../observer.singleton'
 import TimeUtil from '../../../observer.utils/time.util'
-import { IceStats, ReceiverStats, UserMediaError } from '../../../schema/v20200114'
 import StatsParser from '../stats.parser'
 
 export interface UserConfig {

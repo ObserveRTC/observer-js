@@ -1,3 +1,3 @@
-export async function greet(subject: string): Promise<string> {
-    return `Hello, ${subject}!`
+export async function getThing() {
+    return 3
 }

@@ -17,16 +17,28 @@ module.exports = {
         libraryTarget: "umd"
     },
     resolve: {
-        extensions: ['.ts', '.tsx', '.js']
+        extensions: ['.ts', '.tsx', '.js'],
+        alias: {
+            core: path.join(__dirname, 'core'),
+        },
     },
     devtool: 'source-map',
     module: {
         rules: [
             {
+                test: /\.worker\.(js|ts)$/i,
+                use: [{
+                    loader: 'comlink-loader',
+                    options: {
+                        singleton: true
+                    }
+                }]
+            },
+            {
                 test: /\.ts$/,
                 exclude: [/node_modules/],
                 loader: 'ts-loader',
-            },
+            }
         ],
     },
     optimization: {

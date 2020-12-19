@@ -26,7 +26,9 @@
     "typescript": "^3.9.3",
     "uglifyjs-webpack-plugin": "^2.2.0",
     "webpack": "^4.43.0",
-    "webpack-cli": "^3.3.11"
+    "webpack-cli": "^3.3.11",
+    "worker-loader": "^3.0.6",
+    "worker-plugin": "^5.0.0"
   },
   "scripts": {
     "build": "tsc",
@@ -36,7 +38,7 @@
     "build-library-dev": "npm run build-library && webpack --config webpack/dev/webpack.config.js --mode=development",
     "build-library-prod": "npm run build-library && webpack --config webpack/prod/webpack.config.js --mode=production",
     "publish-npm-library": "npm run build-library-prod && npm publish",
-    "publish-cdn-library": "npm run build-library-dev && npm run build-library-prod"
+    "publish-cdn-library": "npm run build-library-dev"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"

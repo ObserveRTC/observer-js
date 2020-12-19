@@ -26,6 +26,15 @@ module.exports = {
                 exclude: [/node_modules/],
                 loader: 'ts-loader',
             },
+            {
+                test: /\.worker\.(js|ts)$/i,
+                use: [{
+                    loader: 'comlink-loader',
+                    options: {
+                        singleton: true
+                    }
+                }]
+            }
         ],
     },
     optimization: {
