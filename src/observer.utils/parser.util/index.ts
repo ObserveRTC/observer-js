@@ -25,4 +25,4 @@ class ParserUtil {
     }
 }
 
-export default ParserUtil
+export { ParserUtil }

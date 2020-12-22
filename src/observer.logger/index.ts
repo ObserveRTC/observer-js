@@ -20,4 +20,4 @@ const initLogger = (prefix: string, dev? = true) => {
 }
 
 const logger = initLogger('ObserverRTC')
-export default logger
+export { logger }

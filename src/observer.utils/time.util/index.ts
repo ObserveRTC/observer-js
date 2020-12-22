@@ -15,4 +15,4 @@ class TimeUtil {
     }
 }
 
-export default TimeUtil
+export { TimeUtil }

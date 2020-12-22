@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
-import observerSingleton from '../../../observer.singleton'
-import TimeUtil from '../../../observer.utils/time.util'
-import StatsParser from '../stats.parser'
+import { observerSingleton } from '../../observer.singleton'
+import { TimeUtil } from '../../observer.utils/time.util'
+import { StatsParser } from '../rtc.collector/rtc.stats.parser'
 
 export interface UserConfig {
     pc: RTCPeerConnection
@@ -19,11 +19,11 @@ export interface PCDetails {
 
 class ObserverPC {
     private readonly _id: string = uuidv4()
-    private readonly timeZoneOffsetInMinute: number = TimeUtil.getTimeZoneOffsetInMinute()
-    private browserId?: string
+    private readonly _timeZoneOffsetInMinute: number = TimeUtil.getTimeZoneOffsetInMinute()
+    private _browserId?: string
     constructor(private readonly userConfig: UserConfig) {
         this.getStats = this.getStats.bind(this)
-        observerSingleton.getBrowserId().then(value => this.browserId = value)
+        observerSingleton.getBrowserId().then(value => this._browserId = value)
     }
 
     get id(): string {
@@ -32,10 +32,10 @@ class ObserverPC {
 
     get pcDetails(): PCDetails {
         return {
-            browserId: this.browserId,
+            browserId: this._browserId,
             callId: this.userConfig?.callId,
             peerConnectionId: this._id,
-            timeZoneOffsetInMinute: this.timeZoneOffsetInMinute,
+            timeZoneOffsetInMinute: this._timeZoneOffsetInMinute,
             userId: this.userConfig?.userId
         } as PCDetails
     }

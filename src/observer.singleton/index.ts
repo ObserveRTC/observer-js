@@ -1,5 +1,5 @@
 import logger from '../observer.logger'
-import BrowserUtil from '../observer.utils/browser.util'
+import { BrowserUtil } from '../observer.utils/browser.util'
 
 class ObserverSingleton {
     public browserId: string = ''
@@ -16,4 +16,4 @@ class ObserverSingleton {
 const observerSingleton = new ObserverSingleton()
 observerSingleton.getBrowserId().catch()
 
-export default observerSingleton
+export { observerSingleton }

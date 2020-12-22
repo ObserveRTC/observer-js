@@ -23,4 +23,4 @@ class StatsParser {
 
 }
 
-export default StatsParser
+export { StatsParser }

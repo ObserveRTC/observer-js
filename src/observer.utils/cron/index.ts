@@ -86,4 +86,4 @@ class CronInterval {
   }
 }
 
-export default CronInterval
+export { CronInterval }

@@ -1,19 +1,19 @@
-import logger from '../../observer.logger'
-import CronInterval from '../../observer.utils/cron'
-import Collector from '../rtc.collector'
-import ObserverPC, { UserConfig } from '../rtc.collector/peer'
+import { logger } from '../../observer.logger'
+import { CronInterval } from '../../observer.utils/cron'
+import ObserverPC, { UserConfig } from '../observer.peer'
+import { RTCCollector } from '../rtc.collector'
 
 class Observer {
     private _rtcList: ObserverPC[] = []
     private _worker: CronInterval = new CronInterval()
-    private _collector: Collector = new Collector(this)
+    private _collector = new RTCCollector(this)
 
     constructor() {
-        // @ts-ignore
-        console.warn('$ObserverRTC version', LIBRARY_VERSION)
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
         this._worker.start(this._collector.run, 1000, true)
+        // @ts-ignore
+        console.warn('$ObserverRTC version', LIBRARY_VERSION)
     }
 
     public addPC(pc: RTCPeerConnection, callId?: string, userId?: string) {
@@ -39,4 +39,4 @@ class Observer {
     }
 }
 
-export default Observer
+export { Observer }

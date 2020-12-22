@@ -1,6 +1,6 @@
-import Observer from '../api'
+import { Observer } from '../api'
 
-class ObserverBuilder {
+class Builder {
     private readonly instance: Observer
     constructor(poolingInterval = 1000) {
         this.instance = new Observer()
@@ -10,4 +10,4 @@ class ObserverBuilder {
         return this.instance
     }
 }
-export default ObserverBuilder
+export { Builder }
