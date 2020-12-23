@@ -1,4 +1,4 @@
-import logger from '../observer.logger'
+import { logger } from '../observer.logger'
 import { BrowserUtil } from '../observer.utils/browser.util'
 
 class ObserverSingleton {

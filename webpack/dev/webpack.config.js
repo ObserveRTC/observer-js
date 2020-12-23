@@ -6,7 +6,7 @@ const {readFileSync} = require('fs')
 
 module.exports = {
     entry: {
-        'observer-lib': './build/index.js'
+        'observer-lib': './src/observer.api/observer.builder/index.ts'
     },
     output: {
         path: path.resolve(__dirname, '../../', 'dist'),
@@ -14,7 +14,6 @@ module.exports = {
         library: "ObserverRTC",
         umdNamedDefine: true,
         libraryExport: "default",
-        libraryTarget: "umd"
     },
     resolve: {
         extensions: ['.ts', '.tsx', '.js'],
@@ -22,7 +21,7 @@ module.exports = {
             core: path.join(__dirname, 'core'),
         },
     },
-    devtool: 'source-map',
+    devtool: 'inline',
     module: {
         rules: [
             {
