@@ -1,4 +1,4 @@
-import { Observer } from '../api'
+import { Observer } from '../observer'
 
 class Builder {
     private readonly instance: Observer

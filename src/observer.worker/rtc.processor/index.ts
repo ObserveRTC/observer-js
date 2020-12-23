@@ -28,5 +28,5 @@ class RTCProcessor {
     }
 }
 
-export default RTCProcessor
+export { RTCProcessor }
 

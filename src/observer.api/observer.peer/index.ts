@@ -51,4 +51,4 @@ class ObserverPC {
 
 }
 
-export default ObserverPC
+export { ObserverPC }

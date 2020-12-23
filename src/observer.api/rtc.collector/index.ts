@@ -1,6 +1,6 @@
 import { logger } from '../../observer.logger'
-import { Observer } from '../api'
-import ObserverPC, { PCDetails } from '../observer.peer'
+import { Observer } from '../observer'
+import { ObserverPC, PCDetails } from '../observer.peer'
 
 
 interface ObserverStats {
@@ -9,17 +9,11 @@ interface ObserverStats {
 }
 
 class RTCCollector {
-    private inst: any
     constructor(private readonly observer: Observer) {
-        this.run = this.run.bind(this)
-        this.runAsync = this.runAsync.bind(this)
+        this.collect = this.collect.bind(this)
     }
 
-    public run() {
-        this.runAsync().catch(null)
-    }
-
-    private async runAsync(): Promise<any> {
+    public async collect(): Promise<any> {
         const statsList =
             await Promise.all(
                 this.observer.rtcList.map( async (value: ObserverPC): Promise<ObserverStats> => {
