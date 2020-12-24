@@ -1,9 +1,5 @@
-import { Observer } from '../observer'
-import { Builder } from '../observer.builder'
-import { ObserverPC } from '../observer.peer'
+import { Observer } from "../observer";
+import { Builder } from "../observer.builder";
+import { ObserverPC } from "../observer.peer";
 
-export {
-    Builder,
-    ObserverPC,
-    Observer
-}
+export { Builder, ObserverPC, Observer };
