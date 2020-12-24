@@ -22,7 +22,7 @@ const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
 
 const commonInput = {
-  input: './src/observer.api/public/index.ts',
+  input: './src/observer.api/package/index.ts',
   plugins: [
     nodeResolvePlugin({
       browser: true,

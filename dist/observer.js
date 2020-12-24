@@ -2183,9 +2183,9 @@
         }
     }
 
-    exports.Builder = Builder;
     exports.Observer = Observer;
     exports.ObserverPC = ObserverPC;
+    exports.default = Builder;
 
     Object.defineProperty(exports, '__esModule', { value: true });
 
