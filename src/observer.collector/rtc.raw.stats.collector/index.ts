@@ -1,4 +1,4 @@
-class StatsParser {
+class RawStatsCollector {
   public static async getRawStats(
     senderOrReceiver: RTCRtpSender[] | RTCRtpReceiver[] | undefined
   ): Promise<any> {
@@ -24,4 +24,4 @@ class StatsParser {
   }
 }
 
-export { StatsParser };
+export { RawStatsCollector };

@@ -3,7 +3,6 @@ const jsonPlugin = require('@rollup/plugin-json')
 const nodeResolvePlugin = require('@rollup/plugin-node-resolve').nodeResolve
 const typescriptPlugin = require('@rollup/plugin-typescript')
 const terserPlugin = require('rollup-plugin-terser').terser
-const dtsPlugin = require('rollup-plugin-dts').default
 const licensePlugin = require('rollup-plugin-license')
 const { version } = require('./package.json')
 import commonjs from '@rollup/plugin-commonjs'
@@ -22,7 +21,7 @@ const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
 
 const commonInput = {
-  input: './src/observer.api/package/index.ts',
+  input: './src/observer.worker/package/index.ts',
   plugins: [
     nodeResolvePlugin({
       browser: true,
@@ -49,13 +48,13 @@ const commonTerser = terserPlugin(require('./terser.config.js'))
 
 const buildDev =  {
   ...commonOutput,
-  file: `${outputDirectory}/observer.js`,
+  file: `${outputDirectory}/observer.worker.js`,
   format: 'umd',
 }
 
 const buildProduction = {
   ...commonOutput,
-  file: `${outputDirectory}/observer.min.js`,
+  file: `${outputDirectory}/observer.worker.min.js`,
   format: 'umd',
   plugins: [commonTerser],
 }
@@ -67,15 +66,5 @@ module.exports = [
     output: [
       isProd ? buildProduction : buildDev
     ],
-  },
-
-  // TypeScript definition
-  {
-    ...commonInput,
-    plugins: [dtsPlugin(), commonBanner],
-    output: {
-      file: `${outputDirectory}/observer.d.ts`,
-      format: 'es',
-    },
-  },
+  }
 ]

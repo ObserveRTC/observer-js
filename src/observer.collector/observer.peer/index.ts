@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { observerSingleton } from "../../observer.singleton";
 import { TimeUtil } from "../../observer.utils/time.util";
-import { StatsParser } from "../rtc.collector/rtc.stats.parser";
+import { RawStatsCollector } from '../rtc.raw.stats.collector'
 
 export interface UserConfig {
   pc: RTCPeerConnection;
@@ -41,11 +41,11 @@ class ObserverPC {
   }
 
   public async getStats(): Promise<any> {
-    const receiverList = StatsParser.getReceiver(this.userConfig?.pc);
-    const senderList = StatsParser.getSender(this.userConfig?.pc);
+    const receiverList = RawStatsCollector.getReceiver(this.userConfig?.pc);
+    const senderList = RawStatsCollector.getSender(this.userConfig?.pc);
     return Promise.all([
-      StatsParser.getRawStats(receiverList),
-      StatsParser.getRawStats(senderList),
+      RawStatsCollector.getRawStats(receiverList),
+      RawStatsCollector.getRawStats(senderList),
     ]);
   }
 }

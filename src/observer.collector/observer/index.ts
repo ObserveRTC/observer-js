@@ -5,16 +5,15 @@ import { RTCCollector } from '../rtc.collector'
 class Observer {
   private _rtcList: ObserverPC[] = []
   private _collector = new RTCCollector(this)
-
   constructor() {
     this.addPC = this.addPC.bind(this)
     this.removePC = this.removePC.bind(this)
     this.collectState = this.collectState.bind(this)
     // @ts-ignore
-    console.warn('$ObserverRTC version', LIBRARY_VERSION)
+    console.warn('$ObserverRTC version')
   }
 
-  public addPC(pc: RTCPeerConnection, callId?: string, userId?: string) {
+  public addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void {
     const userConfig = {
       callId,
       pc,
@@ -24,7 +23,7 @@ class Observer {
     this._rtcList.push(new ObserverPC(userConfig))
   }
 
-  public removePC(pc: ObserverPC) {
+  public removePC(pc: ObserverPC): void {
     this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
   }
 
@@ -36,7 +35,7 @@ class Observer {
     return this._rtcList
   }
 
-  public dispose() {
+  public dispose(): void {
     this._rtcList = []
   }
 }

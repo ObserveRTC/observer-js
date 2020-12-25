@@ -2139,15 +2139,41 @@
         }
     }
 
+    class WorkerLoader {
+        constructor() {
+            this.submitData = this.submitData.bind(this);
+            this.getWorkerURL = this.getWorkerURL.bind(this);
+            this.loadWorker = this.loadWorker.bind(this);
+            this.loadWorker();
+        }
+        loadWorker() {
+            const workerURL = this.getWorkerURL();
+            this._worker = new Worker(workerURL);
+        }
+        getWorkerURL() {
+            const content = "importScripts( 'https://observertc.github.io/webextrapp/dist/observer.js' );";
+            return URL.createObjectURL(new Blob([content], { type: "text/javascript" }));
+        }
+        get worker() {
+            return this._worker;
+        }
+        submitData() {
+            this._worker.postMessage({
+                what: 'something'
+            });
+        }
+    }
+
     class Observer {
         constructor() {
             this._rtcList = [];
             this._collector = new RTCCollector(this);
+            this._worker = new WorkerLoader();
             this.addPC = this.addPC.bind(this);
             this.removePC = this.removePC.bind(this);
             this.collectState = this.collectState.bind(this);
             // @ts-ignore
-            console.warn('$ObserverRTC version', LIBRARY_VERSION);
+            console.warn('$ObserverRTC version', 'ok', this._worker);
         }
         addPC(pc, callId, userId) {
             const userConfig = {
@@ -2172,6 +2198,9 @@
         dispose() {
             this._rtcList = [];
         }
+        worker() {
+            return this._worker;
+        }
     }
 
     class Builder {
@@ -2183,9 +2212,16 @@
         }
     }
 
+    const helloWorld = (name) => console.warn('hello world', name);
+    onmessage = (event) => {
+        logger.warn('gotcha', event);
+        helloWorld('pallab');
+    };
+
+    exports.Builder = Builder;
     exports.Observer = Observer;
     exports.ObserverPC = ObserverPC;
-    exports.default = Builder;
+    exports.helloWorld = helloWorld;
 
     Object.defineProperty(exports, '__esModule', { value: true });
 
