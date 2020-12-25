@@ -21,7 +21,7 @@ const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
 
 const commonInput = {
-  input: './src/observer.worker/package/index.ts',
+  input: './src/observer.processor/__package__/index.ts',
   plugins: [
     nodeResolvePlugin({
       browser: true,
@@ -31,7 +31,8 @@ const commonInput = {
       declaration: false,
     }),
     commonjs(),
-    commonBanner,
+    // todo (pallab) uncomment before publishing
+    // commonBanner,
     replace({
       __buildDate__: buildDate,
       __buildVersion__: buildVersion

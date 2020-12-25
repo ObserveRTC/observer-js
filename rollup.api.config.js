@@ -5,11 +5,9 @@ const typescriptPlugin = require('@rollup/plugin-typescript')
 const terserPlugin = require('rollup-plugin-terser').terser
 const dtsPlugin = require('rollup-plugin-dts').default
 const licensePlugin = require('rollup-plugin-license')
-const { version } = require('./package.json')
+const { version, config } = require('./package.json')
 import commonjs from '@rollup/plugin-commonjs'
 import replace from '@rollup/plugin-replace';
-import virtual from '@rollup/plugin-virtual';
-import {plugin as globImport} from 'rollup-plugin-glob-import';
 
 const outputDirectory = 'dist'
 const commonBanner = licensePlugin({
@@ -19,24 +17,13 @@ const commonBanner = licensePlugin({
     },
   },
 })
-let sourceCode = 'wtf'
 const buildDate = JSON.stringify(new Date().toUTCString())
 const buildVersion = JSON.stringify(version)
+const workerURL = JSON.stringify(config.workerURL)
 const isProd = process.env.npm_lifecycle_event === 'build'
-const myPlugin = ({
-  name: 'copy-worker',
-  renderChunk(code) {
-    return code.replace(/___code___/, `${code}`)
-  }
-})
-
-const getSource = () => {
-  console.warn(arguments)
-  return 'wwww'
-}
 
 const commonInput = {
-  input: './src/observer.api/package/index.ts',
+  input: './src/observer.collector/__package__/index.ts',
   plugins: [
     nodeResolvePlugin({
       browser: true,
@@ -50,6 +37,7 @@ const commonInput = {
     replace({
       __buildDate__: buildDate,
       __buildVersion__: buildVersion,
+      __workerUrl__: workerURL,
     }),
   ],
 }

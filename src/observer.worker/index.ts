@@ -21,7 +21,7 @@ class ObserverWorkerBridge {
     }
 
     private loadWorker(): void {
-      const contentURL = `importScripts( ${this.loadURL} );`;
+      const contentURL = `importScripts( '${this.loadURL}' );`;
       const workerURL = URL.createObjectURL( new Blob( [ contentURL ], { type: "text/javascript" } ) );
       this._worker = new Worker(workerURL);
       this._worker.onerror = this.onError
