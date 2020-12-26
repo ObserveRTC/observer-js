@@ -1,8 +1,18 @@
+import type {
+    RawStats
+} from '../../observer.collector/rtc.collector'
 
-type RawStats = 'rawStats'
+type RequestRawStats = 'requestRawStats'
+type OnRequestRawStats = 'onRequestRawStats'
 
 export interface ClientPayload {
-    what: RawStats;
+    what: OnRequestRawStats;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: any;
+}
+
+export interface WorkerPayload {
+    what: RequestRawStats;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     data: any;
 }
@@ -13,5 +23,5 @@ export interface ClientCallback {
 }
 
 export interface WorkerCallback {
-    onResponseRawStats: () => void;
+    onResponseRawStats: (rawStats: RawStats[]) => void;
 }

@@ -7,11 +7,11 @@ import {
 import {
     ObserverPC
 } from '../observer.peer'
-import type {
-    ObserverStats
-} from '../rtc.collector'
 import {
     RTCCollector
+} from '../rtc.collector'
+import type {
+    RawStats
 } from '../rtc.collector'
 import type {
     UserConfig
@@ -20,10 +20,11 @@ import {
     logger
 } from '../../observer.logger'
 
+
 class Observer implements ClientCallback {
     private _rtcList: ObserverPC[] = []
 
-    private readonly _collector = new RTCCollector(this)
+    private readonly _collector = new RTCCollector()
 
 
     private readonly _collectorWorker = new CollectorWorker(
@@ -36,7 +37,6 @@ class Observer implements ClientCallback {
     constructor () {
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
-        this.collectState = this.collectState.bind(this)
         this._collectorWorker.loadWorker()
         // eslint-disable-next-line no-console
         console.warn(
@@ -55,7 +55,7 @@ class Observer implements ClientCallback {
     }
 
     onRequestRawStats (): void {
-        this._collector.collect().then((rawStats: ObserverStats[]) => {
+        this._collector.collect(this._rtcList).then((rawStats: RawStats[]) => {
             this._collectorWorker.sendRawStats(rawStats)
         }).catch(null)
     }
@@ -75,10 +75,6 @@ class Observer implements ClientCallback {
 
     public removePC (pc: ObserverPC): void {
         this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
-    }
-
-    public async collectState (): Promise<any> {
-        return this._collector.collect()
     }
 
     get rtcList (): ObserverPC[] {

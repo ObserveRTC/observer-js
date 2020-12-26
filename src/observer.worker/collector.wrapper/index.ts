@@ -1,9 +1,10 @@
 import type {
     ClientCallback,
-    ClientPayload
+    ClientPayload,
+    WorkerPayload
 } from '../types'
 import type {
-    ObserverStats
+    RawStats
 } from '../../observer.collector/rtc.collector'
 import {
     logger
@@ -12,7 +13,7 @@ import {
 class CollectorWorker {
     private _worker!: Worker
 
-    constructor (private readonly loadURL: string, private readonly clientCallback?: ClientCallback) {
+    constructor (private readonly loadURL: string, private readonly _clientCallback?: ClientCallback) {
         this.loadWorker = this.loadWorker.bind(this)
     }
 
@@ -27,21 +28,31 @@ class CollectorWorker {
         this._worker.onmessage = this.onMessage.bind(this)
     }
 
-    public sendRawStats (rawStats: ObserverStats[]): void {
+    public sendRawStats (rawStats: RawStats[]): void {
         const payload = {
             'data': rawStats,
-            'what': 'rawStats'
+            'what': 'onRequestRawStats'
         } as ClientPayload
         this._worker.postMessage(payload)
     }
 
     public onError (err: any): void {
         logger.error(err)
-        this.clientCallback?.onError(err)
+        this._clientCallback?.onError(err)
     }
 
-    public onMessage (msg: any): void {
-        logger.warn(msg)
+    public onMessage (msg: MessageEvent): void {
+        const data = msg.data as WorkerPayload
+        switch (data.what) {
+            case 'requestRawStats':
+                this._clientCallback?.onRequestRawStats()
+                return
+            default:
+                logger.warn(
+                    'unknown types',
+                    data
+                )
+        }
     }
 }
 
