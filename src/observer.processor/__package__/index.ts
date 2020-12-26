@@ -1,3 +1,7 @@
-import { helloWorld } from '../index'
+import {
+    processorWorker
+} from '../index'
 
-export { helloWorld }
+export {
+    processorWorker
+}

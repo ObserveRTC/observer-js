@@ -1,55 +1,101 @@
-import { logger } from '../../observer.logger'
-import { ObserverWorkerBridge, WorkerCallback } from '../../observer.worker'
-import { ObserverPC, UserConfig } from '../observer.peer'
-import { RTCCollector } from '../rtc.collector'
+import {
+    CollectorWorker
+} from '../../observer.worker/collector.wrapper'
+import {
+    ObserverPC
+} from '../observer.peer'
+import type {
+    ObserverStats
+} from '../rtc.collector'
+import {
+    RTCCollector
+} from '../rtc.collector'
+import type {
+    UserConfig
+} from '../observer.peer'
+import type {
+    WorkerCallback
+} from '../../observer.worker/collector.wrapper'
+import {
+    logger
+} from '../../observer.logger'
 
 class Observer implements WorkerCallback {
-  private _rtcList: ObserverPC[] = []
-  private _collector = new RTCCollector(this)
-  // @ts-ignore
-  private _observerWorkerBridge = new ObserverWorkerBridge(__workerUrl__, this)
+    private _rtcList: ObserverPC[] = []
 
-  constructor() {
-    this.addPC = this.addPC.bind(this)
-    this.removePC = this.removePC.bind(this)
-    this.collectState = this.collectState.bind(this)
-    // @ts-ignore
-    console.warn('$ObserverRTC version[collector]', __buildVersion__, 'from build date', __buildDate__)
-  }
+    private readonly _collector = new RTCCollector(this)
 
-  onMessage(_msg: any): void {
-    throw new Error('Method not implemented.')
-  }
 
-  onError(_err: any): void {
-    throw new Error('Method not implemented.')
-  }
+    private readonly _collectorWorker = new CollectorWorker(
+        // @ts-expect-error Will be injected in build time
+        __workerUrl__,
+        this
+    )
 
-  public addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void {
-    const userConfig = {
-      callId,
-      pc,
-      userId,
-    } as UserConfig
-    logger.warn('adding pc', userConfig)
-    this._rtcList.push(new ObserverPC(userConfig))
-  }
+    // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
+    constructor () {
+        this.addPC = this.addPC.bind(this)
+        this.removePC = this.removePC.bind(this)
+        this.collectState = this.collectState.bind(this)
+        this._collectorWorker.loadWorker()
+        // eslint-disable-next-line no-console
+        console.warn(
+            '$ObserverRTC version[collector]',
+            // @ts-expect-error Will be injected in build time
+            __buildVersion__,
+            'from build date',
+            // @ts-expect-error Will be injected in build time
+            __buildDate__
+        )
+    }
 
-  public removePC(pc: ObserverPC): void {
-    this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
-  }
+    onMessage (_msg: any): void {
+        // Pass
+        logger.warn(_msg)
+    }
 
-  public async collectState(): Promise<any> {
-    return this._collector.collect()
-  }
+    onError (_err: any): void {
+        // Pass
+        logger.warn(_err)
+    }
 
-  get rtcList(): ObserverPC[] {
-    return this._rtcList
-  }
+    onRequestRawStats (): void {
+        this._collector.collect().then((rawStats: ObserverStats[]) => {
+            this._collectorWorker.sendRawStats(rawStats)
+            // eslint-disable-next-line newline-per-chained-call
+        }).catch(null)
+    }
 
-  public dispose(): void {
-    this._rtcList = []
-  }
+    public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {
+        const userConfig = {
+            callId,
+            pc,
+            userId
+        } as UserConfig
+        logger.warn(
+            'adding pc',
+            userConfig
+        )
+        this._rtcList.push(new ObserverPC(userConfig))
+    }
+
+    public removePC (pc: ObserverPC): void {
+        this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
+    }
+
+    public async collectState (): Promise<any> {
+        return this._collector.collect()
+    }
+
+    get rtcList (): ObserverPC[] {
+        return this._rtcList
+    }
+
+    public dispose (): void {
+        this._rtcList = []
+    }
 }
 
-export { Observer }
+export {
+    Observer
+}

@@ -1,13 +1,18 @@
-import { Observer } from "../observer";
+import {
+    Observer
+} from '../observer'
 
 class Builder {
-  private readonly instance: Observer;
-  constructor() {
-    this.instance = new Observer();
-  }
+    private readonly instance: Observer
 
-  build(): Observer {
-    return this.instance;
-  }
+    constructor () {
+        this.instance = new Observer()
+    }
+
+    build (): Observer {
+        return this.instance
+    }
 }
-export { Builder };
+export {
+    Builder
+}

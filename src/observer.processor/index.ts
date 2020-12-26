@@ -1,12 +1,18 @@
-import { logger } from '../observer.logger'
+import {
+    ProcessorWorker
+} from '../observer.worker/processor.wrapper'
 
-// @ts-ignore
-console.warn('$ObserverRTC version[processor]', __buildVersion__, 'from build date', __buildDate__)
-
-const helloWorld = (name: string) => console.warn('hello world', name)
-onmessage = (event: MessageEvent ) => {
-  logger.warn('gotcha', event)
-  helloWorld('pallab')
+console.warn(
+    '$ObserverRTC version[processor]',
+    // @ts-expect-error Will be injected in build time
+    __buildVersion__,
+    'from build date',
+    // @ts-expect-error Will be injected in build time
+    __buildDate__
+)
+const processorWorker = new ProcessorWorker()
+// eslint-disable-next-line @typescript-eslint/unbound-method
+onmessage = processorWorker.onMessage
+export {
+    processorWorker
 }
-
-export {helloWorld}
