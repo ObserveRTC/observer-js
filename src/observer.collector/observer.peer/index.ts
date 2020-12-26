@@ -1,18 +1,20 @@
 import {
+    RTCState
+} from '../rtc.state'
+import {
     RawStatsCollector
 } from '../rtc.raw.stats.collector'
+
 import {
     TimeUtil
 } from '../../observer.utils/time.util'
+
 import {
     observerSingleton
 } from '../../observer.singleton'
 import {
     v4 as uuidv4
 } from 'uuid'
-import {
-    RTCState
-} from '../rtc.state'
 
 export interface UserConfig {
     pc: RTCPeerConnection;
@@ -26,6 +28,11 @@ export interface PCDetails {
     peerConnectionId?: string;
     timeZoneOffsetInMinute?: number;
     userId?: string;
+}
+
+export interface ObserverStats {
+    receiverStats: RTCRtpReceiver[];
+    senderStats: RTCRtpSender[];
 }
 
 class ObserverPC {
@@ -67,13 +74,22 @@ class ObserverPC {
         this._rtcState.updateState(currentState)
     }
 
-    public async getStats (): Promise<any> {
-        const receiverList = RawStatsCollector.getReceiver(this.userConfig.pc),
-            senderList = RawStatsCollector.getSender(this.userConfig.pc)
-        return Promise.all([
+    public async getStats (): Promise<ObserverStats> {
+        const receiverList = RawStatsCollector.getReceiver(this.userConfig.pc)
+        const senderList = RawStatsCollector.getSender(this.userConfig.pc)
+        const [
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            receiverStats,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            senderStats
+        ] = await Promise.all([
             RawStatsCollector.getRawStats(receiverList),
             RawStatsCollector.getRawStats(senderList)
         ])
+        return {
+            'receiverStats': receiverStats as RTCRtpReceiver[],
+            'senderStats': senderStats as RTCRtpSender[]
+        } as ObserverStats
     }
 }
 

@@ -1,9 +1,9 @@
 import type {
-    ObserverPC, PCDetails
+    ObserverPC, ObserverStats, PCDetails
 } from '../observer.peer'
 
 export interface RawStats {
-    stats: any;
+    stats: ObserverStats;
     details: PCDetails;
 }
 
@@ -18,12 +18,10 @@ class RTCCollector {
     }
 
     private async collectStats (observerPc: ObserverPC): Promise<RawStats> {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const stats = await observerPc.getStats(),
-            {pcDetails} = observerPc
+        const stats = await observerPc.getStats()
+        const {pcDetails} = observerPc
         return {
             'details': pcDetails,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             stats
         } as RawStats
     }

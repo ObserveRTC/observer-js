@@ -7,14 +7,11 @@ type OnRequestRawStats = 'onRequestRawStats'
 
 export interface ClientPayload {
     what: OnRequestRawStats;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: any;
+    data: RawStats[];
 }
 
 export interface WorkerPayload {
     what: RequestRawStats;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: any;
 }
 
 export interface ClientCallback {
