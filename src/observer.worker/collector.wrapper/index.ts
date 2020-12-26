@@ -1,23 +1,13 @@
 import type {
+    WorkerCallback,
+    WorkerPayload
+} from '../types'
+import type {
     ObserverStats
 } from '../../observer.collector/rtc.collector'
 import {
     logger
 } from '../../observer.logger'
-
-type RawStats = 'rawStats'
-
-export interface WorkerPayload {
-    what: RawStats;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: any;
-}
-
-export interface WorkerCallback {
-    onMessage: (msg: any) => void;
-    onRequestRawStats: () => void;
-    onError: (err: any) => void;
-}
 
 class CollectorWorker {
     private _worker!: Worker
@@ -35,10 +25,6 @@ class CollectorWorker {
         this._worker = new Worker(workerURL)
         this._worker.onerror = this.onError.bind(this)
         this._worker.onmessage = this.onMessage.bind(this)
-    }
-
-    public sendMessage (data: WorkerPayload): void {
-        this._worker.postMessage(data)
     }
 
     public sendRawStats (rawStats: ObserverStats[]): void {
@@ -61,5 +47,5 @@ class CollectorWorker {
 }
 
 export {
-    CollectorWorker, RawStats
+    CollectorWorker
 }
