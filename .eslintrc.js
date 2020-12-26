@@ -19,6 +19,7 @@ const projectRules = {
     'error',
     'never',
   ],
+  '@typescript-eslint/lines-between-class-members': 'off',
   '@typescript-eslint/no-parameter-properties': 'off',
   'object-curly-newline': [
     'error',

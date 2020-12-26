@@ -1,27 +1,20 @@
+
+export interface Runnable {
+    execute: () => void;
+}
+
+const intervalDuration = 1000
+
 class CronInterval {
-    private _runId: any = undefined
-
-    private _runnable?: any
-
-    private _intervalDurationInMs = 1000
+    private _runId?: NodeJS.Timeout
+    private _runnable?: Runnable
+    private _intervalDurationInMs = intervalDuration
 
     constructor () {
         this.runInternal = this.runInternal.bind(this)
     }
 
-    private runInternal () {
-        this._runnable?.()
-        this._runId = setTimeout(
-            this.runInternal,
-            this._intervalDurationInMs
-        )
-    }
-
-
-    start (runnable?: any, intervalDurationInMs = 1000): void {
-        if (!(runnable && typeof runnable === 'function')) {
-            throw new Error('expecting a function type as \'runnable\' param.')
-        }
+    start (runnable: Runnable, intervalDurationInMs = intervalDuration): void {
         this._runnable = runnable
         this._intervalDurationInMs = intervalDurationInMs
         this.runInternal()
@@ -30,8 +23,16 @@ class CronInterval {
     stop (): void {
         if (this._runId) {
             clearTimeout(this._runId)
+            // eslint-disable-next-line no-undefined
             this._runId = undefined
         }
+    }
+    private runInternal (): void {
+        this._runnable?.execute()
+        this._runId = setTimeout(
+            this.runInternal.bind(this),
+            this._intervalDurationInMs
+        )
     }
 }
 
