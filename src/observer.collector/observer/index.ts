@@ -55,6 +55,13 @@ class Observer implements ClientCallback {
     }
 
     onRequestRawStats (): void {
+        // Before collecting stats, check if those pc are active
+        this._rtcList = this._rtcList.filter((pc: ObserverPC) => {
+            // Update connection state
+            pc.updateConnectionState()
+            return !pc.isExpired
+        })
+        // Now collect stats for all active peer connections
         this._collector.collect(this._rtcList).then((rawStats: RawStats[]) => {
             this._collectorWorker.sendRawStats(rawStats)
         }).catch(null)

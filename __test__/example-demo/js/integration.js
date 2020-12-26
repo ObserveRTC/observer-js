@@ -1,6 +1,6 @@
 class Integrator {
     constructor(websocketServer = '') {
-        // this.init()
+        this.init()
     }
     init(poolingInterval = 1000) {
         this.observer = new ObserverRTC.Builder()
