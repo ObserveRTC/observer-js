@@ -1,6 +1,6 @@
 import type {
-    WorkerCallback,
-    WorkerPayload
+    ClientCallback,
+    ClientPayload
 } from '../types'
 import type {
     ObserverStats
@@ -12,7 +12,7 @@ import {
 class CollectorWorker {
     private _worker!: Worker
 
-    constructor (private readonly loadURL: string, private readonly workerCallback?: WorkerCallback) {
+    constructor (private readonly loadURL: string, private readonly clientCallback?: ClientCallback) {
         this.loadWorker = this.loadWorker.bind(this)
     }
 
@@ -31,18 +31,17 @@ class CollectorWorker {
         const payload = {
             'data': rawStats,
             'what': 'rawStats'
-        } as WorkerPayload
+        } as ClientPayload
         this._worker.postMessage(payload)
     }
 
     public onError (err: any): void {
         logger.error(err)
-        this.workerCallback?.onError(err)
+        this.clientCallback?.onError(err)
     }
 
     public onMessage (msg: any): void {
         logger.warn(msg)
-        this.workerCallback?.onMessage(msg)
     }
 }
 

@@ -1,3 +1,6 @@
+import type {
+    ClientCallback
+} from '../../observer.worker/types'
 import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
@@ -13,14 +16,11 @@ import {
 import type {
     UserConfig
 } from '../observer.peer'
-import type {
-    WorkerCallback
-} from '../../observer.worker/collector.wrapper'
 import {
     logger
 } from '../../observer.logger'
 
-class Observer implements WorkerCallback {
+class Observer implements ClientCallback {
     private _rtcList: ObserverPC[] = []
 
     private readonly _collector = new RTCCollector(this)
@@ -49,11 +49,6 @@ class Observer implements WorkerCallback {
         )
     }
 
-    onMessage (_msg: any): void {
-        // Pass
-        logger.warn(_msg)
-    }
-
     onError (_err: any): void {
         // Pass
         logger.warn(_err)
@@ -62,7 +57,6 @@ class Observer implements WorkerCallback {
     onRequestRawStats (): void {
         this._collector.collect().then((rawStats: ObserverStats[]) => {
             this._collectorWorker.sendRawStats(rawStats)
-            // eslint-disable-next-line newline-per-chained-call
         }).catch(null)
     }
 

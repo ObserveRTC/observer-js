@@ -1,4 +1,5 @@
 const projectRules = {
+  'newline-per-chained-call': 'off',
   'max-params': 'off',
   'max-statements': 'off',
   'one-var': 'off',
