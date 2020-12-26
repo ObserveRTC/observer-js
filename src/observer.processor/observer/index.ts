@@ -1,21 +1,36 @@
 import {
+    logger
+} from '../../observer.logger'
+import {
     CronInterval
 } from '../../observer.utils/cron'
 import {
+    TimeUtil
+} from '../../observer.utils/time.util'
+import {
     ProcessorWorker
 } from '../../observer.worker/processor.wrapper'
+
 import type {
     RawStats
 } from '../../observer.collector/rtc.collector'
 import type {
+    PeerConnectionSample
+} from '../../schema/v20200114'
+import {
+    RawStatsProcessor
+} from '../rtc.raw.stats.processor'
+
+import type {
     Runnable
 } from '../../observer.utils/cron'
 import type {
+    SendRecv
+} from '../rtc.raw.stats.processor'
+import type {
     WorkerCallback
 } from '../../observer.worker/types'
-import {
-    logger
-} from '../../observer.logger'
+
 
 const intervalDurationInMs = 1000
 class ObserverProcessor implements WorkerCallback {
@@ -38,7 +53,21 @@ class ObserverProcessor implements WorkerCallback {
     }
 
     onResponseRawStats (rawStats: RawStats[]): void {
-        logger.warn(rawStats)
+        const socketPayloads = rawStats.map((currentStats) => {
+            const payload = {
+                'browserId': currentStats.details.browserId,
+                'callId': currentStats.details.callId,
+                'iceStats': RawStatsProcessor.getIceStats(currentStats.stats),
+                'peerConnectionId': currentStats.details.peerConnectionId,
+                'receiverStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.receiverStats as SendRecv[]),
+                'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats as SendRecv[]),
+                'timeZoneOffsetInMinute': currentStats.details.timeZoneOffsetInMinute,
+                'timestamp': TimeUtil.getCurrent(),
+                'userId': currentStats.details.userId
+            } as PeerConnectionSample
+            return payload
+        })
+        logger.warn(socketPayloads)
     }
 
     public updateWorkerInstance (workerScope: any): void {
