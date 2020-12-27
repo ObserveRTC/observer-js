@@ -2,9 +2,11 @@
   "name": "@ObserveRTC/observer-lib",
   "version": "0.3.3",
   "description": "Extractor Development Toolkits for WebRTC Samples",
-  "main": "dist/observer.js",
+  "main": "dist/v0.3.3/observer.js",
+  "types": "dist/v0.3.3/observer.d.ts",
   "config": {
-    "workerURL": "http://127.0.0.1:9090/js/dist/v0.3.3/observer.worker.js"
+    "workerDevURL": "https://observertc.github.io/webextrapp/dist/v0.3.3/observer.worker.js",
+    "workerProdURL": "https://observertc.github.io/webextrapp/dist/dist/v0.3.3/observer.worker.min.js"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",
@@ -52,9 +54,9 @@
     "webpack-dev-server": "^3.11.0"
   },
   "scripts": {
-    "build": "rimraf dist/v* && rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
-    "build-dev": "rimraf dist/v* && rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
-    "build:watch": "yarn build --watch",
+    "build": "rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
+    "build-dev": "rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
+    "publish": "rimraf dist/v* && npm run build && npm run build-dev",
     "lint": "eslint --ext .ts .",
     "lint:fix": "yarn lint --fix",
     "test": "jest"

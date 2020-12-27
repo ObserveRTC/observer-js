@@ -19,8 +19,8 @@ const commonBanner = licensePlugin({
 })
 const buildDate = JSON.stringify(new Date().toUTCString())
 const buildVersion = JSON.stringify(version)
-const workerURL = JSON.stringify(config.workerURL)
 const isProd = process.env.npm_lifecycle_event === 'build'
+const workerURL = JSON.stringify(isProd ? config.workerProdURL : config.workerDevURL)
 
 const commonInput = {
   input: './src/observer.collector/__package__/index.ts',
