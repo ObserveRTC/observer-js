@@ -9,7 +9,7 @@ const { version, config } = require('./package.json')
 import commonjs from '@rollup/plugin-commonjs'
 import replace from '@rollup/plugin-replace';
 
-const outputDirectory = 'dist'
+const outputDirectory = `dist/v${version}`
 const commonBanner = licensePlugin({
   banner: {
     content: {
