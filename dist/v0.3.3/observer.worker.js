@@ -1298,7 +1298,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "0.3.3", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 27 Dec 2020 19:49:06 GMT");
+	        "Sun, 27 Dec 2020 19:51:34 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method
