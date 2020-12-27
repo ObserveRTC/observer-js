@@ -17,6 +17,5 @@ class Integrator {
     }
 }
 
-//const wsServerURL = 'wss://webrtc-bserver.org/86ed98c6-b001-48bb-b31e-da638b979c72/testMediaUnitId/v20200114/json'
 const wsServerURL = 'ws://localhost:7080/86ed98c6-b001-48bb-b31e-da638b979c72/testMediaUnitId/v20200114/json'
 window.integrator = new Integrator(wsServerURL, 1000);
