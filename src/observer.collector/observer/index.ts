@@ -1,38 +1,33 @@
-import type {
-    ClientCallback
-} from '../../observer.worker/types'
+import {
+    logger
+} from '../../observer.logger'
 import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
-import {
-    ObserverPC
-} from '../observer.peer'
-import {
-    RTCCollector
-} from '../rtc.collector'
 import type {
-    RawStats
-} from '../rtc.collector'
+    ClientCallback
+} from '../../observer.worker/types'
 import type {
     UserConfig
 } from '../observer.peer'
 import {
-    logger
-} from '../../observer.logger'
-
+    ObserverPC
+} from '../observer.peer'
+import type {
+    RawStats
+} from '../rtc.collector'
+import {
+    RTCCollector
+} from '../rtc.collector'
 
 class Observer implements ClientCallback {
     private _rtcList: ObserverPC[] = []
-
     private readonly _collector = new RTCCollector()
-
-
     private readonly _collectorWorker = new CollectorWorker(
         // @ts-expect-error Will be injected in build time
         __workerUrl__,
         this
     )
-
     // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
     constructor () {
         this.addPC = this.addPC.bind(this)
@@ -65,6 +60,10 @@ class Observer implements ClientCallback {
         this._collector.collect(this._rtcList).then((rawStats: RawStats[]) => {
             this._collectorWorker.sendRawStats(rawStats)
         }).catch(null)
+    }
+
+    onRequestInitialConfig (): void {
+        logger.warn('onRequestInitialConfig')
     }
 
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {

@@ -1,10 +1,13 @@
 const projectRules = {
+  'simple-import-sort/imports': 'error',
+  'simple-import-sort/exports': 'error',
   'newline-per-chained-call': 'off',
   'max-params': 'off',
   'max-statements': 'off',
   'one-var': 'off',
   'no-extra-semi': 'error',
   'no-console': 'warn',
+  'sort-imports': 'off',
   'max-len': [
     'error',
     {
@@ -78,6 +81,7 @@ module.exports = {
       rules: projectRules,
       'plugins': [
         '@typescript-eslint',
+        'simple-import-sort'
       ],
       'parserOptions': {
         'project': [

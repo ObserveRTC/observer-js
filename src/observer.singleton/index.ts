@@ -1,10 +1,9 @@
 import {
-    BrowserUtil
-} from '../observer.utils/browser.util'
-
-import {
     logger
 } from '../observer.logger'
+import {
+    BrowserUtil
+} from '../observer.utils/browser.util'
 
 class ObserverSingleton {
     public browserId = ''

@@ -1,14 +1,14 @@
 import type {
-    ClientCallback,
-    ClientPayload,
-    WorkerPayload
-} from '../types'
-import type {
     RawStats
 } from '../../observer.collector/rtc.collector'
 import {
     logger
 } from '../../observer.logger'
+import type {
+    ClientCallback,
+    ClientPayload,
+    WorkerPayload
+} from '../types'
 
 class CollectorWorker {
     private _worker!: Worker
@@ -46,6 +46,9 @@ class CollectorWorker {
         switch (data.what) {
             case 'requestRawStats':
                 this._clientCallback?.onRequestRawStats()
+                return
+            case 'requestInitialConfig':
+                this._clientCallback?.onRequestInitialConfig()
                 return
             default:
                 logger.warn(

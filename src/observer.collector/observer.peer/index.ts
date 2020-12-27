@@ -1,20 +1,19 @@
 import {
-    RTCState
-} from '../rtc.state'
-import {
-    RawStatsCollector
-} from '../rtc.raw.stats.collector'
-
-import {
-    TimeUtil
-} from '../../observer.utils/time.util'
+    v4 as uuidv4
+} from 'uuid'
 
 import {
     observerSingleton
 } from '../../observer.singleton'
 import {
-    v4 as uuidv4
-} from 'uuid'
+    TimeUtil
+} from '../../observer.utils/time.util'
+import {
+    RawStatsCollector
+} from '../rtc.raw.stats.collector'
+import {
+    RTCState
+} from '../rtc.state'
 
 export interface UserConfig {
     pc: RTCPeerConnection;

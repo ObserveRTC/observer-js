@@ -1,12 +1,13 @@
 import {
-    Builder
-} from '../observer.builder'
-import {
     Observer
 } from '../observer'
+import {
+    Builder
+} from '../observer.builder'
 import {
     ObserverPC
 } from '../observer.peer'
 export {
-    Builder, ObserverPC, Observer
+    Builder, Observer,
+    ObserverPC
 }

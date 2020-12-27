@@ -1,6 +1,12 @@
+import type {
+    RawStats
+} from '../../observer.collector/rtc.collector'
 import {
     logger
 } from '../../observer.logger'
+import type {
+    Runnable
+} from '../../observer.utils/cron'
 import {
     CronInterval
 } from '../../observer.utils/cron'
@@ -10,26 +16,18 @@ import {
 import {
     ProcessorWorker
 } from '../../observer.worker/processor.wrapper'
-
-import type {
-    RawStats
-} from '../../observer.collector/rtc.collector'
-import type {
-    PeerConnectionSample
-} from '../../schema/v20200114'
-import {
-    RawStatsProcessor
-} from '../rtc.raw.stats.processor'
-
-import type {
-    Runnable
-} from '../../observer.utils/cron'
-import type {
-    SendRecv
-} from '../rtc.raw.stats.processor'
 import type {
     WorkerCallback
 } from '../../observer.worker/types'
+import type {
+    PeerConnectionSample
+} from '../../schema/v20200114'
+import type {
+    SendRecv
+} from '../rtc.raw.stats.processor'
+import {
+    RawStatsProcessor
+} from '../rtc.raw.stats.processor'
 
 
 const intervalDurationInMs = 1000
@@ -72,6 +70,8 @@ class ObserverProcessor implements WorkerCallback {
 
     public updateWorkerInstance (workerScope: any): void {
         this._processorWorker.setWorkerScope(workerScope)
+        // Also request server address
+        this._processorWorker.requestInitialConfig()
     }
 
     public startCronTask (): void {

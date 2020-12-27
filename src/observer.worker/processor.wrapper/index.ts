@@ -1,11 +1,14 @@
 import type {
+    RawStats
+} from '../../observer.collector/rtc.collector'
+import {
+    logger
+} from '../../observer.logger'
+import type {
     ClientPayload,
     WorkerCallback,
     WorkerPayload
 } from '../types'
-import {
-    logger
-} from '../../observer.logger'
 
 
 class ProcessorWorker {
@@ -13,6 +16,7 @@ class ProcessorWorker {
     constructor (private readonly _workerCallback?: WorkerCallback) {
         this.setWorkerScope = this.setWorkerScope.bind(this)
         this.onMessage = this.onMessage.bind(this)
+        this.requestInitialConfig = this.requestInitialConfig.bind(this)
         this.requestRawStats = this.requestRawStats.bind(this)
     }
 
@@ -25,7 +29,7 @@ class ProcessorWorker {
         const data = msg.data as ClientPayload
         switch (data.what) {
             case 'onRequestRawStats':
-                this._workerCallback?.onResponseRawStats(data.data)
+                this._workerCallback?.onResponseRawStats(data.data as RawStats[])
                 return
             default:
                 logger.warn(
@@ -33,7 +37,11 @@ class ProcessorWorker {
                     data
                 )
         }
-        logger.warn(event)
+    }
+
+    requestInitialConfig (): void {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+        this._workerScope.postMessage({'what': 'requestInitialConfig'} as WorkerPayload)
     }
 
     requestRawStats (): void {

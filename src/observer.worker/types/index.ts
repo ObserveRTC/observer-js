@@ -4,18 +4,27 @@ import type {
 
 type RequestRawStats = 'requestRawStats'
 type OnRequestRawStats = 'onRequestRawStats'
+type RequestInitialConfig = 'requestInitialConfig'
+type OnRequestInitialConfig = 'onRequestInitialConfig'
+type Data = RawStats[] | InitialConfig
+
+export interface InitialConfig {
+    wsAddress: string;
+    poolingIntervalInMs: number;
+}
 
 export interface ClientPayload {
-    what: OnRequestRawStats;
-    data: RawStats[];
+    what: OnRequestRawStats | OnRequestInitialConfig;
+    data: Data;
 }
 
 export interface WorkerPayload {
-    what: RequestRawStats;
+    what: RequestRawStats | RequestInitialConfig;
 }
 
 export interface ClientCallback {
     onRequestRawStats: () => void;
+    onRequestInitialConfig: () => void;
     onError: (err: any) => void;
 }
 

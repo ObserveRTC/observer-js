@@ -1,10 +1,9 @@
 import type {
-    IceStats, ReceiverStats
-} from '../../schema/v20200114'
-
-import type {
     ObserverStats
 } from '../../observer.collector/observer.peer'
+import type {
+    IceStats, ReceiverStats
+} from '../../schema/v20200114'
 import StatsMap from '../../schema/v20200114/stats.map'
 
 // @ts-expect-error stupid workaround
