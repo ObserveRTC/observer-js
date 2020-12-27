@@ -5,7 +5,7 @@ import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
 import type {
-    ClientCallback, InitialConfig,
+    ClientCallback, InitialConfig
 } from '../../observer.worker/types'
 import type {
     UserConfig
