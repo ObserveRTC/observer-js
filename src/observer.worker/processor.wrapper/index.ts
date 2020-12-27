@@ -33,7 +33,6 @@ class ProcessorWorker {
                 this._workerCallback?.onResponseRawStats(data.data as RawStats[])
                 return
             case 'onRequestInitialConfig':
-                logger.warn(this._workerCallback)
                 this._workerCallback?.onResponseInitialConfig(data.data as InitialConfig)
                 return
             default:
