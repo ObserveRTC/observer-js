@@ -1,5 +1,5 @@
 import type {
-    RawStats
+    RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
     logger
@@ -18,7 +18,7 @@ import type {
     WorkerCallback
 } from '../../observer.worker/types'
 import type {
-    PeerConnectionSample
+    PeerConnectionSample, UserMediaError
 } from '../../schema/v20200114'
 import type {
     SendRecv
@@ -82,6 +82,16 @@ class ObserverProcessor implements WorkerCallback {
 
         // Try to send the payload to server
         this._webSocketTransport?.sendBulk(optimizedPayload)
+    }
+
+    onUserMediaError (mediaError: UserMediaErrorPayload): void {
+        const socketPayloads: PeerConnectionSample = {
+            'browserId': mediaError.details.browserId,
+            'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
+            'timestamp': mediaError.details.timestamp,
+            'userMediaErrors': [{'message': mediaError.errName} as UserMediaError]
+        } as PeerConnectionSample
+        this._webSocketTransport?.send(socketPayloads)
     }
 
     public updateWorkerInstance (workerScope: any): void {

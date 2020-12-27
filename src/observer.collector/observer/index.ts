@@ -51,13 +51,15 @@ class Observer implements ClientCallback, UserMediaCallback {
         )
     }
 
-    onMediaError (errName: string): void {
-        logger.warn(errName)
-    }
-
     onError (_err: any): void {
         // Pass
         logger.warn(_err)
+    }
+
+    onMediaError (errName: string): void {
+        this._collector.collectUserMediaError(errName).then((mediaError): void => {
+            this._collectorWorker.sendUserMediaError(mediaError)
+        }).catch(null)
     }
 
     onRequestRawStats (): void {

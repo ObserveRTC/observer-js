@@ -1,12 +1,15 @@
 import type {
-    RawStats
+    RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
+
 
 type RequestRawStats = 'requestRawStats'
 type OnRequestRawStats = 'onRequestRawStats'
 type RequestInitialConfig = 'requestInitialConfig'
 type OnRequestInitialConfig = 'onRequestInitialConfig'
-type Data = RawStats[] | InitialConfig
+type OnUserMediaError = 'onUserMediaError'
+
+type Data = RawStats[] | InitialConfig | UserMediaErrorPayload
 
 export interface InitialConfig {
     wsAddress: string;
@@ -14,7 +17,7 @@ export interface InitialConfig {
 }
 
 export interface ClientPayload {
-    what: OnRequestRawStats | OnRequestInitialConfig;
+    what: OnRequestRawStats | OnRequestInitialConfig | OnUserMediaError;
     data: Data;
 }
 
@@ -31,4 +34,5 @@ export interface ClientCallback {
 export interface WorkerCallback {
     onResponseRawStats: (rawStats: RawStats[]) => void;
     onResponseInitialConfig: (rawStats: InitialConfig) => void;
+    onUserMediaError: (mediaError: UserMediaErrorPayload) => void;
 }

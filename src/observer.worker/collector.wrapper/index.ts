@@ -1,5 +1,5 @@
 import type {
-    RawStats
+    RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
     logger
@@ -33,6 +33,14 @@ class CollectorWorker {
         const payload = {
             'data': initializeConfig,
             'what': 'onRequestInitialConfig'
+        } as ClientPayload
+        this._worker.postMessage(payload)
+    }
+
+    public sendUserMediaError (userMediaErrorPayload: UserMediaErrorPayload): void {
+        const payload = {
+            'data': userMediaErrorPayload,
+            'what': 'onUserMediaError'
         } as ClientPayload
         this._worker.postMessage(payload)
     }

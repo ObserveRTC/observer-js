@@ -1,5 +1,5 @@
 import type {
-    RawStats
+    RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
     logger
@@ -34,6 +34,9 @@ class ProcessorWorker {
                 return
             case 'onRequestInitialConfig':
                 this._workerCallback?.onResponseInitialConfig(data.data as InitialConfig)
+                return
+            case 'onUserMediaError':
+                this._workerCallback?.onUserMediaError(data.data as UserMediaErrorPayload)
                 return
             default:
                 logger.warn(
