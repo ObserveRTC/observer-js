@@ -11,9 +11,6 @@ import {
     CronInterval
 } from '../../observer.utils/cron'
 import {
-    TimeUtil
-} from '../../observer.utils/time.util'
-import {
     ProcessorWorker
 } from '../../observer.worker/processor.wrapper'
 import type {
@@ -69,7 +66,7 @@ class ObserverProcessor implements WorkerCallback {
                 'receiverStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.receiverStats as SendRecv[]),
                 'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats as SendRecv[]),
                 'timeZoneOffsetInMinute': currentStats.details.timeZoneOffsetInMinute,
-                'timestamp': TimeUtil.getCurrent(),
+                'timestamp': currentStats.details.timestamp,
                 'userId': currentStats.details.userId
             } as PeerConnectionSample
             return payload

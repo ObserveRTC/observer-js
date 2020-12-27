@@ -27,6 +27,7 @@ export interface PCDetails {
     peerConnectionId?: string;
     timeZoneOffsetInMinute?: number;
     userId?: string;
+    timestamp?: number;
 }
 
 export interface ObserverStats {
@@ -60,6 +61,7 @@ class ObserverPC {
             'callId': this.userConfig.callId,
             'peerConnectionId': this._id,
             'timeZoneOffsetInMinute': this._timeZoneOffsetInMinute,
+            'timestamp': TimeUtil.getCurrent(),
             'userId': this.userConfig.userId
         } as PCDetails
     }
