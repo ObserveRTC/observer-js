@@ -1,6 +1,12 @@
 import {
     logger
 } from '../../observer.logger'
+import type {
+    UserMediaCallback
+} from '../../observer.usermediahandler'
+import {
+    UserMediaHandler
+} from '../../observer.usermediahandler'
 import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
@@ -20,7 +26,8 @@ import {
     RTCCollector
 } from '../rtc.collector'
 
-class Observer implements ClientCallback {
+class Observer implements ClientCallback, UserMediaCallback {
+    private readonly _userMediaHandler = new UserMediaHandler()
     private _rtcList: ObserverPC[] = []
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
@@ -32,6 +39,7 @@ class Observer implements ClientCallback {
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
         this._collectorWorker.loadWorker()
+        this._userMediaHandler.overrideUserMedia(this)
         // eslint-disable-next-line no-console
         console.warn(
             '$ObserverRTC version[collector]',
@@ -41,6 +49,10 @@ class Observer implements ClientCallback {
             // @ts-expect-error Will be injected in build time
             __buildDate__
         )
+    }
+
+    onMediaError (errName: string): void {
+        logger.warn(errName)
     }
 
     onError (_err: any): void {

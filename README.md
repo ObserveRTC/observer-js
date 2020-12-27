@@ -35,13 +35,13 @@ Extractor Development Toolkits for WebRTC Samples
   - Developer version
 
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/v0.3.3/observer.js"></script>
+  <script src="https://observertc.github.io/webextrapp/dist/v0.3.4/observer.js"></script>
   ```
 
   - Production version
 
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/v0.3.3/observer.min.js"></script>
+  <script src="https://observertc.github.io/webextrapp/dist/v0.3.4/observer.min.js"></script>
   ```
 
 
