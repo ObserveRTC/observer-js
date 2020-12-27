@@ -29,11 +29,15 @@ import type {
 import {
     RawStatsProcessor
 } from '../rtc.raw.stats.processor'
+import {
+    WebSocketTransport
+} from '../websocket.transport'
 
 
 const defaultIntervalDurationInMs = 1000
 class ObserverProcessor implements WorkerCallback {
     private readonly _cron = new CronInterval()
+    private _webSocketTransport?: WebSocketTransport
     private readonly _processorWorker = new ProcessorWorker(this)
 
     constructor () {
@@ -70,7 +74,8 @@ class ObserverProcessor implements WorkerCallback {
             } as PeerConnectionSample
             return payload
         })
-        logger.warn(socketPayloads)
+        // Try to send the payload to server
+        this._webSocketTransport?.sendBulk(socketPayloads)
     }
 
     public updateWorkerInstance (workerScope: any): void {
@@ -86,12 +91,15 @@ class ObserverProcessor implements WorkerCallback {
         this.startCronTask(rawStats.poolingIntervalInMs)
     }
 
-
     private startWsServer (wsServerAddress: string): void {
         logger.warn(
             'start websocket server',
             wsServerAddress
         )
+        if (this._webSocketTransport) {
+            this._webSocketTransport.dispose()
+        }
+        this._webSocketTransport = new WebSocketTransport(wsServerAddress)
     }
 
     private startCronTask (intervalDurationInMs: number = defaultIntervalDurationInMs): void {
