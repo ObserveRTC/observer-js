@@ -27,6 +27,9 @@ import {
     RawStatsProcessor
 } from '../rtc.raw.stats.processor'
 import {
+    StatsOptimizer
+} from '../rtc.stats.optimizer'
+import {
     WebSocketTransport
 } from '../websocket.transport'
 
@@ -34,6 +37,7 @@ import {
 const defaultIntervalDurationInMs = 1000
 class ObserverProcessor implements WorkerCallback {
     private readonly _cron = new CronInterval()
+    private readonly _statsOptimizer = new StatsOptimizer()
     private _webSocketTransport?: WebSocketTransport
     private readonly _processorWorker = new ProcessorWorker(this)
 
@@ -71,8 +75,13 @@ class ObserverProcessor implements WorkerCallback {
             } as PeerConnectionSample
             return payload
         })
+        // Order is import starts
+        const optimizedPayload = socketPayloads.map((currentStats) => this._statsOptimizer.excludeSameCandidates(currentStats))
+        this._statsOptimizer.addStatBulk(socketPayloads)
+        // Order is import ends
+
         // Try to send the payload to server
-        this._webSocketTransport?.sendBulk(socketPayloads)
+        this._webSocketTransport?.sendBulk(optimizedPayload)
     }
 
     public updateWorkerInstance (workerScope: any): void {

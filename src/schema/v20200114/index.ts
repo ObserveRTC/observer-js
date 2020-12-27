@@ -14,7 +14,7 @@ export interface PeerConnectionSample {
     receiverStats?: ReceiverStats;
     senderStats?: ReceiverStats;
     userMediaErrors?: UserMediaError[];
-    timestamp?: number;
+    timestamp: number;
     timeZoneOffsetInMinute?: number;
     userId?: string;
 }
