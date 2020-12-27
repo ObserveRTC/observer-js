@@ -8,7 +8,7 @@ import type {
 } from '../../schema/v20200114'
 
 class WebSocketTransport {
-    private webSocket?: ReconnectingWebSocket
+    private _webSocket?: ReconnectingWebSocket
     constructor (wsServerAddress: string) {
         this.send = this.send.bind(this)
         this.sendBulk = this.sendBulk.bind(this)
@@ -22,17 +22,35 @@ class WebSocketTransport {
             'maxEnqueuedMessages': 120,
             'maxRetries': 100
         }
-        this.webSocket = new ReconnectingWebSocket(
+        this._webSocket = new ReconnectingWebSocket(
             wsServerAddress,
             [],
             options
         )
+        this._webSocket.onclose = (close): void => {
+            logger.warn(
+                'websocket closed',
+                close
+            )
+        }
+        this._webSocket.onerror = (err): void => {
+            logger.warn(
+                'websocket error',
+                err
+            )
+        }
+        this._webSocket.onopen = (currentEvent): void => {
+            logger.warn(
+                'websocket on open',
+                currentEvent
+            )
+        }
     }
 
     public dispose (): void {
-        this.webSocket?.close()
+        this._webSocket?.close()
         // eslint-disable-next-line no-undefined
-        this.webSocket = undefined
+        this._webSocket = undefined
     }
 
     public send (socketPayload: PeerConnectionSample): void {
@@ -40,7 +58,7 @@ class WebSocketTransport {
             'sending payload ->',
             socketPayload
         )
-        this.webSocket?.send(JSON.stringify(socketPayload))
+        this._webSocket?.send(JSON.stringify(socketPayload))
     }
 
     public sendBulk (socketPayloadList: PeerConnectionSample[]): void {
