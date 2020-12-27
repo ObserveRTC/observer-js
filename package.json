@@ -54,8 +54,8 @@
     "webpack-dev-server": "^3.11.0"
   },
   "scripts": {
-    "build": "rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
-    "build-dev": "rimraf dist && rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
+    "build": "rimraf dist/v* && rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
+    "build-dev": "rimraf dist/v* && rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
     "build:watch": "yarn build --watch",
     "lint": "eslint --ext .ts .",
     "lint:fix": "yarn lint --fix",

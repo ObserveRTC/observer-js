@@ -1,5 +1,7 @@
 import * as Logger from 'loglevel'
 
+// @ts-expect-error Will be injected in build time
+const isDebug = __isDebug__ === true
 const initLogger = (prefix: string, dev = true): Logger.Logger => {
         // eslint-disable-next-line no-underscore-dangle
         const _logger = Logger.getLogger(prefix)
@@ -33,7 +35,10 @@ const initLogger = (prefix: string, dev = true): Logger.Logger => {
         return _logger
     },
 
-    logger = initLogger('ObserverRTC')
+    logger = initLogger(
+        'ObserverRTC',
+        isDebug
+    )
 export {
     logger
 }

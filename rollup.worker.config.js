@@ -35,7 +35,8 @@ const commonInput = {
     // commonBanner,
     replace({
       __buildDate__: buildDate,
-      __buildVersion__: buildVersion
+      __buildVersion__: buildVersion,
+      __isDebug__: isProd === false
     })
   ],
 }

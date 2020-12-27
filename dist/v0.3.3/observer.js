@@ -480,6 +480,8 @@
 	}));
 	});
 
+	// @ts-expect-error Will be injected in build time
+	const isDebug = true === true;
 	const initLogger = (prefix, dev = true) => {
 	    // eslint-disable-next-line no-underscore-dangle
 	    const _logger = loglevel.getLogger(prefix);
@@ -501,7 +503,7 @@
 	        _logger.setLevel(3);
 	    }
 	    return _logger;
-	}, logger = initLogger('ObserverRTC');
+	}, logger = initLogger('ObserverRTC', isDebug);
 
 	class CollectorWorker {
 	    constructor(loadURL, _clientCallback) {
@@ -2105,7 +2107,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "0.3.3", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 27 Dec 2020 18:32:50 GMT");
+	        "Sun, 27 Dec 2020 18:58:54 GMT");
 	    }
 	    onError(_err) {
 	        // Pass
