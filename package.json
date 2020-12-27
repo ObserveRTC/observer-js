@@ -4,7 +4,7 @@
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/observer.js",
   "config": {
-    "workerURL": "http://127.0.0.1:9090/js/dist/observer.worker.js"
+    "workerURL": "http://127.0.0.1:9090/js/dist/v0.3.3/observer.worker.js"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",

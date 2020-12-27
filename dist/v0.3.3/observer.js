@@ -500,7 +500,7 @@
 	    }
 	    else {
 	        // eslint-disable-next-line @typescript-eslint/no-magic-numbers
-	        _logger.setLevel(3);
+	        _logger.setLevel(4);
 	    }
 	    return _logger;
 	}, logger = initLogger('ObserverRTC', isDebug);
@@ -2098,7 +2098,7 @@
 	        this._collector = new RTCCollector();
 	        this._collectorWorker = new CollectorWorker(
 	        // @ts-expect-error Will be injected in build time
-	        "http://127.0.0.1:9090/js/dist/observer.worker.js", this);
+	        "http://127.0.0.1:9090/js/dist/v0.3.3/observer.worker.js", this);
 	        this.addPC = this.addPC.bind(this);
 	        this.removePC = this.removePC.bind(this);
 	        this._collectorWorker.loadWorker();
@@ -2107,7 +2107,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "0.3.3", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 27 Dec 2020 18:58:54 GMT");
+	        "Sun, 27 Dec 2020 19:09:15 GMT");
 	    }
 	    onError(_err) {
 	        // Pass

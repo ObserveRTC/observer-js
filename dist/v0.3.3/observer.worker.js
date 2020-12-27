@@ -306,7 +306,7 @@
 	    }
 	    else {
 	        // eslint-disable-next-line @typescript-eslint/no-magic-numbers
-	        _logger.setLevel(3);
+	        _logger.setLevel(4);
 	    }
 	    return _logger;
 	}, logger = initLogger('ObserverRTC', isDebug);
@@ -1298,7 +1298,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "0.3.3", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 27 Dec 2020 18:58:58 GMT");
+	        "Sun, 27 Dec 2020 19:09:18 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method

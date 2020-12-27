@@ -36,7 +36,7 @@ const commonInput = {
     replace({
       __buildDate__: buildDate,
       __buildVersion__: buildVersion,
-      __isDebug__: isProd === false
+      __isDebug__: JSON.stringify(isProd === false)
     })
   ],
 }

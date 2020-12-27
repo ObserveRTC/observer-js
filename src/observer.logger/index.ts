@@ -30,7 +30,7 @@ const initLogger = (prefix: string, dev = true): Logger.Logger => {
             _logger.enableAll()
         } else {
             // eslint-disable-next-line @typescript-eslint/no-magic-numbers
-            _logger.setLevel(3)
+            _logger.setLevel(4)
         }
         return _logger
     },

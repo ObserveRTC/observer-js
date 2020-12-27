@@ -38,7 +38,7 @@ const commonInput = {
       __buildDate__: buildDate,
       __buildVersion__: buildVersion,
       __workerUrl__: workerURL,
-      __isDebug__: isProd === false
+      __isDebug__: JSON.stringify(isProd === false)
     })
   ],
 }
