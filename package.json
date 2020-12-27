@@ -6,7 +6,7 @@
   "types": "dist/v0.3.3/observer.d.ts",
   "config": {
     "workerDevURL": "https://observertc.github.io/webextrapp/dist/v0.3.3/observer.worker.js",
-    "workerProdURL": "https://observertc.github.io/webextrapp/dist/dist/v0.3.3/observer.worker.min.js"
+    "workerProdURL": "https://observertc.github.io/webextrapp/dist/v0.3.3/observer.worker.min.js"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",
