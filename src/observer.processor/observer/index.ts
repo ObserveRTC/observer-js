@@ -17,6 +17,7 @@ import {
     ProcessorWorker
 } from '../../observer.worker/processor.wrapper'
 import type {
+    InitialConfig,
     WorkerCallback
 } from '../../observer.worker/types'
 import type {
@@ -30,12 +31,16 @@ import {
 } from '../rtc.raw.stats.processor'
 
 
-const intervalDurationInMs = 1000
+const defaultIntervalDurationInMs = 1000
 class ObserverProcessor implements WorkerCallback {
     private readonly _cron = new CronInterval()
     private readonly _processorWorker = new ProcessorWorker(this)
 
     constructor () {
+        this.startWsServer = this.startWsServer.bind(this)
+        this.startCronTask = this.startCronTask.bind(this)
+        this.onResponseRawStats = this.onResponseRawStats.bind(this)
+        this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this)
         console.warn(
             '$ObserverRTC version[processor]',
             // @ts-expect-error Will be injected in build time
@@ -70,11 +75,26 @@ class ObserverProcessor implements WorkerCallback {
 
     public updateWorkerInstance (workerScope: any): void {
         this._processorWorker.setWorkerScope(workerScope)
-        // Also request server address
+    }
+
+    public initialize (): void {
         this._processorWorker.requestInitialConfig()
     }
 
-    public startCronTask (): void {
+    onResponseInitialConfig (rawStats: InitialConfig): void {
+        this.startWsServer(rawStats.wsAddress)
+        this.startCronTask(rawStats.poolingIntervalInMs)
+    }
+
+
+    private startWsServer (wsServerAddress: string): void {
+        logger.warn(
+            'start websocket server',
+            wsServerAddress
+        )
+    }
+
+    private startCronTask (intervalDurationInMs: number = defaultIntervalDurationInMs): void {
         this._cron.start(
             {'execute': this._processorWorker.requestRawStats.bind(this)} as Runnable,
             intervalDurationInMs
@@ -85,7 +105,7 @@ class ObserverProcessor implements WorkerCallback {
 const observerProcessor = new ObserverProcessor()
 // Update worker scope
 observerProcessor.updateWorkerInstance(self)
+// Try to initialize
+observerProcessor.initialize()
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 onmessage = observerProcessor.messageHandler
-// Start cron task
-observerProcessor.startCronTask()

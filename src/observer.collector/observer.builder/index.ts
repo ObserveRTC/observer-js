@@ -1,3 +1,6 @@
+import type {
+    InitialConfig
+} from '../../observer.worker/types'
 import {
     Observer
 } from '../observer'
@@ -5,8 +8,8 @@ import {
 class Builder {
     private readonly instance: Observer
 
-    constructor () {
-        this.instance = new Observer()
+    constructor (initializeConfig: InitialConfig) {
+        this.instance = new Observer(initializeConfig)
     }
 
     build (): Observer {

@@ -5,7 +5,7 @@ import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
 import type {
-    ClientCallback
+    ClientCallback, InitialConfig,
 } from '../../observer.worker/types'
 import type {
     UserConfig
@@ -28,8 +28,7 @@ class Observer implements ClientCallback {
         __workerUrl__,
         this
     )
-    // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
-    constructor () {
+    constructor (private readonly _initializeConfig: InitialConfig) {
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
         this._collectorWorker.loadWorker()
@@ -63,7 +62,7 @@ class Observer implements ClientCallback {
     }
 
     onRequestInitialConfig (): void {
-        logger.warn('onRequestInitialConfig')
+        this._collectorWorker.sendInitialConfig(this._initializeConfig)
     }
 
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {

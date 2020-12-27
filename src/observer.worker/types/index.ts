@@ -30,4 +30,5 @@ export interface ClientCallback {
 
 export interface WorkerCallback {
     onResponseRawStats: (rawStats: RawStats[]) => void;
+    onResponseInitialConfig: (rawStats: InitialConfig) => void;
 }

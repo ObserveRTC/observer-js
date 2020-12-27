@@ -7,6 +7,7 @@ import {
 import type {
     ClientCallback,
     ClientPayload,
+    InitialConfig,
     WorkerPayload
 } from '../types'
 
@@ -26,6 +27,14 @@ class CollectorWorker {
         this._worker = new Worker(workerURL)
         this._worker.onerror = this.onError.bind(this)
         this._worker.onmessage = this.onMessage.bind(this)
+    }
+
+    public sendInitialConfig (initializeConfig: InitialConfig): void {
+        const payload = {
+            'data': initializeConfig,
+            'what': 'onRequestInitialConfig'
+        } as ClientPayload
+        this._worker.postMessage(payload)
     }
 
     public sendRawStats (rawStats: RawStats[]): void {
