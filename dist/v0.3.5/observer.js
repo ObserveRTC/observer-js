@@ -525,7 +525,7 @@
             const originalFactory = loglevel.methodFactory, rawMethod = originalFactory(methodName, logLevel, loggerName);
             // eslint-disable-next-line @typescript-eslint/explicit-function-return-type,func-names
             return function () {
-                rawMethod(`${prefix} ${new Date().toUTCString()}`, 
+                rawMethod(`${prefix} ${new Date().toUTCString()}`,
                 // eslint-disable-next-line prefer-rest-params
                 ...arguments);
             };
@@ -609,7 +609,7 @@
             const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
             // eslint-disable-next-line @typescript-eslint/promise-function-async,@typescript-eslint/explicit-function-return-type,func-names
             const newGetUserMedia = function () {
-                return origGetUserMedia.apply(navigator.mediaDevices, 
+                return origGetUserMedia.apply(navigator.mediaDevices,
                 // @ts-expect-error ignore
                 // eslint-disable-next-line prefer-rest-params
                 arguments).then((stream) => __awaiter(this, void 0, void 0, function* () { return Promise.resolve(stream); }), (err) => __awaiter(this, void 0, void 0, function* () {
@@ -1951,7 +1951,7 @@
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_c) {
                 switch (_c.label) {
-                    case 0: 
+                    case 0:
                     // A delay is required to ensure consistent entropy components.
                     // See https://github.com/fingerprintjs/fingerprintjs/issues/254
                     // and https://github.com/fingerprintjs/fingerprintjs/issues/307
@@ -2115,7 +2115,7 @@
                 const senderList = RawStatsCollector.getSender(this.userConfig.pc);
                 const [
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                receiverStats, 
+                receiverStats,
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 senderStats] = yield Promise.all([
                     RawStatsCollector.getRawStats(receiverList),
@@ -2171,15 +2171,15 @@
             this._collector = new RTCCollector();
             this._collectorWorker = new CollectorWorker(
             // @ts-expect-error Will be injected in build time
-            "https://observertc.github.io/webextrapp/dist/v0.3.5/observer.worker.js", this);
+            "https://observertc.github.io/observer-js/dist/v0.3.5/observer.worker.js", this);
             this.addPC = this.addPC.bind(this);
             this.removePC = this.removePC.bind(this);
             this._collectorWorker.loadWorker();
             this._userMediaHandler.overrideUserMedia(this);
             // eslint-disable-next-line no-console
-            console.warn('$ObserverRTC version[collector]', 
+            console.warn('$ObserverRTC version[collector]',
             // @ts-expect-error Will be injected in build time
-            "0.3.5", 'from build date', 
+            "0.3.5", 'from build date',
             // @ts-expect-error Will be injected in build time
             "Mon, 28 Dec 2020 18:13:25 GMT");
         }

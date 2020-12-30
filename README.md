@@ -22,26 +22,26 @@ Extractor Development Toolkits for WebRTC Samples
   - Developer version 
   
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/observer.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/observer.js"></script>
   ```
   
   - Production version
   
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/observer.min.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/observer.min.js"></script>
   ```
   
 - New version that use WebWorker. It's recommend using this version
   - Developer version
 
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/v0.3.5/observer.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/v0.3.5/observer.js"></script>
   ```
 
   - Production version
 
   ```html
-  <script src="https://observertc.github.io/webextrapp/dist/v0.3.5/observer.min.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/v0.3.5/observer.min.js"></script>
   ```
 
 

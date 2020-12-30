@@ -5,8 +5,8 @@
   "main": "dist/v0.3.5/observer.js",
   "types": "dist/v0.3.5/observer.d.ts",
   "config": {
-    "workerDevURL": "https://observertc.github.io/webextrapp/dist/v0.3.5/observer.worker.js",
-    "workerProdURL": "https://observertc.github.io/webextrapp/dist/v0.3.5/observer.worker.min.js",
+    "workerDevURL": "https://observertc.github.io/observer-js/dist/v0.3.5/observer.worker.js",
+    "workerProdURL": "https://observertc.github.io/observer-js/dist/v0.3.5/observer.worker.min.js",
     "_workerDevURL": "http://localhost:9090/js/dist/v0.3.5/observer.worker.js",
     "_workerProdURL": "http://localhost:9090/js/dist/v0.3.5/observer.worker.min.js"
   },
@@ -67,6 +67,6 @@
     "registry": "https://npm.pkg.github.com/"
   },
   "repository": {
-    "url": "git@github.com:ObserveRTC/webextrapp.git"
+    "url": "git@github.com:ObserveRTC/observer-js.git"
   }
 }
