@@ -3,7 +3,9 @@ class Integrator {
         this.init(websocketServer, poolingIntervalInMs)
     }
     init(websocketServer = '', poolingIntervalInMs) {
-        this.observer = new ObserverRTC.Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
+        this.observer = new ObserverRTC
+            .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
+            .withIntegration('General')
             .build()
     }
 

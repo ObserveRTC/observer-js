@@ -14,6 +14,7 @@ import type {
     ClientCallback, InitialConfig
 } from '../../observer.worker/types'
 import type {
+    Integration,
     UserConfig
 } from '../observer.peer'
 import {
@@ -29,6 +30,7 @@ import {
 class Observer implements ClientCallback, UserMediaCallback {
     private readonly _userMediaHandler = new UserMediaHandler()
     private _rtcList: ObserverPC[] = []
+    private _integration?: Integration
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
         // @ts-expect-error Will be injected in build time
@@ -38,6 +40,8 @@ class Observer implements ClientCallback, UserMediaCallback {
     constructor (private readonly _initializeConfig: InitialConfig) {
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
+        this.setIntegration = this.setIntegration.bind(this)
+
         this._collectorWorker.loadWorker()
         this._userMediaHandler.overrideUserMedia(this)
         // eslint-disable-next-line no-console
@@ -79,9 +83,14 @@ class Observer implements ClientCallback, UserMediaCallback {
         this._collectorWorker.sendInitialConfig(this._initializeConfig)
     }
 
+    public setIntegration (integration: Integration): void {
+        this._integration = integration
+    }
+
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {
         const userConfig = {
             callId,
+            'integration': this._integration,
             pc,
             userId
         } as UserConfig

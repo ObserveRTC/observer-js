@@ -15,10 +15,13 @@ import {
     RTCState
 } from '../rtc.state'
 
+export type Integration = 'Jitsi' | 'TokBox' | 'General'
+
 export interface UserConfig {
     pc: RTCPeerConnection;
     callId?: string;
     userId?: string;
+    integration?: string;
 }
 
 export interface PCDetails {
@@ -28,6 +31,7 @@ export interface PCDetails {
     timeZoneOffsetInMinute?: number;
     userId?: string;
     timestamp?: number;
+    integration?: string;
 }
 
 export interface ObserverStats {
@@ -59,6 +63,7 @@ class ObserverPC {
         return {
             'browserId': this._browserId,
             'callId': this.userConfig.callId,
+            'integration': this.userConfig.integration,
             'peerConnectionId': this._id,
             'timeZoneOffsetInMinute': this._timeZoneOffsetInMinute,
             'timestamp': TimeUtil.getCurrent(),

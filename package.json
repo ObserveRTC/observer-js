@@ -1,14 +1,14 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "Extractor Development Toolkits for WebRTC Samples",
-  "main": "dist/v0.3.5/observer.js",
-  "types": "dist/v0.3.5/observer.d.ts",
+  "main": "dist/v0.4.0./observer.js",
+  "types": "dist/v0.4.0/observer.d.ts",
   "config": {
-    "workerDevURL": "https://observertc.github.io/observer-js/dist/v0.3.5/observer.worker.js",
-    "workerProdURL": "https://observertc.github.io/observer-js/dist/v0.3.5/observer.worker.min.js",
-    "_workerDevURL": "http://localhost:9090/js/dist/v0.3.5/observer.worker.js",
-    "_workerProdURL": "http://localhost:9090/js/dist/v0.3.5/observer.worker.min.js"
+    "workerDevURL": "https://observertc.github.io/observer-js/dist/v0.4.0/observer.worker.js",
+    "workerProdURL": "https://observertc.github.io/observer-js/dist/v0.4.0/observer.worker.min.js",
+    "_workerDevURL": "http://localhost:9090/js/dist/v0.4.0/observer.worker.js",
+    "_workerProdURL": "http://localhost:9090/js/dist/v0.4.0/observer.worker.min.js"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",
