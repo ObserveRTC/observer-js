@@ -15,7 +15,7 @@ import {
     RTCState
 } from '../rtc.state'
 
-export type Integration = 'Jitsi' | 'TokBox' | 'General'
+export type Integration = 'Jitsi' | 'TokBox' | 'MediaSoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General'
 
 export interface UserConfig {
     pc: RTCPeerConnection;
