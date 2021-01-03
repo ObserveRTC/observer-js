@@ -20,6 +20,9 @@ import type {
 import type {
     PeerConnectionSample, UserMediaError
 } from '../../schema/v20200114'
+import {
+    IntegrationOptimizer
+} from '../rtc.integration.optimizer'
 import type {
     SendRecv
 } from '../rtc.raw.stats.processor'
@@ -38,6 +41,7 @@ const defaultIntervalDurationInMs = 1000
 class ObserverProcessor implements WorkerCallback {
     private readonly _cron = new CronInterval()
     private readonly _statsOptimizer = new StatsOptimizer()
+    private readonly _integrationOptimizer = new IntegrationOptimizer()
     private _webSocketTransport?: WebSocketTransport
     private readonly _processorWorker = new ProcessorWorker(this)
 
@@ -46,6 +50,7 @@ class ObserverProcessor implements WorkerCallback {
         this.startCronTask = this.startCronTask.bind(this)
         this.onResponseRawStats = this.onResponseRawStats.bind(this)
         this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this)
+        // eslint-disable-next-line no-console
         console.warn(
             '$ObserverRTC version[processor]',
             // @ts-expect-error Will be injected in build time
@@ -61,7 +66,8 @@ class ObserverProcessor implements WorkerCallback {
     }
 
     onResponseRawStats (rawStats: RawStats[]): void {
-        const socketPayloads = rawStats.map((currentStats) => {
+        const filteredStats = this._integrationOptimizer.optimize(rawStats)
+        const socketPayloads = filteredStats.map((currentStats) => {
             const payload = {
                 'browserId': currentStats.details.browserId,
                 'callId': currentStats.details.callId,

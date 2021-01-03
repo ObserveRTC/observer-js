@@ -199,7 +199,7 @@ interface UserMediaCallback {
     onMediaError: (errName: string) => void;
 }
 
-declare type Integration = 'Jitsi' | 'TokBox' | 'General';
+declare type Integration = 'Jitsi' | 'TokBox' | 'MediaSoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General';
 interface UserConfig {
     pc: RTCPeerConnection;
     callId?: string;

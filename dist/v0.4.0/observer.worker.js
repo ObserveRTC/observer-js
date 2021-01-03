@@ -374,6 +374,32 @@
 	    }
 	}
 
+	class TokBoxOptimizer {
+	    isTokBoxIntegration(rawStats) {
+	        // eslint-disable-next-line @typescript-eslint/no-magic-numbers,@typescript-eslint/no-unnecessary-condition,@typescript-eslint/strict-boolean-expressions
+	        return rawStats && rawStats.length > 0 && rawStats[0].details.integration === 'TokBox';
+	    }
+	    filterShortCalls(rawStats) {
+	        return rawStats.filter(this.hasStats.bind(this));
+	    }
+	    hasStats(rawStats) {
+	        // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	        return rawStats.stats.receiverStats.length > 0 || rawStats.stats.senderStats.length > 0;
+	    }
+	}
+
+	class IntegrationOptimizer {
+	    constructor() {
+	        this._tokBoxOptimizer = new TokBoxOptimizer();
+	    }
+	    optimize(rawStats) {
+	        if (this._tokBoxOptimizer.isTokBoxIntegration(rawStats)) {
+	            return this._tokBoxOptimizer.filterShortCalls(rawStats);
+	        }
+	        return rawStats;
+	    }
+	}
+
 	// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 	class StatsMap {
 	    static localCandidate(candidate) {
@@ -1292,16 +1318,18 @@
 	    constructor() {
 	        this._cron = new CronInterval();
 	        this._statsOptimizer = new StatsOptimizer();
+	        this._integrationOptimizer = new IntegrationOptimizer();
 	        this._processorWorker = new ProcessorWorker(this);
 	        this.startWsServer = this.startWsServer.bind(this);
 	        this.startCronTask = this.startCronTask.bind(this);
 	        this.onResponseRawStats = this.onResponseRawStats.bind(this);
 	        this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this);
+	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[processor]', 
 	        // @ts-expect-error Will be injected in build time
 	        "0.4.0", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 03 Jan 2021 13:15:24 GMT");
+	        "Sun, 03 Jan 2021 21:28:16 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -1309,7 +1337,8 @@
 	    }
 	    onResponseRawStats(rawStats) {
 	        var _a;
-	        const socketPayloads = rawStats.map((currentStats) => {
+	        const filteredStats = this._integrationOptimizer.optimize(rawStats);
+	        const socketPayloads = filteredStats.map((currentStats) => {
 	            const payload = {
 	                'browserId': currentStats.details.browserId,
 	                'callId': currentStats.details.callId,
