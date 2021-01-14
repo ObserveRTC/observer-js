@@ -160,7 +160,6 @@ temp/
 .idea/**/uiDesigner.xml
 .idea/**/dbnavigator.xml
 !jest.config.js
-*.d.ts
 node_modules
 
 # Gradle
