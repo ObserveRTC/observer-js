@@ -44,12 +44,14 @@ class ObserverProcessor implements WorkerCallback {
     private readonly _integrationOptimizer = new IntegrationOptimizer()
     private _webSocketTransport?: WebSocketTransport
     private readonly _processorWorker = new ProcessorWorker(this)
+    private _initialConfig?: InitialConfig
 
     constructor () {
         this.startWsServer = this.startWsServer.bind(this)
         this.startCronTask = this.startCronTask.bind(this)
         this.onResponseRawStats = this.onResponseRawStats.bind(this)
         this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this)
+        this.sendDataToTransport = this.sendDataToTransport.bind(this)
         // eslint-disable-next-line no-console
         console.warn(
             '$ObserverRTC version[processor]',
@@ -86,8 +88,8 @@ class ObserverProcessor implements WorkerCallback {
         this._statsOptimizer.addStatBulk(socketPayloads)
         // Order is import ends
 
-        // Try to send the payload to server
-        this._webSocketTransport?.sendBulk(optimizedPayload)
+        // Try to send the payload to transport
+        this.sendDataToTransport(optimizedPayload)
     }
 
     onUserMediaError (mediaError: UserMediaErrorPayload): void {
@@ -97,7 +99,7 @@ class ObserverProcessor implements WorkerCallback {
             'timestamp': mediaError.details.timestamp,
             'userMediaErrors': [{'message': mediaError.errName} as UserMediaError]
         } as PeerConnectionSample
-        this._webSocketTransport?.send(socketPayloads)
+        this.sendDataToTransport([socketPayloads])
     }
 
     public updateWorkerInstance (workerScope: any): void {
@@ -108,9 +110,14 @@ class ObserverProcessor implements WorkerCallback {
         this._processorWorker.requestInitialConfig()
     }
 
-    onResponseInitialConfig (rawStats: InitialConfig): void {
-        this.startWsServer(rawStats.wsAddress)
-        this.startCronTask(rawStats.poolingIntervalInMs)
+    onResponseInitialConfig (initialConfig: InitialConfig): void {
+        this._initialConfig = initialConfig
+        this.startCronTask(initialConfig.poolingIntervalInMs)
+        if (this._initialConfig.transportType === 'local') {
+            // Don't try to initialize websocket transport
+            return
+        }
+        this.startWsServer(initialConfig.wsAddress)
     }
 
     private startWsServer (wsServerAddress: string): void {
@@ -129,6 +136,17 @@ class ObserverProcessor implements WorkerCallback {
             {'execute': this._processorWorker.requestRawStats.bind(this)} as Runnable,
             intervalDurationInMs
         )
+    }
+
+    private sendDataToTransport (samples: PeerConnectionSample[]): void {
+        if (this._initialConfig?.transportType === 'local') {
+            // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+            if (samples.length > 0) {
+                this._processorWorker.sendTransportData(samples)
+            }
+        } else {
+            this._webSocketTransport?.sendBulk(samples)
+        }
     }
 }
 

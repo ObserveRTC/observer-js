@@ -1,4 +1,10 @@
+const localTransport = {
+    onObserverRTCSample: (sampleList) => {
+        console.warn('peer connection samples', sampleList)
+    }
+}
 class Integrator {
+
     constructor(websocketServer, poolingIntervalInMs) {
         this.init(websocketServer, poolingIntervalInMs)
     }
@@ -6,6 +12,7 @@ class Integrator {
         this.observer = new ObserverRTC
             .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
             .withIntegration('General')
+            // .withLocalTransport(localTransport) enable it if we want to receive sample callback instead of sending them to server
             .build()
     }
 

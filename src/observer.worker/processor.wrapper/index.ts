@@ -5,6 +5,9 @@ import {
     logger
 } from '../../observer.logger'
 import type {
+    PeerConnectionSample
+} from '../../schema/v20200114'
+import type {
     ClientPayload,
     InitialConfig,
     WorkerCallback,
@@ -19,6 +22,7 @@ class ProcessorWorker {
         this.onMessage = this.onMessage.bind(this)
         this.requestInitialConfig = this.requestInitialConfig.bind(this)
         this.requestRawStats = this.requestRawStats.bind(this)
+        this.sendTransportData = this.sendTransportData.bind(this)
     }
 
     setWorkerScope (workerScope: any): void {
@@ -54,6 +58,14 @@ class ProcessorWorker {
     requestRawStats (): void {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
         this._workerScope.postMessage({'what': 'requestRawStats'} as WorkerPayload)
+    }
+
+    sendTransportData (samples: PeerConnectionSample[]): void {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+        this._workerScope.postMessage({
+            'data': samples,
+            'what': 'onLocalTransport'
+        } as WorkerPayload)
     }
 }
 

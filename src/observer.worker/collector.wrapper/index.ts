@@ -67,6 +67,9 @@ class CollectorWorker {
             case 'requestInitialConfig':
                 this._clientCallback?.onRequestInitialConfig()
                 return
+            case 'onLocalTransport':
+                this._clientCallback?.onTransportCallback(data.data)
+                return
             default:
                 logger.warn(
                     'unknown types',

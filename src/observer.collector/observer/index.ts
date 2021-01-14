@@ -2,6 +2,9 @@ import {
     logger
 } from '../../observer.logger'
 import type {
+    LocalTransport
+} from '../../observer.processor/local.transport'
+import type {
     UserMediaCallback
 } from '../../observer.usermediahandler'
 import {
@@ -13,6 +16,9 @@ import {
 import type {
     ClientCallback, InitialConfig
 } from '../../observer.worker/types'
+import type {
+    PeerConnectionSample
+} from '../../schema/v20200114'
 import type {
     Integration,
     UserConfig
@@ -31,6 +37,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     private readonly _userMediaHandler = new UserMediaHandler()
     private _rtcList: ObserverPC[] = []
     private _integration?: Integration
+    private _localTransport?: LocalTransport
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
         // @ts-expect-error Will be injected in build time
@@ -41,6 +48,7 @@ class Observer implements ClientCallback, UserMediaCallback {
         this.addPC = this.addPC.bind(this)
         this.removePC = this.removePC.bind(this)
         this.setIntegration = this.setIntegration.bind(this)
+        this.setLocalTransport = this.setLocalTransport.bind(this)
 
         this._collectorWorker.loadWorker()
         this._userMediaHandler.overrideUserMedia(this)
@@ -80,11 +88,22 @@ class Observer implements ClientCallback, UserMediaCallback {
     }
 
     onRequestInitialConfig (): void {
-        this._collectorWorker.sendInitialConfig(this._initializeConfig)
+        this._collectorWorker.sendInitialConfig({
+            ...this._initializeConfig,
+            ...this._localTransport && {'transportType': 'local'}
+        } as InitialConfig)
+    }
+
+    onTransportCallback (peerConnectionSamples?: PeerConnectionSample[]): void {
+        this._localTransport?.onObserverRTCSample?.(peerConnectionSamples)
     }
 
     public setIntegration (integration: Integration): void {
         this._integration = integration
+    }
+
+    public setLocalTransport (transport: LocalTransport): void {
+        this._localTransport = transport
     }
 
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {

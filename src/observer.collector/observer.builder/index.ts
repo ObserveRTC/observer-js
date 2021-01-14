@@ -1,4 +1,7 @@
 import type {
+    LocalTransport
+} from '../../observer.processor/local.transport'
+import type {
     InitialConfig
 } from '../../observer.worker/types'
 import {
@@ -13,6 +16,11 @@ class Builder {
 
     constructor (initializeConfig: InitialConfig) {
         this.instance = new Observer(initializeConfig)
+    }
+
+    withLocalTransport (transport: LocalTransport): Builder {
+        this.instance.setLocalTransport(transport)
+        return this
     }
 
     withIntegration (integration: Integration): Builder {
