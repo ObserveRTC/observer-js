@@ -15,13 +15,13 @@ import {
     RTCState
 } from '../rtc.state'
 
-export type Integration = 'Jitsi' | 'TokBox' | 'MediaSoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General'
+export type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General'
 
 export interface UserConfig {
     pc: RTCPeerConnection;
     callId?: string;
     userId?: string;
-    integration?: string;
+    integration?: Integration;
 }
 
 export interface PCDetails {
@@ -31,7 +31,7 @@ export interface PCDetails {
     timeZoneOffsetInMinute?: number;
     userId?: string;
     timestamp?: number;
-    integration?: string;
+    integration?: Integration;
 }
 
 export interface ObserverStats {
