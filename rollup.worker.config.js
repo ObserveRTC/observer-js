@@ -9,6 +9,7 @@ import commonjs from '@rollup/plugin-commonjs'
 import replace from '@rollup/plugin-replace';
 
 const outputDirectory = `dist/v${version}`
+const outputDirectoryLatest = `dist/latest`
 const commonBanner = licensePlugin({
   banner: {
     content: {
@@ -54,6 +55,11 @@ const buildDev =  {
   format: 'umd',
 }
 
+const buildDevLatest =  {
+  ...buildDev,
+  file: `${outputDirectoryLatest}/observer.worker.js`,
+}
+
 const buildProduction = {
   ...commonOutput,
   file: `${outputDirectory}/observer.worker.min.js`,
@@ -61,12 +67,18 @@ const buildProduction = {
   plugins: [commonTerser],
 }
 
+const buildProductionLatest = {
+  ...buildProduction,
+  file: `${outputDirectoryLatest}/observer.worker.min.js`,
+}
+
 module.exports = [
   // Browser bundles. They have all the dependencies included for convenience.
   {
     ...commonInput,
     output: [
-      isProd ? buildProduction : buildDev
+      isProd ? buildProduction : buildDev,
+      isProd ? buildProductionLatest : buildDevLatest
     ],
   }
 ]
