@@ -6,8 +6,14 @@ import {
     observerSingleton
 } from '../../observer.singleton'
 import {
+    BrowserUtil
+} from '../../observer.utils/browser.util'
+import {
     TimeUtil
 } from '../../observer.utils/time.util'
+import type {
+    BrowserDetails
+} from '../../schema/v20200114'
 import {
     RawStatsCollector
 } from '../rtc.raw.stats.collector'
@@ -26,6 +32,7 @@ export interface UserConfig {
 
 export interface PCDetails {
     browserId?: string;
+    browserDetails?: BrowserDetails;
     callId?: string;
     peerConnectionId?: string;
     timeZoneOffsetInMinute?: number;
@@ -61,6 +68,7 @@ class ObserverPC {
 
     get pcDetails (): PCDetails {
         return {
+            'browserDetails': BrowserUtil.getBrowserDetails(),
             'browserId': this._browserId,
             'callId': this.userConfig.callId,
             'integration': this.userConfig.integration,

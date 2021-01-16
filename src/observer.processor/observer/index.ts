@@ -71,6 +71,7 @@ class ObserverProcessor implements WorkerCallback {
         const filteredStats = this._integrationOptimizer.optimize(rawStats)
         const socketPayloads = filteredStats.map((currentStats) => {
             const payload = {
+                'browserDetails': currentStats.details.browserDetails,
                 'browserId': currentStats.details.browserId,
                 'callId': currentStats.details.callId,
                 'iceStats': RawStatsProcessor.getIceStats(currentStats.stats),
@@ -94,6 +95,7 @@ class ObserverProcessor implements WorkerCallback {
 
     onUserMediaError (mediaError: UserMediaErrorPayload): void {
         const socketPayloads: PeerConnectionSample = {
+            'browserDetails': mediaError.details.browserDetails,
             'browserId': mediaError.details.browserId,
             'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
             'timestamp': mediaError.details.timestamp,

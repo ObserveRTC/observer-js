@@ -6,8 +6,38 @@
  *   const peerConnectionSample = Convert.toPeerConnectionSample(json);
  */
 
+export interface MediaDeviceInfo {
+    deviceId?: string;
+    groupId?: string;
+    kind?: 'videoinput' | 'audioinput' | 'audiooutput';
+    label?: string;
+}
+
+export interface BrowserDetails {
+    browser: {
+        name?: string;
+        version?: string;
+    };
+    os: {
+        name?: string;
+        version?: string;
+        versionName?: string;
+    };
+    platform: {
+        type?: string;
+        vendor?: string;
+        model?: string;
+    };
+    engine: {
+        name?: string;
+        version?: string;
+    };
+    deviceList: MediaDeviceInfo[];
+}
+
 export interface PeerConnectionSample {
     browserId?: string;
+    browserDetails?: BrowserDetails;
     callId?: string;
     iceStats?: IceStats;
     peerConnectionId?: string;

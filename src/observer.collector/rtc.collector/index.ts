@@ -2,6 +2,9 @@ import {
     observerSingleton
 } from '../../observer.singleton'
 import {
+    BrowserUtil
+} from '../../observer.utils/browser.util'
+import {
     TimeUtil
 } from '../../observer.utils/time.util'
 import type {
@@ -31,6 +34,10 @@ class RTCCollector {
     public async collectUserMediaError (errName: string): Promise<UserMediaErrorPayload> {
         return {
             'details': {
+                'browserDetails': {
+                    ...BrowserUtil.getBrowserDetails(),
+                    'deviceList': await BrowserUtil.getDeviceList()
+                },
                 'browserId': await observerSingleton.getBrowserId(),
                 'timeZoneOffsetInMinute': TimeUtil.getTimeZoneOffsetInMinute(),
                 'timestamp': TimeUtil.getCurrent()

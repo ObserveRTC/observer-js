@@ -1354,9 +1354,9 @@
 	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[processor]', 
 	        // @ts-expect-error Will be injected in build time
-	        "0.6.0", 'from build date', 
+	        "0.6.1", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Thu, 14 Jan 2021 02:34:46 GMT");
+	        "Sat, 16 Jan 2021 01:14:24 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -1366,6 +1366,7 @@
 	        const filteredStats = this._integrationOptimizer.optimize(rawStats);
 	        const socketPayloads = filteredStats.map((currentStats) => {
 	            const payload = {
+	                'browserDetails': currentStats.details.browserDetails,
 	                'browserId': currentStats.details.browserId,
 	                'callId': currentStats.details.callId,
 	                'iceStats': RawStatsProcessor.getIceStats(currentStats.stats),
@@ -1387,6 +1388,7 @@
 	    }
 	    onUserMediaError(mediaError) {
 	        const socketPayloads = {
+	            'browserDetails': mediaError.details.browserDetails,
 	            'browserId': mediaError.details.browserId,
 	            'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
 	            'timestamp': mediaError.details.timestamp,

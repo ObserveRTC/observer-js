@@ -7,7 +7,6 @@ import {
 
 class ObserverSingleton {
     public browserId = ''
-
     public async getBrowserId (): Promise<string> {
         if (this.browserId) {
             return this.browserId

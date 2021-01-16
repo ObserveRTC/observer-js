@@ -195,8 +195,36 @@ declare class ParserUtil {
     static parseWsServerUrl(serverURL: string, serviceUUID: string, mediaUnitId: string, statsVersion: string): string;
 }
 
+interface MediaDeviceInfo {
+    deviceId?: string;
+    groupId?: string;
+    kind?: 'videoinput' | 'audioinput' | 'audiooutput';
+    label?: string;
+}
+interface BrowserDetails {
+    browser: {
+        name?: string;
+        version?: string;
+    };
+    os: {
+        name?: string;
+        version?: string;
+        versionName?: string;
+    };
+    platform: {
+        type?: string;
+        vendor?: string;
+        model?: string;
+    };
+    engine: {
+        name?: string;
+        version?: string;
+    };
+    deviceList: MediaDeviceInfo[];
+}
 interface PeerConnectionSample {
     browserId?: string;
+    browserDetails?: BrowserDetails;
     callId?: string;
     iceStats?: IceStats;
     peerConnectionId?: string;
@@ -423,6 +451,7 @@ interface UserConfig {
 }
 interface PCDetails {
     browserId?: string;
+    browserDetails?: BrowserDetails;
     callId?: string;
     peerConnectionId?: string;
     timeZoneOffsetInMinute?: number;
