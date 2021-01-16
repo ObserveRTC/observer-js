@@ -2,9 +2,10 @@
   "name": "wobserver-test",
   "version": "0.0.2",
   "scripts": {
-    "start-server": "http-server -p 9090"
+    "start-server": "webpack serve"
   },
   "devDependencies": {
-    "http-server": "^0.12.3"
+    "@webpack-cli/serve": "^1.2.1",
+    "webpack-dev-server": "^3.11.2"
   }
 }
