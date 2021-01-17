@@ -13,7 +13,7 @@ export interface MediaDeviceInfo {
     label?: string;
 }
 
-export interface BrowserDetails {
+export interface ClientDetails {
     browser: {
         name?: string;
         version?: string;
@@ -32,13 +32,13 @@ export interface BrowserDetails {
         name?: string;
         version?: string;
     };
-    deviceList: MediaDeviceInfo[];
 }
 
 export interface PeerConnectionSample {
     browserId?: string;
-    browserDetails?: BrowserDetails;
+    clientDetails?: ClientDetails;
     callId?: string;
+    deviceList?: MediaDeviceInfo[];
     iceStats?: IceStats;
     peerConnectionId?: string;
     receiverStats?: ReceiverStats;
@@ -297,7 +297,7 @@ export interface UserMediaError {
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class Convert {
     public static toPeerConnectionSample (json: string): PeerConnectionSample {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return,max-lines
         return JSON.parse(json)
     }
 

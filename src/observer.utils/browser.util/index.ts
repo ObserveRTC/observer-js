@@ -2,7 +2,7 @@ import FingerprintJS from '@fingerprintjs/fingerprintjs'
 import * as Bowser from 'bowser'
 
 import type {
-    BrowserDetails,
+    ClientDetails,
     MediaDeviceInfo
 } from '../../schema/v20200114'
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
@@ -13,14 +13,19 @@ class BrowserUtil {
         return result.visitorId
     }
 
-    public static getBrowserDetails (): BrowserDetails {
-        const browserDetails = Bowser.parse(window.navigator.userAgent)
-        return browserDetails as BrowserDetails
+    public static getClientDetails (): ClientDetails {
+        const clientDetails = Bowser.parse(window.navigator.userAgent)
+        return clientDetails as ClientDetails
     }
 
     public static async getDeviceList (): Promise<MediaDeviceInfo[]> {
         const deviceList = await navigator.mediaDevices.enumerateDevices()
-        return deviceList
+        return deviceList.map((currentDeviceInfo) => ({
+            'deviceId': currentDeviceInfo.deviceId,
+            'groupId': currentDeviceInfo.groupId,
+            'kind': currentDeviceInfo.kind,
+            'label': currentDeviceInfo.label
+        } as MediaDeviceInfo))
     }
 }
 

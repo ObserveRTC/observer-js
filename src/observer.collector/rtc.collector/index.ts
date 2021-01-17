@@ -34,11 +34,9 @@ class RTCCollector {
     public async collectUserMediaError (errName: string): Promise<UserMediaErrorPayload> {
         return {
             'details': {
-                'browserDetails': {
-                    ...BrowserUtil.getBrowserDetails(),
-                    'deviceList': await BrowserUtil.getDeviceList()
-                },
                 'browserId': await observerSingleton.getBrowserId(),
+                'clientDetails': BrowserUtil.getClientDetails(),
+                'deviceList': await BrowserUtil.getDeviceList(),
                 'timeZoneOffsetInMinute': TimeUtil.getTimeZoneOffsetInMinute(),
                 'timestamp': TimeUtil.getCurrent()
             },
