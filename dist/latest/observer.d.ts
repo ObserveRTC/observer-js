@@ -201,7 +201,7 @@ interface MediaDeviceInfo {
     kind?: 'videoinput' | 'audioinput' | 'audiooutput';
     label?: string;
 }
-interface BrowserDetails {
+interface ClientDetails {
     browser: {
         name?: string;
         version?: string;
@@ -220,12 +220,12 @@ interface BrowserDetails {
         name?: string;
         version?: string;
     };
-    deviceList: MediaDeviceInfo[];
 }
 interface PeerConnectionSample {
     browserId?: string;
-    browserDetails?: BrowserDetails;
+    clientDetails?: ClientDetails;
     callId?: string;
+    deviceList?: MediaDeviceInfo[];
     iceStats?: IceStats;
     peerConnectionId?: string;
     receiverStats?: ReceiverStats;
@@ -451,8 +451,9 @@ interface UserConfig {
 }
 interface PCDetails {
     browserId?: string;
-    browserDetails?: BrowserDetails;
+    clientDetails?: ClientDetails;
     callId?: string;
+    deviceList?: MediaDeviceInfo[];
     peerConnectionId?: string;
     timeZoneOffsetInMinute?: number;
     userId?: string;

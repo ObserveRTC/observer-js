@@ -1,9 +1,10 @@
+import lodash from 'lodash'
+
 import {
     TimeUtil
 } from '../../observer.utils/time.util'
 import type {
-    LocalCandidateElement,
-    PeerConnectionSample, RemoteCandidateElement
+    PeerConnectionSample
 } from '../../schema/v20200114'
 
 // 15 seconds
@@ -15,27 +16,45 @@ class StatsOptimizer {
         this.getLast = this.getLast.bind(this)
         this.removeOldBulk = this.removeOldBulk.bind(this)
         this.isEqual = this.isEqual.bind(this)
-        this.excludeSameCandidates = this.excludeSameCandidates.bind(this)
+        this.isSameLocalIceCandidate = this.isSameLocalIceCandidate.bind(this)
+        this.isSameRemoteIceCandidate = this.isSameRemoteIceCandidate.bind(this)
+        this.isSameClientDetails = this.isSameClientDetails.bind(this)
+        this.isSameDeviceList = this.isSameDeviceList.bind(this)
     }
 
     excludeSameCandidates (currentStats: PeerConnectionSample): PeerConnectionSample {
         const previousStats = this.getLast(currentStats)
         if (!previousStats) {
+            // If there is no previous stats
             return currentStats
         }
-        const retval = JSON.parse(JSON.stringify(currentStats)) as PeerConnectionSample
-        if (this.isEqual(
-            previousStats.iceStats?.localCandidates,
-            currentStats.iceStats?.localCandidates
-        )) {
-            delete retval.iceStats?.localCandidates
-        }
-        if (this.isEqual(
-            previousStats.iceStats?.remoteCandidates,
-            currentStats.iceStats?.remoteCandidates
-        )) {
-            delete retval.iceStats?.remoteCandidates
-        }
+        const omitList = []
+        // Check if local ice candidates are same
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        this.isSameLocalIceCandidate(
+            previousStats,
+            currentStats
+        ) && omitList.push('iceStats.localCandidates')
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        this.isSameLocalIceCandidate(
+            previousStats,
+            currentStats
+        ) && omitList.push('iceStats.remoteCandidates')
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        this.isSameClientDetails(
+            previousStats,
+            currentStats
+        ) && omitList.push('clientDetails')
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        this.isSameDeviceList(
+            previousStats,
+            currentStats
+        ) && omitList.push('deviceList')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+        const retval = lodash.omit(
+            currentStats,
+            omitList
+        ) as PeerConnectionSample
         return retval
     }
 
@@ -44,13 +63,37 @@ class StatsOptimizer {
         this.removeOldBulk()
     }
 
-    private isEqual (
-        previousCandidate: LocalCandidateElement[] | RemoteCandidateElement[] = [],
-        currentCandidate: LocalCandidateElement[] | RemoteCandidateElement[] = []
-    ): boolean {
-        return currentCandidate.
-            every((candidate) => previousCandidate.
-                some((item) => item.id === candidate.id))
+    private isSameLocalIceCandidate (previousStats: PeerConnectionSample, currentStats: PeerConnectionSample): boolean {
+        return this.isEqual(
+            previousStats.iceStats?.localCandidates,
+            currentStats.iceStats?.localCandidates
+        )
+    }
+    private isSameRemoteIceCandidate (previousStats: PeerConnectionSample, currentStats: PeerConnectionSample): boolean {
+        return this.isEqual(
+            previousStats.iceStats?.remoteCandidates,
+            currentStats.iceStats?.remoteCandidates
+        )
+    }
+    private isSameClientDetails (previousStats: PeerConnectionSample, currentStats: PeerConnectionSample): boolean {
+        return this.isEqual(
+            previousStats.clientDetails,
+            currentStats.clientDetails
+        )
+    }
+    private isSameDeviceList (previousStats: PeerConnectionSample, currentStats: PeerConnectionSample): boolean {
+        return this.isEqual(
+            previousStats.deviceList,
+            currentStats.deviceList
+        )
+    }
+
+    private isEqual (previousStats: any, currentStats: any): boolean {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+        return lodash.isEqual(
+            previousStats,
+            currentStats
+        ) as boolean
     }
 
     private removeOldBulk (): void {

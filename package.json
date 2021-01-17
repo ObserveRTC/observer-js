@@ -13,6 +13,7 @@
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",
     "bowser": "^2.11.0",
+    "lodash": "^4.17.20",
     "loglevel": "^1.6.8",
     "reconnecting-websocket": "^4.4.0",
     "tslib": "^2.0.3",
@@ -29,6 +30,7 @@
     "@surma/rollup-plugin-off-main-thread": "^1.4.2",
     "@types/jasmine": "^3.5.14",
     "@types/jest": "^26.0.15",
+    "@types/lodash": "^4.14.167",
     "@types/loglevel": "^1.6.3",
     "@types/ua-parser-js": "^0.7.33",
     "@types/uuid": "^8.3.0",

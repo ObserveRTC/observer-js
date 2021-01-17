@@ -1991,36 +1991,22 @@
                 return result.visitorId;
             });
         }
-        static getBrowserDetails() {
-            const browserDetails = es5.parse(window.navigator.userAgent);
-            return browserDetails;
+        static getClientDetails() {
+            const clientDetails = es5.parse(window.navigator.userAgent);
+            return clientDetails;
         }
         static getDeviceList() {
             return __awaiter(this, void 0, void 0, function* () {
                 const deviceList = yield navigator.mediaDevices.enumerateDevices();
-                return deviceList;
+                return deviceList.map((currentDeviceInfo) => ({
+                    'deviceId': currentDeviceInfo.deviceId,
+                    'groupId': currentDeviceInfo.groupId,
+                    'kind': currentDeviceInfo.kind,
+                    'label': currentDeviceInfo.label
+                }));
             });
         }
     }
-
-    class ObserverSingleton {
-        constructor() {
-            this.browserId = '';
-        }
-        getBrowserId() {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (this.browserId) {
-                    return this.browserId;
-                }
-                this.browserId = yield BrowserUtil.getBrowserId();
-                logger.warn('browser id', this.browserId);
-                return this.browserId;
-            });
-        }
-    }
-    const observerSingleton = new ObserverSingleton();
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    observerSingleton.getBrowserId().catch();
 
     // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     class TimeUtil {
@@ -2032,6 +2018,44 @@
             return timezoneOffset;
         }
     }
+
+    class ObserverSingleton {
+        constructor() {
+            this.browserId = '';
+            this.activeDeviceList = [];
+            // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+            this.lastDeviceStateCheckedTimestampInMs = 0;
+            // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+            this.offsetInMs = 60 * 1000;
+            this.getBrowserId = this.getBrowserId.bind(this);
+            this.getActiveDeviceList = this.getActiveDeviceList.bind(this);
+        }
+        getBrowserId() {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (this.browserId) {
+                    return this.browserId;
+                }
+                this.browserId = yield BrowserUtil.getBrowserId();
+                logger.warn('browser id', this.browserId);
+                return this.browserId;
+            });
+        }
+        getActiveDeviceList() {
+            const nowInMs = TimeUtil.getCurrent();
+            if (nowInMs - this.lastDeviceStateCheckedTimestampInMs > this.offsetInMs) {
+                this.lastDeviceStateCheckedTimestampInMs = nowInMs;
+                BrowserUtil.getDeviceList().then((deviceList) => {
+                    this.activeDeviceList = deviceList;
+                }).catch(null);
+            }
+            return this.activeDeviceList;
+        }
+    }
+    const observerSingleton = new ObserverSingleton();
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    observerSingleton.getBrowserId().catch();
+    // Update active device list in the beginning
+    observerSingleton.getActiveDeviceList();
 
     // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     class RawStatsCollector {
@@ -2111,9 +2135,10 @@
         }
         get pcDetails() {
             return {
-                'browserDetails': BrowserUtil.getBrowserDetails(),
                 'browserId': this._browserId,
                 'callId': this.userConfig.callId,
+                'clientDetails': BrowserUtil.getClientDetails(),
+                'deviceList': observerSingleton.getActiveDeviceList(),
                 'integration': this.userConfig.integration,
                 'peerConnectionId': this._id,
                 'timeZoneOffsetInMinute': this._timeZoneOffsetInMinute,
@@ -2162,8 +2187,9 @@
             return __awaiter(this, void 0, void 0, function* () {
                 return {
                     'details': {
-                        'browserDetails': Object.assign(Object.assign({}, BrowserUtil.getBrowserDetails()), { 'deviceList': yield BrowserUtil.getDeviceList() }),
                         'browserId': yield observerSingleton.getBrowserId(),
+                        'clientDetails': BrowserUtil.getClientDetails(),
+                        'deviceList': yield BrowserUtil.getDeviceList(),
                         'timeZoneOffsetInMinute': TimeUtil.getTimeZoneOffsetInMinute(),
                         'timestamp': TimeUtil.getCurrent()
                     },
@@ -2191,7 +2217,7 @@
             this._collector = new RTCCollector();
             this._collectorWorker = new CollectorWorker(
             // @ts-expect-error Will be injected in build time
-            "https://observertc.github.io/observer-js/dist/v0.6.1/observer.worker.js", this);
+            "http://localhost:9090/js/dist/v0.6.1/observer.worker.js", this);
             this.addPC = this.addPC.bind(this);
             this.removePC = this.removePC.bind(this);
             this.setIntegration = this.setIntegration.bind(this);
@@ -2203,7 +2229,7 @@
             // @ts-expect-error Will be injected in build time
             "0.6.1", 'from build date', 
             // @ts-expect-error Will be injected in build time
-            "Sat, 16 Jan 2021 01:14:20 GMT");
+            "Sun, 17 Jan 2021 19:47:32 GMT");
         }
         onError(_err) {
             // Pass
