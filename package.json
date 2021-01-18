@@ -5,10 +5,8 @@
   "main": "dist/v0.6.0./observer.js",
   "types": "dist/v0.6.0/observer.d.ts",
   "config": {
-    "_workerDevURL": "https://observertc.github.io/observer-js/dist/v0.6.1/observer.worker.js",
-    "_workerProdURL": "https://observertc.github.io/observer-js/dist/v0.6.1/observer.worker.min.js",
-    "workerDevURL": "http://localhost:9090/js/dist/v0.6.1/observer.worker.js",
-    "workerProdURL": "http://localhost:9090/js/dist/v0.6.1/observer.worker.min.js"
+    "_workerLoadEndpoint": "https://observertc.github.io/observer-js/dist",
+    "workerLoadEndpoint": "http://localhost:9090/js/dist"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^3.0.4",
@@ -59,8 +57,8 @@
     "webpack-dev-server": "^3.11.0"
   },
   "scripts": {
-    "build": "rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
-    "build-dev": "rollup --config rollup.api.config.js && rollup --config rollup.worker.config.js",
+    "build": "rollup --config rollup.api.config.js",
+    "build-dev": "rollup --config rollup.api.config.js",
     "publish": "npm run build && npm run build-dev",
     "lint": "eslint --ext .ts .",
     "lint:fix": "yarn lint --fix",
