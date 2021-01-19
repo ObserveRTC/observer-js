@@ -6,12 +6,14 @@
   "types": "dist/v0.6.0/observer.d.ts",
   "config": {
     "development": {
+      "_workerLoadEndpoint": "http://localhost:9090/js/dist",
       "workerLoadEndpoint": "https://observertc.github.io/observer-js/dist",
       "collectorLibraryFileName": "observer.js",
       "workerLibraryFileName": "observer.worker.js"
     },
     "production": {
-      "workerLoadEndpoint": "http://localhost:9090/js/dist",
+      "_workerLoadEndpoint": "http://localhost:9090/js/dist",
+      "workerLoadEndpoint": "https://observertc.github.io/observer-js/dist",
       "collectorLibraryFileName": "observer.min.js",
       "workerLibraryFileName": "observer.worker.min.js"
     },
