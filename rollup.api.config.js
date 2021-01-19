@@ -5,7 +5,18 @@ const typescriptPlugin = require('@rollup/plugin-typescript')
 const terserPlugin = require('rollup-plugin-terser').terser
 const dtsPlugin = require('rollup-plugin-dts').default
 const licensePlugin = require('rollup-plugin-license')
-const { version, config } = require('./package.json')
+const { version } = require('./package.json')
+const {
+  collectorRootFilePath,
+  workerRootFilePath,
+  collectorLibraryOutput,
+  workerLibraryOutput,
+  libraryFileNameDefinition,
+  development,
+  production,
+} = require('./package.json').config
+
+
 import commonjs from '@rollup/plugin-commonjs'
 import replace from '@rollup/plugin-replace'
 
@@ -20,62 +31,53 @@ const getLicense = () => {
   })
   return license
 }
-const getWorkerURL = (isProduction = false) => {
-  const workerURL = isProduction ? `${config.workerLoadEndpoint}/${version}/observer.worker.min.js` : `${config.workerLoadEndpoint}/${version}/observer.worker.js`
+const getWorkerURL = (isProduction = false, currentVersion = version) => {
+  const workerURL = isProduction ?
+    `${production.workerLoadEndpoint}/${currentVersion}/${production.workerLibraryFileName}` :
+    `${development.workerLoadEndpoint}/${currentVersion}/${development.workerLibraryFileName}`
   return workerURL
 }
 
-
-const outputDirectory = `dist/v${version}`
-const outputDirectoryLatest = `dist/latest`
 const buildDate = JSON.stringify(new Date().toUTCString())
 const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
-const workerURL = JSON.stringify(getWorkerURL(isProd))
 const commonTerser = terserPlugin(require('./terser.config.js'))
 
-const collectorRootFilePath = './src/observer.collector/__package__/index.ts'
-const workerRootFilePath = './src/observer.processor/__package__/index.ts'
-
-const commonInput = {
-  plugins: [
-    nodeResolvePlugin({
-      browser: true,
-    }),
-    jsonPlugin(),
-    typescriptPlugin({
-      declaration: false,
-    }),
-    commonjs(),
-    getLicense(),
-    replace({
-      __buildDate__: buildDate,
-      __buildVersion__: buildVersion,
-      __workerUrl__: workerURL,
-      __isDebug__: JSON.stringify(isProd === false),
-    }),
-  ],
+const getCommonInput = (currentVersion) => {
+  const workerURL = JSON.stringify(getWorkerURL(isProd, currentVersion))
+  const commonInput = {
+    plugins: [
+      nodeResolvePlugin({
+        browser: true,
+      }),
+      jsonPlugin(),
+      typescriptPlugin({
+        declaration: false,
+      }),
+      commonjs(),
+      getLicense(),
+      replace({
+        __buildDate__: buildDate,
+        __buildVersion__: buildVersion,
+        __workerUrl__: workerURL,
+        __isDebug__: JSON.stringify(isProd === false),
+      }),
+    ],
+  }
+  return commonInput
 }
 
-const collectorLibraryOutput = {
-  name: 'ObserverRTC',
-  exports: 'named',
-}
+const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWorker = false) => {
+  const workerlibraryFileName = isProduction ? production.workerLibraryFileName : development.workerLibraryFileName
+  const collectorlibraryFileName = isProduction ? production.collectorLibraryFileName : development.collectorLibraryFileName
 
-const workerLibraryOutput = {
-  name: 'ObserverWorkerRTC',
-  exports: 'named',
-}
-
-const buildLibrary = (isProduction = false, outputLatest = false, isWorker = false) => {
-  const libraryFileName = isProduction ? (isWorker ? 'observer.worker.min' : 'observer.min') : (isWorker ? 'observer.worker' : 'observer')
-  const libraryFileNameDefinition = 'observer.d'
-  const currentOutputDirectory = outputLatest === true ? outputDirectoryLatest : outputDirectory
+  const libraryFileName = isWorker ? workerlibraryFileName : collectorlibraryFileName
+  const currentOutputDirectory = `dist/${currentVersion}`
   const rootFilePath = isWorker ? workerRootFilePath : collectorRootFilePath
 
   const buildCollectorLibrary = {
     ...(isWorker ? workerLibraryOutput : collectorLibraryOutput),
-    file: `${currentOutputDirectory}/${libraryFileName}.js`,
+    file: `${currentOutputDirectory}/${libraryFileName}`,
     format: 'umd',
     ...(isProduction && { plugins: [commonTerser] }),
   }
@@ -84,7 +86,7 @@ const buildLibrary = (isProduction = false, outputLatest = false, isWorker = fal
   buildConfig.push(
     // Library building
     {
-      ...commonInput,
+      ...getCommonInput(currentVersion),
       input: rootFilePath,
       output: [
         buildCollectorLibrary,
@@ -94,11 +96,11 @@ const buildLibrary = (isProduction = false, outputLatest = false, isWorker = fal
   if (!isWorker) {
     // TypeScript definition
     buildConfig.push({
-      ...commonInput,
+      ...getCommonInput(currentVersion),
       input: rootFilePath,
       plugins: [dtsPlugin(), getLicense()],
       output: {
-        file: `${outputDirectory}/${libraryFileNameDefinition}.ts`,
+        file: `${currentOutputDirectory}/${libraryFileNameDefinition}`,
         format: 'es',
       },
     })
@@ -107,6 +109,8 @@ const buildLibrary = (isProduction = false, outputLatest = false, isWorker = fal
 }
 
 module.exports = [
-  ...buildLibrary(isProd, false, false),
-  ...buildLibrary(isProd, false, true),
+  ...buildLibrary(isProd, `v${version}`, false),
+  ...buildLibrary(isProd, `v${version}`, true),
+  ...buildLibrary(isProd, 'latest', false),
+  ...buildLibrary(isProd, 'latest', true),
 ]
