@@ -2229,7 +2229,7 @@
             // @ts-expect-error Will be injected in build time
             "0.6.1", 'from build date', 
             // @ts-expect-error Will be injected in build time
-            "Tue, 19 Jan 2021 15:45:12 GMT");
+            "Wed, 10 Feb 2021 18:30:29 GMT");
         }
         onError(_err) {
             // Pass
