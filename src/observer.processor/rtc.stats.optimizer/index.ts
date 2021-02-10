@@ -93,7 +93,7 @@ class StatsOptimizer {
         return lodash.isEqual(
             previousStats,
             currentStats
-        ) as boolean
+        )
     }
 
     private removeOldBulk (): void {

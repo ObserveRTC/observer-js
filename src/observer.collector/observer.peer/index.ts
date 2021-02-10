@@ -12,9 +12,7 @@ import {
     TimeUtil
 } from '../../observer.utils/time.util'
 import type {
-    ClientDetails
-} from '../../schema/v20200114'
-import type {
+    ClientDetails,
     MediaDeviceInfo
 } from '../../schema/v20200114'
 import {

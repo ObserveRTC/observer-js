@@ -41,6 +41,8 @@ const getWorkerURL = (isProduction = false, currentVersion = version) => {
 const buildDate = JSON.stringify(new Date().toUTCString())
 const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
+const isStable = process.env.npm_lifecycle_event === 'build-stable'
+const isLatest = process.env.npm_lifecycle_event === 'build-latest'
 const commonTerser = terserPlugin(require('./terser.config.js'))
 
 const getCommonInput = (currentVersion) => {
@@ -108,9 +110,22 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWo
   return buildConfig
 }
 
-module.exports = [
-  ...buildLibrary(isProd, `v${version}`, false),
-  ...buildLibrary(isProd, `v${version}`, true),
-  ...buildLibrary(isProd, 'latest', false),
-  ...buildLibrary(isProd, 'latest', true),
-]
+let buildPipe = []
+if (isStable) {
+  buildPipe = [
+    ...buildLibrary(isProd, 'stable', false),
+    ...buildLibrary(isProd, 'stable', true),
+  ]
+} else if (isLatest) {
+  buildPipe = [
+    ...buildLibrary(isProd, 'latest', false),
+    ...buildLibrary(isProd, 'latest', true),
+  ]
+} else {
+  buildPipe = [
+    ...buildLibrary(isProd, `v${version}`, false),
+    ...buildLibrary(isProd, `v${version}`, true),
+  ]
+}
+
+module.exports = buildPipe
