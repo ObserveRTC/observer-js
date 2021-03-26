@@ -28,6 +28,11 @@ class Builder {
         return this
     }
 
+    withMarker (marker: string): Builder {
+        this.instance.updateMarker(marker)
+        return this
+    }
+
     build (): Observer {
         return this.instance
     }

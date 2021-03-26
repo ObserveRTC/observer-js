@@ -106,6 +106,10 @@ class Observer implements ClientCallback, UserMediaCallback {
         this._localTransport = transport
     }
 
+    public updateMarker (marker: string): void {
+        this._collector.updateMarker(marker)
+    }
+
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {
         const userConfig = {
             callId,

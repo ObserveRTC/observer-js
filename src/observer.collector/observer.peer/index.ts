@@ -41,6 +41,7 @@ export interface PCDetails {
     userId?: string;
     timestamp?: number;
     integration?: Integration;
+    marker?: string;
 }
 
 export interface ObserverStats {
@@ -68,7 +69,7 @@ class ObserverPC {
         return this._id
     }
 
-    get pcDetails (): PCDetails {
+    public getPcDetails (marker?: string): PCDetails {
         return {
             'browserId': this._browserId,
             'callId': this.userConfig.callId,
@@ -78,7 +79,8 @@ class ObserverPC {
             'peerConnectionId': this._id,
             'timeZoneOffsetInMinute': this._timeZoneOffsetInMinute,
             'timestamp': TimeUtil.getCurrent(),
-            'userId': this.userConfig.userId
+            'userId': this.userConfig.userId,
+            ...marker && {marker}
         } as PCDetails
     }
 
