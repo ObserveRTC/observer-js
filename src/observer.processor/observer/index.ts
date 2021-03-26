@@ -76,6 +76,7 @@ class ObserverProcessor implements WorkerCallback {
                 'clientDetails': currentStats.details.clientDetails,
                 'deviceList': currentStats.details.deviceList,
                 'iceStats': RawStatsProcessor.getIceStats(currentStats.stats),
+                'marker': currentStats.details.marker,
                 'peerConnectionId': currentStats.details.peerConnectionId,
                 'receiverStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.receiverStats as SendRecv[]),
                 'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats as SendRecv[]),
@@ -99,6 +100,7 @@ class ObserverProcessor implements WorkerCallback {
             'browserId': mediaError.details.browserId,
             'clientDetails': mediaError.details.clientDetails,
             'deviceList': mediaError.details.deviceList,
+            'marker': mediaError.details.marker,
             'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
             'timestamp': mediaError.details.timestamp,
             'userMediaErrors': [{'message': mediaError.errName} as UserMediaError]
