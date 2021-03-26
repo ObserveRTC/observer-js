@@ -42,9 +42,9 @@ class RTCCollector {
                 'browserId': await observerSingleton.getBrowserId(),
                 'clientDetails': BrowserUtil.getClientDetails(),
                 'deviceList': await BrowserUtil.getDeviceList(),
+                'marker': this.marker,
                 'timeZoneOffsetInMinute': TimeUtil.getTimeZoneOffsetInMinute(),
-                'timestamp': TimeUtil.getCurrent(),
-                ...this.marker && {'marker': this.marker}
+                'timestamp': TimeUtil.getCurrent()
             },
             errName
         } as UserMediaErrorPayload

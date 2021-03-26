@@ -76,11 +76,11 @@ class ObserverPC {
             'clientDetails': BrowserUtil.getClientDetails(),
             'deviceList': observerSingleton.getActiveDeviceList(),
             'integration': this.userConfig.integration,
+            marker,
             'peerConnectionId': this._id,
             'timeZoneOffsetInMinute': this._timeZoneOffsetInMinute,
             'timestamp': TimeUtil.getCurrent(),
-            'userId': this.userConfig.userId,
-            ...marker && {marker}
+            'userId': this.userConfig.userId
         } as PCDetails
     }
 
