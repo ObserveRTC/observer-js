@@ -39,6 +39,7 @@ const projectRules = {
   '@typescript-eslint/explicit-module-boundary-types': 'off',
   '@typescript-eslint/no-explicit-any': 'off',
   '@typescript-eslint/explicit-member-accessibility': 'off',
+  '@typescript-eslint/strict-boolean-expressions': 'off',
   'quotes': 'off',
   '@typescript-eslint/quotes': ['error', 'single'],
   '@typescript-eslint/semi': [
