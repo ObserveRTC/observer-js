@@ -47,6 +47,7 @@ export interface PeerConnectionSample {
     timestamp: number;
     timeZoneOffsetInMinute?: number;
     userId?: string;
+    marker?: string;
 }
 
 export interface IceStats {
