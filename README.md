@@ -16,18 +16,19 @@ Extractor Development Toolkits for WebRTC Samples
   Once build is complete it will create `observer.js` ( developer) or `observer.min.js` ( production ) library in the `dist` folder.
 
 
-### You can just use the latest version of the library from GitHub directly in your HTML/JavaScript
+### You can just use the latest version of the library from GitHub directly in your HTML/JavaScript. You can either use specific version from available version list or can use the latest version. 
+#### [Available version list](https://github.com/ObserveRTC/observer-js/tags)
 
   - Developer version
 
   ```html
-  <script src="https://observertc.github.io/observer-js/dist/v0.6.0/observer.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/latest/observer.js"></script>
   ```
 
   - Production version
 
   ```html
-  <script src="https://observertc.github.io/observer-js/dist/v0.6.0/observer.min.js"></script>
+  <script src="https://observertc.github.io/observer-js/dist/latest/observer.min.js"></script>
   ```
 
 
