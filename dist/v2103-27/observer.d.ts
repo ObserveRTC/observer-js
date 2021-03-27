@@ -191,6 +191,10 @@
  * limitations under the License.
  */
 
+import { Logger } from 'loglevel';
+
+declare const logger: Logger;
+
 declare class ParserUtil {
     static parseWsServerUrl(serverURL: string, serviceUUID: string, mediaUnitId: string, statsVersion: string): string;
 }
@@ -525,4 +529,4 @@ declare class Builder {
     build(): Observer;
 }
 
-export { Builder, Observer, ObserverPC, ParserUtil };
+export { Builder, Observer, ObserverPC, ParserUtil, logger };
