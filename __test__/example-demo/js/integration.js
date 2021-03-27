@@ -12,8 +12,13 @@ class Integrator {
         this.observer = new ObserverRTC
             .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
             .withIntegration('General')
-            // .withLocalTransport(localTransport) enable it if we want to receive sample callback instead of sending them to server
+            .withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
+            .withMarker("a-sample-marker")
             .build()
+    }
+
+    updateMarker(marker) {
+        this.observer.updateMarker(marker)
     }
 
     startCollection() {
