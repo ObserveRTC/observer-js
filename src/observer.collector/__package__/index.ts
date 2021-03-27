@@ -1,4 +1,7 @@
 import {
+    logger
+} from '../../observer.logger'
+import {
     ParserUtil
 } from '../../observer.utils/parser.util'
 import {
@@ -10,8 +13,10 @@ import {
 import {
     ObserverPC
 } from '../observer.peer'
+
 export {
-    Builder, Observer,
+    Builder, logger,
+    Observer,
     ObserverPC,
     ParserUtil
 }
