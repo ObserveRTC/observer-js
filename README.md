@@ -32,7 +32,7 @@ Extractor Development Toolkits for WebRTC Samples
   ```
 
 
-## Run demo using docker
+## Run demo 
 
   - Goto `example-demo` folder from `__test__`
    - `cd __test__/example-demo`
