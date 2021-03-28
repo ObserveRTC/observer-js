@@ -33,6 +33,11 @@ class Builder {
         return this
     }
 
+    withBrowserId (browserId: string): Builder {
+        this.instance.setBrowserId(browserId)
+        return this
+    }
+
     build (): Observer {
         return this.instance
     }

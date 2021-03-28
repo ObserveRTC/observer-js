@@ -53,25 +53,20 @@ class ObserverPC {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call
     private readonly _id: string = uuidv4()
     private readonly _timeZoneOffsetInMinute: number = TimeUtil.getTimeZoneOffsetInMinute()
-    private _browserId?: string
     private readonly _rtcState = new RTCState()
 
     constructor (private readonly userConfig: UserConfig) {
         this.updateConnectionState = this.updateConnectionState.bind(this)
         this.getStats = this.getStats.bind(this)
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        observerSingleton.getBrowserId().then((value) => {
-            this._browserId = value
-        })
     }
 
     get id (): string {
         return this._id
     }
 
-    public getPcDetails (marker?: string): PCDetails {
+    public async getPcDetails (marker?: string, browserId?: string): Promise<PCDetails> {
         return {
-            'browserId': this._browserId,
+            'browserId': browserId ?? await observerSingleton.getBrowserId(),
             'callId': this.userConfig.callId,
             'clientDetails': BrowserUtil.getClientDetails(),
             'deviceList': observerSingleton.getActiveDeviceList(),

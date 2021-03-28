@@ -110,6 +110,10 @@ class Observer implements ClientCallback, UserMediaCallback {
         this._collector.updateMarker(marker)
     }
 
+    public setBrowserId (browserId: string): void {
+        this._collector.setBrowserId(browserId)
+    }
+
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {
         const userConfig = {
             callId,

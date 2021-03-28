@@ -47,8 +47,6 @@ class ObserverSingleton {
 }
 
 const observerSingleton = new ObserverSingleton()
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
-observerSingleton.getBrowserId().catch()
 // Update active device list in the beginning
 observerSingleton.getActiveDeviceList()
 
