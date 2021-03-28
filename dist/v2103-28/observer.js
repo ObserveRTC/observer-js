@@ -2222,7 +2222,7 @@
 	        this._collector = new RTCCollector();
 	        this._collectorWorker = new CollectorWorker(
 	        // @ts-expect-error Will be injected in build time
-	        "https://observertc.github.io/observer-js/dist/latest/observer.worker.js", this);
+	        "https://observertc.github.io/observer-js/dist/v2103-28/observer.worker.js", this);
 	        this.addPC = this.addPC.bind(this);
 	        this.removePC = this.removePC.bind(this);
 	        this.setIntegration = this.setIntegration.bind(this);
@@ -2234,7 +2234,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "2103-28", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 28 Mar 2021 07:52:26 GMT");
+	        "Sun, 28 Mar 2021 07:52:19 GMT");
 	    }
 	    onError(_err) {
 	        // Pass
