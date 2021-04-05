@@ -34,17 +34,4 @@ Extractor Development Toolkits for WebRTC Samples
 
 ## Run demo 
 
-  - Goto `example-demo` folder from `__test__`
-   - `cd __test__/example-demo`
-  - Install npm dependency
-   - `npm install`
-  - Run the demo
-   - `npm run start-server` and access the server from http://localhost:9090
-
-
- ##### Change websocket server address in the demo application
-
-  - Goto [integration.js](__test__/example-demo/js/integration.js#L20) and change server address
-  - Change the current websocket server address
-  - Run the demo
-    - `npm run start-server` and access the server from http://localhost:9090
+ - Details - https://hub.docker.com/r/observertc/observer-js-demo
