@@ -81,7 +81,7 @@
     "build": "rollup --config rollup.api.config.js",
     "build-dev": "rollup --config rollup.api.config.js",
     "build-latest": "cp -r ./dist/${tag}/ ./dist/latest/",
-    "publish": "npm run build && npm run build-dev && npm run build-latest",
+    "publish": "npm run build && npm run build-dev",
     "lint": "eslint --ext .ts .",
     "lint:fix": "yarn lint --fix",
     "test": "jest"
