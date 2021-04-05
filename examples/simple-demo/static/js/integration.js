@@ -9,16 +9,19 @@ class Integrator {
     constructor(websocketServer, poolingIntervalInMs) {
         this.init(websocketServer, poolingIntervalInMs)
     }
+
     init(websocketServer = '', poolingIntervalInMs) {
         const builder = new ObserverRTC
             .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
 
         builder.withIntegration('General')
+        //builder.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
+        if(observer_marker)
+            builder.withMarker(observer_marker)
+        if(observer_browser_id)
+            builder.withBrowserId(observer_browser_id)
 
-            //.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
-            .withMarker("a-sample-marker")
-            .withBrowserId("sample browser id")
-            .build()
+        this.observer = builder.build()
     }
 
     updateMarker(marker) {
@@ -35,5 +38,8 @@ class Integrator {
     }
 }
 
-const wsServerURL = 'ws://localhost:7080/86ed98c6-b001-48bb-b31e-da638b979c72/testMediaUnitId/v20200114/json'
+if(!observer_server_endpoint){
+    throw Error('Please set a observer server endpoint')
+}
+const wsServerURL = observer_server_endpoint
 window.integrator = new Integrator(wsServerURL, 1000);
