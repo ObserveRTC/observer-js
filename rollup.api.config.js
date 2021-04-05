@@ -109,17 +109,9 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWo
   return buildConfig
 }
 
-let buildPipe = []
-if (isLatest) {
-  buildPipe = [
-    ...buildLibrary(isProd, 'latest', false),
-    ...buildLibrary(isProd, 'latest', true),
-  ]
-} else {
-  buildPipe = [
+const buildPipe = [
     ...buildLibrary(isProd, `v${version}`, false),
     ...buildLibrary(isProd, `v${version}`, true),
-  ]
-}
+]
 
 module.exports = buildPipe
