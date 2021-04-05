@@ -16,9 +16,9 @@ class Integrator {
 
         builder.withIntegration('General')
         //builder.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
-        if(observer_marker)
+        if(observer_marker && observer_marker !== 'None')
             builder.withMarker(observer_marker)
-        if(observer_browser_id)
+        if(observer_browser_id && observer_browser_id !== 'None')
             builder.withBrowserId(observer_browser_id)
 
         this.observer = builder.build()
