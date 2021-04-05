@@ -22,7 +22,13 @@
 
     <title>Peer connection</title>
     <link href="//fonts.googleapis.com/css?family=Roboto:300,400,500,700" rel="stylesheet" type="text/css">
-    <link rel="stylesheet" href="css/main.css"/>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
+    <script type="text/javascript">
+       var observer_marker="{{__observer_marker__}}"
+       var observer_browser_id="{{__observer_browser_id__}}"
+       var observer_server_endpoint="{{__observer_server_endpoint__}}"
+    </script>
 </head>
 
 <body>
@@ -60,22 +66,12 @@
     <p>View the console to see logging. The <code>MediaStream</code> object <code>localStream</code>, and the <code>RTCPeerConnection</code>
         objects <code>pc1</code> and <code>pc2</code> are in global scope, so you can inspect them in the console as
         well.</p>
-
-    <p>For more information about RTCPeerConnection, see <a href="http://www.html5rocks.com/en/tutorials/webrtc/basics/"
-                                                            title="HTML5 Rocks article about WebRTC by Sam Dutton">Getting
-        Started With WebRTC</a>.</p>
-
-
-    <a href="https://github.com/webrtc/samples/tree/gh-pages/src/content/peerconnection/pc1"
-       title="View source for this page on GitHub" id="viewSource">View source on GitHub</a>
-
 </div>
 
 <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
-<!--<script src="http://observertc.github.io/observer-js/dist/latest/observer.js"></script>-->
-<script src="http://localhost:9090/js/dist/v2103-27/observer.js"></script>
-<script src="js/integration.js"></script>
-<script src="js/main.js"></script>
+<script src="{{__observerjs__}}"></script>
+<script src="{{ url_for('static', filename='js/integration.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
 </body>
 </html>
