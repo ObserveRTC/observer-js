@@ -3,6 +3,7 @@ const localTransport = {
         console.warn('peer connection samples', sampleList)
     }
 }
+
 class Integrator {
 
     constructor(websocketServer, poolingIntervalInMs) {
