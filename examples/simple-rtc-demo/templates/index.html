@@ -22,7 +22,8 @@
 
     <title>Peer connection</title>
     <link href="//fonts.googleapis.com/css?family=Roboto:300,400,500,700" rel="stylesheet" type="text/css">
-    <link rel="stylesheet" href="css/main.css"/>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}"/>
 </head>
 
 <body>
@@ -72,9 +73,9 @@
 </div>
 
 <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
-<script src="http://observertc.github.io/observer-js/dist/latest/observer.js"></script>
-<script src="js/integration.js"></script>
-<script src="js/main.js"></script>
+<script src="{{__observerjs__}}"></script>
+<script src="{{ url_for('static', filename='js/integration.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
 </body>
 </html>
