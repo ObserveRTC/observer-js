@@ -10,9 +10,11 @@ class Integrator {
         this.init(websocketServer, poolingIntervalInMs)
     }
     init(websocketServer = '', poolingIntervalInMs) {
-        this.observer = new ObserverRTC
+        const builder = new ObserverRTC
             .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
-            .withIntegration('General')
+
+        builder.withIntegration('General')
+
             //.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
             .withMarker("a-sample-marker")
             .withBrowserId("sample browser id")
