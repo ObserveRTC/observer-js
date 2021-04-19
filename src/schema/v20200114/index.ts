@@ -279,6 +279,8 @@ export interface TrackElement {
     framesDropped?: number;
     framesReceived?: number;
     hugeFramesSent?: number;
+    frameWidth?: number;
+    frameHeight?: number;
     id?: string;
     insertedSamplesForDeceleration?: number;
     jitterBufferDelay?: number;
