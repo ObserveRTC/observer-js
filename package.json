@@ -1,19 +1,15 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "2104-19",
+  "version": "2104-25",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/latest/observer.js",
   "types": "dist/latest/observer.d.ts",
   "config": {
     "development": {
-      "_workerLoadEndpoint": "http://localhost:9090/js/dist",
-      "workerLoadEndpoint": "https://observertc.github.io/observer-js/dist",
       "collectorLibraryFileName": "observer.js",
       "workerLibraryFileName": "observer.worker.js"
     },
     "production": {
-      "_workerLoadEndpoint": "http://localhost:9090/js/dist",
-      "workerLoadEndpoint": "https://observertc.github.io/observer-js/dist",
       "collectorLibraryFileName": "observer.min.js",
       "workerLibraryFileName": "observer.worker.min.js"
     },
