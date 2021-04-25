@@ -11,6 +11,9 @@ import {
     UserMediaHandler
 } from '../../observer.usermediahandler'
 import {
+    WorkerUrlManager
+} from '../../observer.utils/worker.url'
+import {
     CollectorWorker
 } from '../../observer.worker/collector.wrapper'
 import type {
@@ -40,8 +43,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     private _localTransport?: LocalTransport
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
-        // @ts-expect-error Will be injected in build time
-        __workerUrl__,
+        WorkerUrlManager.getURL(),
         this
     )
     constructor (private readonly _initializeConfig: InitialConfig) {

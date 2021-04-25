@@ -31,21 +31,13 @@ const getLicense = () => {
   })
   return license
 }
-const getWorkerURL = (isProduction = false, currentVersion = version) => {
-  const workerURL = isProduction ?
-    `${production.workerLoadEndpoint}/${currentVersion}/${production.workerLibraryFileName}` :
-    `${development.workerLoadEndpoint}/${currentVersion}/${development.workerLibraryFileName}`
-  return workerURL
-}
 
 const buildDate = JSON.stringify(new Date().toUTCString())
 const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
-const isLatest = process.env.npm_lifecycle_event === 'build-latest'
 const commonTerser = terserPlugin(require('./terser.config.js'))
 
-const getCommonInput = (currentVersion) => {
-  const workerURL = JSON.stringify(getWorkerURL(isProd, currentVersion))
+const getCommonInput = (currentVersion, libraryFileName, workerLibraryFileName) => {
   const commonInput = {
     plugins: [
       nodeResolvePlugin({
@@ -60,7 +52,8 @@ const getCommonInput = (currentVersion) => {
       replace({
         __buildDate__: buildDate,
         __buildVersion__: buildVersion,
-        __workerUrl__: workerURL,
+        __libraryFileName__: JSON.stringify(libraryFileName),
+        __workerLibraryFileName__: JSON.stringify(workerLibraryFileName),
         __isDebug__: JSON.stringify(isProd === false),
       }),
     ],
@@ -87,7 +80,7 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWo
   buildConfig.push(
     // Library building
     {
-      ...getCommonInput(currentVersion),
+      ...getCommonInput(currentVersion, collectorlibraryFileName, workerlibraryFileName),
       input: rootFilePath,
       output: [
         buildCollectorLibrary,
@@ -97,7 +90,7 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWo
   if (!isWorker) {
     // TypeScript definition
     buildConfig.push({
-      ...getCommonInput(currentVersion),
+      ...getCommonInput(currentVersion,collectorlibraryFileName, workerlibraryFileName),
       input: rootFilePath,
       plugins: [dtsPlugin(), getLicense()],
       output: {
