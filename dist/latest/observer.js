@@ -622,6 +622,18 @@
 	    }
 	}
 
+	/* eslint-disable */
+	class WorkerUrlManager {
+	    static getURL() {
+	        var _a;
+	        // @ts-ignore
+	        const observerLoadPath = [...document.getElementsByTagName('script')].map(item => item.src).find(item => item.includes("observer.js"));
+	        const retval = (_a = observerLoadPath === null || observerLoadPath === void 0 ? void 0 : observerLoadPath.split('/').slice(0, -1)) !== null && _a !== void 0 ? _a : [];
+	        // @ts-ignore
+	        return [...retval, "observer.worker.js"].join('/');
+	    }
+	}
+
 	class CollectorWorker {
 	    constructor(loadURL, _clientCallback) {
 	        this.loadURL = loadURL;
@@ -2220,9 +2232,7 @@
 	        this._userMediaHandler = new UserMediaHandler();
 	        this._rtcList = [];
 	        this._collector = new RTCCollector();
-	        this._collectorWorker = new CollectorWorker(
-	        // @ts-expect-error Will be injected in build time
-	        "https://observertc.github.io/observer-js/dist/v2104-19/observer.worker.js", this);
+	        this._collectorWorker = new CollectorWorker(WorkerUrlManager.getURL(), this);
 	        this.addPC = this.addPC.bind(this);
 	        this.removePC = this.removePC.bind(this);
 	        this.setIntegration = this.setIntegration.bind(this);
@@ -2232,9 +2242,9 @@
 	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[collector]', 
 	        // @ts-expect-error Will be injected in build time
-	        "2104-19", 'from build date', 
+	        "2104-25", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Mon, 19 Apr 2021 14:45:44 GMT");
+	        "Sun, 25 Apr 2021 14:54:22 GMT");
 	    }
 	    onError(_err) {
 	        // Pass

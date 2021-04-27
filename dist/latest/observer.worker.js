@@ -18712,9 +18712,9 @@
 	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[processor]', 
 	        // @ts-expect-error Will be injected in build time
-	        "2104-19", 'from build date', 
+	        "2104-25", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Mon, 19 Apr 2021 14:45:44 GMT");
+	        "Sun, 25 Apr 2021 14:54:22 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method
