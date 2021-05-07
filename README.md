@@ -1,4 +1,4 @@
-# Wobserver WebRTC Extractor
+# WebRTC getStats() evaluator
 Extractor Development Toolkits for WebRTC Samples
 
 
