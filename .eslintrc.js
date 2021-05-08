@@ -58,6 +58,7 @@ const projectRules = {
       'allowAfterThis': true,
     },
   ],
+  'no-ternary': 'off',
 }
 module.exports = {
   'root': true,
