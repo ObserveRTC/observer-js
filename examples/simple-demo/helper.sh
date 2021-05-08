@@ -7,7 +7,7 @@ function run_observer_docker() {
     docker run -it --rm \
     -p 9090:9090 \
     -e __PORT__='9090' \
-    -e __OBSERVER_JS__='https://observertc.github.io/observer-js/dist/latest/observer.js' \
+    -e __OBSERVER_JS__='http://localhost:9091/v2105-08/observer.js' \
     -e __OBSERVER_MARKER__='SAMPLE-OBSERVER-MARKER' \
     -e __OBSERVER_BROWSER_ID__='SAMPLE-SAMPLE-BROWSER-ID' \
     -e __OBSERVER_ACCESS_TOKEN__='SAMPLE-JWT-ACCESS-TOKEN' \
