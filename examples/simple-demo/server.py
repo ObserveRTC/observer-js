@@ -7,6 +7,7 @@ port = os.environ.get('__PORT__', '8080')
 observer_marker = os.environ.get('__OBSERVER_MARKER__')
 observer_browser_id = os.environ.get('__OBSERVER_BROWSER_ID__')
 observer_server_endpoint = os.environ.get('__OBSERVER_SERVER_ENDPOINT__')
+observer_access_token = os.environ.get('__OBSERVER_ACCESS_TOKEN__')
 
 
 @app.route('/')
@@ -15,7 +16,8 @@ def index():
                            __observerjs__=observerjs,
                            __observer_marker__=observer_marker,
                            __observer_browser_id__=observer_browser_id,
-                           __observer_server_endpoint__=observer_server_endpoint)
+                           __observer_server_endpoint__=observer_server_endpoint,
+                           __observer_access_token__=observer_access_token)
 
 
 if __name__ == '__main__':
