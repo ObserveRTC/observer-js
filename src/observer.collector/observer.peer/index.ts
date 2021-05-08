@@ -22,7 +22,7 @@ import {
     RTCState
 } from '../rtc.state'
 
-export type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General'
+export type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'PeerJS' | 'General'
 
 export interface UserConfig {
     pc: RTCPeerConnection;
@@ -84,7 +84,10 @@ class ObserverPC {
     }
 
     public updateConnectionState (): void {
-        const currentState = this.userConfig.pc.connectionState
+        // eslint-disable-next-line
+        const currentState = this.userConfig.pc
+            ? this.userConfig.pc.connectionState
+            : 'closed'
         this._rtcState.updateState(currentState)
     }
 

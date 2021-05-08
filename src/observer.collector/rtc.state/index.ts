@@ -13,9 +13,10 @@ class RTCState {
         this.updateState = this.updateState.bind(this)
         this.isExpired = this.isExpired.bind(this)
     }
-    public updateState (currentState: string): void {
-        if (this.currentState !== currentState) {
-            this.currentState = currentState
+
+    public updateState (nextState: string): void {
+        if (this.currentState !== nextState) {
+            this.currentState = nextState
             this.lastUpdate = TimeUtil.getCurrent()
         }
     }
