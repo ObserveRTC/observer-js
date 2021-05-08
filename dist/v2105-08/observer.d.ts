@@ -449,7 +449,7 @@ interface UserMediaCallback {
     onMediaError: (errName: string) => void;
 }
 
-declare type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General';
+declare type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'PeerJS' | 'General';
 interface UserConfig {
     pc: RTCPeerConnection;
     callId?: string;

@@ -2107,9 +2107,9 @@
 	        this.updateState = this.updateState.bind(this);
 	        this.isExpired = this.isExpired.bind(this);
 	    }
-	    updateState(currentState) {
-	        if (this.currentState !== currentState) {
-	            this.currentState = currentState;
+	    updateState(nextState) {
+	        if (this.currentState !== nextState) {
+	            this.currentState = nextState;
 	            this.lastUpdate = TimeUtil.getCurrent();
 	        }
 	    }
@@ -2159,7 +2159,10 @@
 	        return this._rtcState.isExpired();
 	    }
 	    updateConnectionState() {
-	        const currentState = this.userConfig.pc.connectionState;
+	        // eslint-disable-next-line
+	        const currentState = this.userConfig.pc
+	            ? this.userConfig.pc.connectionState
+	            : 'closed';
 	        this._rtcState.updateState(currentState);
 	    }
 	    getStats() {
@@ -2244,7 +2247,7 @@
 	        // @ts-expect-error Will be injected in build time
 	        "2105-08", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sat, 08 May 2021 18:26:31 GMT");
+	        "Sat, 08 May 2021 20:33:05 GMT");
 	    }
 	    onError(_err) {
 	        // Pass
