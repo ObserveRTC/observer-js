@@ -90,10 +90,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     }
 
     onRequestInitialConfig (): void {
-        this._collectorWorker.sendInitialConfig({
-            ...this._initializeConfig,
-            ...this._localTransport && {'transportType': 'local'}
-        } as InitialConfig)
+        this._collectorWorker.sendInitialConfig(this._initializeConfig)
     }
 
     onTransportCallback (peerConnectionSamples?: PeerConnectionSample[]): void {

@@ -20,6 +20,8 @@ class Integrator {
             builder.withMarker(observer_marker)
         if(observer_browser_id && observer_browser_id !== 'None')
             builder.withBrowserId(observer_browser_id)
+        if(observer_access_token && observer_access_token !== 'None')
+            builder.withAccessToken(observer_access_token)
 
         this.observer = builder.build()
     }

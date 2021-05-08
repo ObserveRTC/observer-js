@@ -9,11 +9,11 @@ import type {
 
 class WebSocketTransport {
     private _webSocket?: ReconnectingWebSocket
-    constructor (wsServerAddress: string) {
+    constructor (wsServerAddress: string, accessToken?: string) {
         this.send = this.send.bind(this)
         this.sendBulk = this.sendBulk.bind(this)
         if (!wsServerAddress) {
-            throw new Error('websocker server address is required')
+            throw new Error('websocket server address is required')
         }
         const options = {
             'connectionTimeout': 30000,
@@ -22,8 +22,12 @@ class WebSocketTransport {
             'maxEnqueuedMessages': 120,
             'maxRetries': 100
         }
-        this._webSocket = new ReconnectingWebSocket(
+        const serverUrl = this.serverAddress(
             wsServerAddress,
+            accessToken
+        )
+        this._webSocket = new ReconnectingWebSocket(
+            serverUrl,
             [],
             options
         )
@@ -45,6 +49,13 @@ class WebSocketTransport {
                 currentEvent
             )
         }
+    }
+
+    serverAddress (wsServerAddress: string, accessToken?: string): string {
+        if (!accessToken) {
+            return wsServerAddress
+        }
+        return `${wsServerAddress}?accessToken=${accessToken}`
     }
 
     public dispose (): void {
