@@ -22,6 +22,7 @@ export interface InitialConfig {
     wsAddress: string;
     poolingIntervalInMs: number;
     transportType: TransportType;
+    accessToken?: string;
 }
 
 export interface ClientPayload {

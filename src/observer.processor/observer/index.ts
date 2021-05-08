@@ -123,10 +123,13 @@ class ObserverProcessor implements WorkerCallback {
             // Don't try to initialize websocket transport
             return
         }
-        this.startWsServer(initialConfig.wsAddress)
+        this.startWsServer(
+            initialConfig.wsAddress,
+            initialConfig.accessToken
+        )
     }
 
-    private startWsServer (wsServerAddress: string): void {
+    private startWsServer (wsServerAddress: string, accessToken?: string): void {
         logger.warn(
             'start websocket server',
             wsServerAddress
@@ -134,7 +137,10 @@ class ObserverProcessor implements WorkerCallback {
         if (this._webSocketTransport) {
             this._webSocketTransport.dispose()
         }
-        this._webSocketTransport = new WebSocketTransport(wsServerAddress)
+        this._webSocketTransport = new WebSocketTransport(
+            wsServerAddress,
+            accessToken
+        )
     }
 
     private startCronTask (intervalDurationInMs: number = defaultIntervalDurationInMs): void {
