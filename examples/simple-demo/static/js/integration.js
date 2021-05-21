@@ -15,7 +15,7 @@ class Integrator {
             .Builder({wsAddress: websocketServer, poolingIntervalInMs: poolingIntervalInMs})
 
         builder.withIntegration('General')
-        //builder.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
+        builder.withLocalTransport(localTransport) //enable it if we want to receive sample callback instead of sending them to server
         if(observer_marker && observer_marker !== 'None')
             builder.withMarker(observer_marker)
         if(observer_browser_id && observer_browser_id !== 'None')
