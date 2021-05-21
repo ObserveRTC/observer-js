@@ -6,12 +6,29 @@ import {
 import type {
     PeerConnectionSample
 } from '../../schema/v20200114'
-
+export interface SocketError {
+    code: number;
+    reason: string;
+}
+const knownErrorCodes = [
+    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+    4224,
+    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+    4225,
+    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+    4226,
+    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+    4227
+]
 class WebSocketTransport {
     private _webSocket?: ReconnectingWebSocket
-    constructor (wsServerAddress: string, accessToken?: string) {
+    private readonly _wsServerAddress: string
+    private _accessToken?: string
+    constructor (wsServerAddress: string, accessToken?: string, wsTransportCallback?: WsTransportCallback) {
         this.send = this.send.bind(this)
         this.sendBulk = this.sendBulk.bind(this)
+        this.serverAddress = this.serverAddress.bind(this)
+        this.updateAccessToken = this.updateAccessToken.bind(this)
         if (!wsServerAddress) {
             throw new Error('websocket server address is required')
         }
@@ -22,12 +39,10 @@ class WebSocketTransport {
             'maxEnqueuedMessages': 120,
             'maxRetries': 100
         }
-        const serverUrl = this.serverAddress(
-            wsServerAddress,
-            accessToken
-        )
+        this._wsServerAddress = wsServerAddress
+        this._accessToken = accessToken
         this._webSocket = new ReconnectingWebSocket(
-            serverUrl,
+            () => this.serverAddress(),
             [],
             options
         )
@@ -36,6 +51,10 @@ class WebSocketTransport {
                 'websocket closed',
                 close
             )
+            const {code} = close
+            if (knownErrorCodes.includes(code)) {
+                wsTransportCallback?.requestAccessToken()
+            }
         }
         this._webSocket.onerror = (err): void => {
             logger.warn(
@@ -51,11 +70,11 @@ class WebSocketTransport {
         }
     }
 
-    serverAddress (wsServerAddress: string, accessToken?: string): string {
-        if (!accessToken) {
-            return wsServerAddress
+    serverAddress (): string {
+        if (!this._accessToken) {
+            return this._wsServerAddress
         }
-        return `${wsServerAddress}?accessToken=${accessToken}`
+        return `${this._wsServerAddress}?accessToken=${this._accessToken}`
     }
 
     public dispose (): void {
@@ -77,8 +96,15 @@ class WebSocketTransport {
             this.send(currentPayload)
         })
     }
+
+    public updateAccessToken (accessToken?: string): void {
+        this._accessToken = accessToken
+    }
 }
 
+export interface WsTransportCallback {
+    requestAccessToken: () => void;
+}
 export {
     WebSocketTransport
 }

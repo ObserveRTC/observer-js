@@ -53,6 +53,14 @@ class CollectorWorker {
         this._worker.postMessage(payload)
     }
 
+    public sendAccessToken (accessToken?: string): void {
+        const payload = {
+            'data': accessToken,
+            'what': 'onRequestAccessToken'
+        } as ClientPayload
+        this._worker.postMessage(payload)
+    }
+
     public onError (err: any): void {
         logger.error(err)
         this._clientCallback?.onError(err)
@@ -69,6 +77,9 @@ class CollectorWorker {
                 return
             case 'onLocalTransport':
                 this._clientCallback?.onTransportCallback(data.data)
+                return
+            case 'requestAccessToken':
+                this._clientCallback?.onRequestAccessToken()
                 return
             default:
                 logger.warn(

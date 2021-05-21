@@ -42,6 +42,9 @@ class ProcessorWorker {
             case 'onUserMediaError':
                 this._workerCallback?.onUserMediaError(data.data as UserMediaErrorPayload)
                 return
+            case 'onRequestAccessToken':
+                this._workerCallback?.onAccessToken(data.data as string)
+                return
             default:
                 logger.warn(
                     'unknown types',
@@ -53,6 +56,11 @@ class ProcessorWorker {
     requestInitialConfig (): void {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
         this._workerScope.postMessage({'what': 'requestInitialConfig'} as WorkerPayload)
+    }
+
+    requestAccessToken (): void {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+        this._workerScope.postMessage({'what': 'requestAccessToken'} as WorkerPayload)
     }
 
     requestRawStats (): void {

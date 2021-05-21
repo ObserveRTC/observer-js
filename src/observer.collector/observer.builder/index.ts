@@ -17,6 +17,7 @@ class Builder {
     private _marker?: string
     private _browserId?: string
     private _integration?: Integration
+    private _accessToken?: (() => string) | string
 
     constructor (initializeConfig: InitialConfig) {
         this._initialConfig = initializeConfig
@@ -46,11 +47,8 @@ class Builder {
         return this
     }
 
-    withAccessToken (accessToken?: string): Builder {
-        this._initialConfig = {
-            ...this._initialConfig,
-            ...accessToken && {accessToken}
-        }
+    withAccessToken (accessToken?: (() => string) | string): Builder {
+        this._accessToken = accessToken
         return this
     }
 
@@ -67,6 +65,9 @@ class Builder {
         }
         if (this._browserId) {
             instance.setBrowserId(this._browserId)
+        }
+        if (this._accessToken || typeof this._accessToken === 'function') {
+            instance.setAccessToken(this._accessToken)
         }
         return instance
     }
