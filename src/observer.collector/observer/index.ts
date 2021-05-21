@@ -41,6 +41,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     private _rtcList: ObserverPC[] = []
     private _integration?: Integration
     private _localTransport?: LocalTransport
+    private _accessToken?: (() => string) | string
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
         WorkerUrlManager.getURL(),
@@ -90,11 +91,28 @@ class Observer implements ClientCallback, UserMediaCallback {
     }
 
     onRequestInitialConfig (): void {
-        this._collectorWorker.sendInitialConfig(this._initializeConfig)
+        let accessToken = ''
+        if (typeof this._accessToken === 'function') {
+            accessToken = this._accessToken()
+        } else if (typeof this._accessToken === 'string') {
+            accessToken = this._accessToken
+        }
+        this._collectorWorker.sendInitialConfig({
+            ...this._initializeConfig,
+            ...accessToken && {accessToken}
+        })
     }
 
     onTransportCallback (peerConnectionSamples?: PeerConnectionSample[]): void {
         this._localTransport?.onObserverRTCSample?.(peerConnectionSamples)
+    }
+
+    onRequestAccessToken (): void {
+        if (typeof this._accessToken === 'function') {
+            this._collectorWorker.sendAccessToken(this._accessToken())
+        } else if (typeof this._accessToken === 'string') {
+            this._collectorWorker.sendAccessToken(this._accessToken)
+        }
     }
 
     public setIntegration (integration: Integration): void {
@@ -111,6 +129,10 @@ class Observer implements ClientCallback, UserMediaCallback {
 
     public setBrowserId (browserId: string): void {
         this._collector.setBrowserId(browserId)
+    }
+
+    public setAccessToken (accessToken?: (() => string) | string): void {
+        this._accessToken = accessToken
     }
 
     public addPC (pc: RTCPeerConnection, callId?: string, userId?: string): void {

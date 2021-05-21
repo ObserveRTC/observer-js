@@ -32,13 +32,16 @@ import {
 import {
     StatsOptimizer
 } from '../rtc.stats.optimizer'
+import type {
+    WsTransportCallback
+} from '../websocket.transport'
 import {
     WebSocketTransport
 } from '../websocket.transport'
 
 
 const defaultIntervalDurationInMs = 1000
-class ObserverProcessor implements WorkerCallback {
+class ObserverProcessor implements WorkerCallback, WsTransportCallback {
     private readonly _cron = new CronInterval()
     private readonly _statsOptimizer = new StatsOptimizer()
     private readonly _integrationOptimizer = new IntegrationOptimizer()
@@ -52,6 +55,7 @@ class ObserverProcessor implements WorkerCallback {
         this.onResponseRawStats = this.onResponseRawStats.bind(this)
         this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this)
         this.sendDataToTransport = this.sendDataToTransport.bind(this)
+        this.onAccessToken = this.onAccessToken.bind(this)
         // eslint-disable-next-line no-console
         console.warn(
             '$ObserverRTC version[processor]',
@@ -62,6 +66,7 @@ class ObserverProcessor implements WorkerCallback {
             __buildDate__
         )
     }
+
     get messageHandler (): any {
         // eslint-disable-next-line @typescript-eslint/unbound-method
         return this._processorWorker.onMessage
@@ -129,17 +134,27 @@ class ObserverProcessor implements WorkerCallback {
         )
     }
 
+    onAccessToken (accessToken: string): void {
+        this._webSocketTransport?.updateAccessToken(accessToken)
+    }
+
+    requestAccessToken (): void {
+        this._processorWorker.requestAccessToken()
+    }
+
     private startWsServer (wsServerAddress: string, accessToken?: string): void {
         logger.warn(
             'start websocket server',
-            wsServerAddress
+            wsServerAddress,
+            accessToken
         )
         if (this._webSocketTransport) {
             this._webSocketTransport.dispose()
         }
         this._webSocketTransport = new WebSocketTransport(
             wsServerAddress,
-            accessToken
+            accessToken,
+            this
         )
     }
 
