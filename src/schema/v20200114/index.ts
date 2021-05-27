@@ -36,6 +36,11 @@ export interface ClientDetails {
     };
 }
 
+export interface ExtensionStat {
+    extensionType?: string;
+    payload?: string;
+}
+
 export interface PeerConnectionSample {
     browserId?: string;
     clientDetails?: ClientDetails;
@@ -50,6 +55,7 @@ export interface PeerConnectionSample {
     timeZoneOffsetInMinute?: number;
     userId?: string;
     marker?: string;
+    extensions?: ExtensionStat[];
 }
 
 export interface IceStats {

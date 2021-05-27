@@ -42,6 +42,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     private _integration?: Integration
     private _localTransport?: LocalTransport
     private _accessToken?: (() => string) | string
+    private _extensionStats: string[] = [];
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(
         WorkerUrlManager.getURL(),
@@ -151,6 +152,13 @@ class Observer implements ClientCallback, UserMediaCallback {
 
     public removePC (pc: ObserverPC): void {
         this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
+    }
+
+    public addExtensionStat(payload: string, extensionType?: string) {
+        this._extensionStats.push({
+            extensionType,
+            payload,
+        })
     }
 
     get rtcList (): ObserverPC[] {
