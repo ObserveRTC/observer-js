@@ -536,7 +536,7 @@
 	        statsVersion = `${statsVersion.replace(
         // eslint-disable-next-line require-unicode-regexp
         /^\//, '')}`;
-	        return `${serverURL}/${serviceUUID}/${mediaUnitId}/${statsVersion}/json`;
+	        return `${serverURL}/pcsamples/${serviceUUID}/${mediaUnitId}/`;
 	    }
 	}
 
@@ -667,13 +667,27 @@
 	        };
 	        this._worker.postMessage(payload);
 	    }
+	    sendAccessToken(accessToken) {
+	        const payload = {
+	            'data': accessToken,
+	            'what': 'onRequestAccessToken'
+	        };
+	        this._worker.postMessage(payload);
+	    }
+	    addExtensionStats(extensionStats) {
+	        const payload = {
+	            'data': extensionStats,
+	            'what': 'onExtensionStats'
+	        };
+	        this._worker.postMessage(payload);
+	    }
 	    onError(err) {
 	        var _a;
 	        logger.error(err);
 	        (_a = this._clientCallback) === null || _a === void 0 ? void 0 : _a.onError(err);
 	    }
 	    onMessage(msg) {
-	        var _a, _b, _c;
+	        var _a, _b, _c, _d;
 	        const data = msg.data;
 	        switch (data.what) {
 	            case 'requestRawStats':
@@ -684,6 +698,9 @@
 	                return;
 	            case 'onLocalTransport':
 	                (_c = this._clientCallback) === null || _c === void 0 ? void 0 : _c.onTransportCallback(data.data);
+	                return;
+	            case 'requestAccessToken':
+	                (_d = this._clientCallback) === null || _d === void 0 ? void 0 : _d.onRequestAccessToken();
 	                return;
 	            default:
 	                logger.warn('unknown types', data);
@@ -2107,9 +2124,9 @@
 	        this.updateState = this.updateState.bind(this);
 	        this.isExpired = this.isExpired.bind(this);
 	    }
-	    updateState(currentState) {
-	        if (this.currentState !== currentState) {
-	            this.currentState = currentState;
+	    updateState(nextState) {
+	        if (this.currentState !== nextState) {
+	            this.currentState = nextState;
 	            this.lastUpdate = TimeUtil.getCurrent();
 	        }
 	    }
@@ -2159,7 +2176,10 @@
 	        return this._rtcState.isExpired();
 	    }
 	    updateConnectionState() {
-	        const currentState = this.userConfig.pc.connectionState;
+	        // eslint-disable-next-line
+	        const currentState = this.userConfig.pc
+	            ? this.userConfig.pc.connectionState
+	            : 'closed';
 	        this._rtcState.updateState(currentState);
 	    }
 	    getStats() {
@@ -2242,9 +2262,9 @@
 	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[collector]', 
 	        // @ts-expect-error Will be injected in build time
-	        "2104-25", 'from build date', 
+	        "2105-30", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 25 Apr 2021 14:54:22 GMT");
+	        "Sun, 30 May 2021 18:57:15 GMT");
 	    }
 	    onError(_err) {
 	        // Pass
@@ -2268,11 +2288,26 @@
 	        }).catch(null);
 	    }
 	    onRequestInitialConfig() {
-	        this._collectorWorker.sendInitialConfig(Object.assign(Object.assign({}, this._initializeConfig), this._localTransport && { 'transportType': 'local' }));
+	        let accessToken = '';
+	        if (typeof this._accessToken === 'function') {
+	            accessToken = this._accessToken();
+	        }
+	        else if (typeof this._accessToken === 'string') {
+	            accessToken = this._accessToken;
+	        }
+	        this._collectorWorker.sendInitialConfig(Object.assign(Object.assign({}, this._initializeConfig), accessToken && { accessToken }));
 	    }
 	    onTransportCallback(peerConnectionSamples) {
 	        var _a, _b;
 	        (_b = (_a = this._localTransport) === null || _a === void 0 ? void 0 : _a.onObserverRTCSample) === null || _b === void 0 ? void 0 : _b.call(_a, peerConnectionSamples);
+	    }
+	    onRequestAccessToken() {
+	        if (typeof this._accessToken === 'function') {
+	            this._collectorWorker.sendAccessToken(this._accessToken());
+	        }
+	        else if (typeof this._accessToken === 'string') {
+	            this._collectorWorker.sendAccessToken(this._accessToken);
+	        }
 	    }
 	    setIntegration(integration) {
 	        this._integration = integration;
@@ -2285,6 +2320,9 @@
 	    }
 	    setBrowserId(browserId) {
 	        this._collector.setBrowserId(browserId);
+	    }
+	    setAccessToken(accessToken) {
+	        this._accessToken = accessToken;
 	    }
 	    addPC(pc, callId, userId) {
 	        const userConfig = {
@@ -2299,6 +2337,13 @@
 	    removePC(pc) {
 	        this._rtcList = this._rtcList.filter((value) => value.id !== pc.id);
 	    }
+	    addExtensionStats(payload, type) {
+	        const extensionStatsPayload = {
+	            payload,
+	            type
+	        };
+	        this._collectorWorker.addExtensionStats(extensionStatsPayload);
+	    }
 	    get rtcList() {
 	        return this._rtcList;
 	    }
@@ -2309,26 +2354,47 @@
 
 	class Builder {
 	    constructor(initializeConfig) {
-	        this.instance = new Observer(initializeConfig);
+	        this._initialConfig = initializeConfig;
 	    }
 	    withLocalTransport(transport) {
-	        this.instance.setLocalTransport(transport);
+	        this._initialConfig = Object.assign(Object.assign({}, this._initialConfig), transport && { 'transportType': 'local' });
+	        this._transport = transport;
 	        return this;
 	    }
 	    withIntegration(integration) {
-	        this.instance.setIntegration(integration);
+	        this._integration = integration;
 	        return this;
 	    }
 	    withMarker(marker) {
-	        this.instance.updateMarker(marker);
+	        this._marker = marker;
 	        return this;
 	    }
 	    withBrowserId(browserId) {
-	        this.instance.setBrowserId(browserId);
+	        this._browserId = browserId;
+	        return this;
+	    }
+	    withAccessToken(accessToken) {
+	        this._accessToken = accessToken;
 	        return this;
 	    }
 	    build() {
-	        return this.instance;
+	        const instance = new Observer(this._initialConfig);
+	        if (this._transport) {
+	            instance.setLocalTransport(this._transport);
+	        }
+	        if (this._integration) {
+	            instance.setIntegration(this._integration);
+	        }
+	        if (this._marker) {
+	            instance.updateMarker(this._marker);
+	        }
+	        if (this._browserId) {
+	            instance.setBrowserId(this._browserId);
+	        }
+	        if (this._accessToken || typeof this._accessToken === 'function') {
+	            instance.setAccessToken(this._accessToken);
+	        }
+	        return instance;
 	    }
 	}
 

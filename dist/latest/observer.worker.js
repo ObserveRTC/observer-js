@@ -542,7 +542,7 @@
 	        this._workerScope = workerScope;
 	    }
 	    onMessage(msg) {
-	        var _a, _b, _c;
+	        var _a, _b, _c, _d, _e;
 	        const data = msg.data;
 	        switch (data.what) {
 	            case 'onRequestRawStats':
@@ -554,6 +554,12 @@
 	            case 'onUserMediaError':
 	                (_c = this._workerCallback) === null || _c === void 0 ? void 0 : _c.onUserMediaError(data.data);
 	                return;
+	            case 'onRequestAccessToken':
+	                (_d = this._workerCallback) === null || _d === void 0 ? void 0 : _d.onAccessToken(data.data);
+	                return;
+	            case 'onExtensionStats':
+	                (_e = this._workerCallback) === null || _e === void 0 ? void 0 : _e.onExtensionStats(data.data);
+	                return;
 	            default:
 	                logger.warn('unknown types', data);
 	        }
@@ -561,6 +567,10 @@
 	    requestInitialConfig() {
 	        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
 	        this._workerScope.postMessage({ 'what': 'requestInitialConfig' });
+	    }
+	    requestAccessToken() {
+	        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+	        this._workerScope.postMessage({ 'what': 'requestAccessToken' });
 	    }
 	    requestRawStats() {
 	        // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
@@ -572,6 +582,37 @@
 	            'data': samples,
 	            'what': 'onLocalTransport'
 	        });
+	    }
+	}
+
+	class ExtensionStats {
+	    constructor() {
+	        this.statsList = [];
+	        this.add = (stats) => {
+	            try {
+	                const { payload, type } = stats;
+	                // If both empty then ignore them
+	                if (!payload && !type) {
+	                    return;
+	                }
+	                this.statsList.push({
+	                    'payload': typeof payload === 'string'
+	                        ? payload
+	                        : JSON.stringify(payload),
+	                    type
+	                });
+	            }
+	            catch (err) {
+	                // Ignore
+	            }
+	        };
+	        // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	        this.hasRecord = () => this.statsList.length > 0;
+	        this.pick = () => {
+	            const retval = this.statsList.map((item) => item);
+	            this.statsList = [];
+	            return retval;
+	        };
 	    }
 	}
 
@@ -845,14 +886,15 @@
 	  var undefined$1;
 
 	  /** Used as the semantic version number. */
-	  var VERSION = '4.17.20';
+	  var VERSION = '4.17.21';
 
 	  /** Used as the size to enable large array optimizations. */
 	  var LARGE_ARRAY_SIZE = 200;
 
 	  /** Error message constants. */
 	  var CORE_ERROR_TEXT = 'Unsupported core-js use. Try https://npms.io/search?q=ponyfill.',
-	      FUNC_ERROR_TEXT = 'Expected a function';
+	      FUNC_ERROR_TEXT = 'Expected a function',
+	      INVALID_TEMPL_VAR_ERROR_TEXT = 'Invalid `variable` option passed into `_.template`';
 
 	  /** Used to stand-in for `undefined` hash values. */
 	  var HASH_UNDEFINED = '__lodash_hash_undefined__';
@@ -985,10 +1027,11 @@
 	  var reRegExpChar = /[\\^$.*+?()[\]{}|]/g,
 	      reHasRegExpChar = RegExp(reRegExpChar.source);
 
-	  /** Used to match leading and trailing whitespace. */
-	  var reTrim = /^\s+|\s+$/g,
-	      reTrimStart = /^\s+/,
-	      reTrimEnd = /\s+$/;
+	  /** Used to match leading whitespace. */
+	  var reTrimStart = /^\s+/;
+
+	  /** Used to match a single whitespace character. */
+	  var reWhitespace = /\s/;
 
 	  /** Used to match wrap detail comments. */
 	  var reWrapComment = /\{(?:\n\/\* \[wrapped with .+\] \*\/)?\n?/,
@@ -997,6 +1040,18 @@
 
 	  /** Used to match words composed of alphanumeric characters. */
 	  var reAsciiWord = /[^\x00-\x2f\x3a-\x40\x5b-\x60\x7b-\x7f]+/g;
+
+	  /**
+	   * Used to validate the `validate` option in `_.template` variable.
+	   *
+	   * Forbids characters which could potentially change the meaning of the function argument definition:
+	   * - "()," (modification of function parameters)
+	   * - "=" (default value)
+	   * - "[]{}" (destructuring of function parameters)
+	   * - "/" (beginning of a comment)
+	   * - whitespace
+	   */
+	  var reForbiddenIdentifierChars = /[()=,{}\[\]\/\s]/;
 
 	  /** Used to match backslashes in property paths. */
 	  var reEscapeChar = /\\(\\)?/g;
@@ -1827,6 +1882,19 @@
 	  }
 
 	  /**
+	   * The base implementation of `_.trim`.
+	   *
+	   * @private
+	   * @param {string} string The string to trim.
+	   * @returns {string} Returns the trimmed string.
+	   */
+	  function baseTrim(string) {
+	    return string
+	      ? string.slice(0, trimmedEndIndex(string) + 1).replace(reTrimStart, '')
+	      : string;
+	  }
+
+	  /**
 	   * The base implementation of `_.unary` without support for storing metadata.
 	   *
 	   * @private
@@ -2157,6 +2225,21 @@
 	    return hasUnicode(string)
 	      ? unicodeToArray(string)
 	      : asciiToArray(string);
+	  }
+
+	  /**
+	   * Used by `_.trim` and `_.trimEnd` to get the index of the last non-whitespace
+	   * character of `string`.
+	   *
+	   * @private
+	   * @param {string} string The string to inspect.
+	   * @returns {number} Returns the index of the last non-whitespace character.
+	   */
+	  function trimmedEndIndex(string) {
+	    var index = string.length;
+
+	    while (index-- && reWhitespace.test(string.charAt(index))) {}
+	    return index;
 	  }
 
 	  /**
@@ -13327,7 +13410,7 @@
 	      if (typeof value != 'string') {
 	        return value === 0 ? value : +value;
 	      }
-	      value = value.replace(reTrim, '');
+	      value = baseTrim(value);
 	      var isBinary = reIsBinary.test(value);
 	      return (isBinary || reIsOctal.test(value))
 	        ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
@@ -15699,6 +15782,12 @@
 	      if (!variable) {
 	        source = 'with (obj) {\n' + source + '\n}\n';
 	      }
+	      // Throw an error if a forbidden character was found in `variable`, to prevent
+	      // potential command injection attacks.
+	      else if (reForbiddenIdentifierChars.test(variable)) {
+	        throw new Error(INVALID_TEMPL_VAR_ERROR_TEXT);
+	      }
+
 	      // Cleanup code by stripping empty strings.
 	      source = (isEvaluating ? source.replace(reEmptyStringLeading, '') : source)
 	        .replace(reEmptyStringMiddle, '$1')
@@ -15812,7 +15901,7 @@
 	    function trim(string, chars, guard) {
 	      string = toString(string);
 	      if (string && (guard || chars === undefined$1)) {
-	        return string.replace(reTrim, '');
+	        return baseTrim(string);
 	      }
 	      if (!string || !(chars = baseToString(chars))) {
 	        return string;
@@ -15847,7 +15936,7 @@
 	    function trimEnd(string, chars, guard) {
 	      string = toString(string);
 	      if (string && (guard || chars === undefined$1)) {
-	        return string.replace(reTrimEnd, '');
+	        return string.slice(0, trimmedEndIndex(string) + 1);
 	      }
 	      if (!string || !(chars = baseToString(chars))) {
 	        return string;
@@ -18654,12 +18743,24 @@
 	    return ReconnectingWebSocket;
 	}());
 
+	const knownErrorCodes = [
+	    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	    4224,
+	    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	    4225,
+	    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	    4226,
+	    // eslint-disable-next-line @typescript-eslint/no-magic-numbers
+	    4227
+	];
 	class WebSocketTransport {
-	    constructor(wsServerAddress) {
+	    constructor(wsServerAddress, accessToken, wsTransportCallback) {
 	        this.send = this.send.bind(this);
 	        this.sendBulk = this.sendBulk.bind(this);
+	        this.serverAddress = this.serverAddress.bind(this);
+	        this.updateAccessToken = this.updateAccessToken.bind(this);
 	        if (!wsServerAddress) {
-	            throw new Error('websocker server address is required');
+	            throw new Error('websocket server address is required');
 	        }
 	        const options = {
 	            'connectionTimeout': 30000,
@@ -18668,9 +18769,15 @@
 	            'maxEnqueuedMessages': 120,
 	            'maxRetries': 100
 	        };
-	        this._webSocket = new ReconnectingWebSocket(wsServerAddress, [], options);
+	        this._wsServerAddress = wsServerAddress;
+	        this._accessToken = accessToken;
+	        this._webSocket = new ReconnectingWebSocket(() => this.serverAddress(), [], options);
 	        this._webSocket.onclose = (close) => {
 	            logger.warn('websocket closed', close);
+	            const { code } = close;
+	            if (knownErrorCodes.includes(code)) {
+	                wsTransportCallback === null || wsTransportCallback === void 0 ? void 0 : wsTransportCallback.requestAccessToken();
+	            }
 	        };
 	        this._webSocket.onerror = (err) => {
 	            logger.warn('websocket error', err);
@@ -18678,6 +18785,12 @@
 	        this._webSocket.onopen = (currentEvent) => {
 	            logger.warn('websocket on open', currentEvent);
 	        };
+	    }
+	    serverAddress() {
+	        if (!this._accessToken) {
+	            return this._wsServerAddress;
+	        }
+	        return `${this._wsServerAddress}?accessToken=${this._accessToken}`;
 	    }
 	    dispose() {
 	        var _a;
@@ -18695,6 +18808,9 @@
 	            this.send(currentPayload);
 	        });
 	    }
+	    updateAccessToken(accessToken) {
+	        this._accessToken = accessToken;
+	    }
 	}
 
 	const defaultIntervalDurationInMs = 1000;
@@ -18704,17 +18820,19 @@
 	        this._statsOptimizer = new StatsOptimizer();
 	        this._integrationOptimizer = new IntegrationOptimizer();
 	        this._processorWorker = new ProcessorWorker(this);
+	        this._extensionStatsList = new ExtensionStats();
 	        this.startWsServer = this.startWsServer.bind(this);
 	        this.startCronTask = this.startCronTask.bind(this);
 	        this.onResponseRawStats = this.onResponseRawStats.bind(this);
 	        this.onResponseInitialConfig = this.onResponseInitialConfig.bind(this);
 	        this.sendDataToTransport = this.sendDataToTransport.bind(this);
+	        this.onAccessToken = this.onAccessToken.bind(this);
 	        // eslint-disable-next-line no-console
 	        console.warn('$ObserverRTC version[processor]', 
 	        // @ts-expect-error Will be injected in build time
-	        "2104-25", 'from build date', 
+	        "2105-30", 'from build date', 
 	        // @ts-expect-error Will be injected in build time
-	        "Sun, 25 Apr 2021 14:54:22 GMT");
+	        "Sun, 30 May 2021 18:57:15 GMT");
 	    }
 	    get messageHandler() {
 	        // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -18723,20 +18841,7 @@
 	    onResponseRawStats(rawStats) {
 	        const filteredStats = this._integrationOptimizer.optimize(rawStats);
 	        const socketPayloads = filteredStats.map((currentStats) => {
-	            const payload = {
-	                'browserId': currentStats.details.browserId,
-	                'callId': currentStats.details.callId,
-	                'clientDetails': currentStats.details.clientDetails,
-	                'deviceList': currentStats.details.deviceList,
-	                'iceStats': RawStatsProcessor.getIceStats(currentStats.stats),
-	                'marker': currentStats.details.marker,
-	                'peerConnectionId': currentStats.details.peerConnectionId,
-	                'receiverStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.receiverStats),
-	                'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats),
-	                'timeZoneOffsetInMinute': currentStats.details.timeZoneOffsetInMinute,
-	                'timestamp': currentStats.details.timestamp,
-	                'userId': currentStats.details.userId
-	            };
+	            const payload = Object.assign({ 'browserId': currentStats.details.browserId, 'callId': currentStats.details.callId, 'clientDetails': currentStats.details.clientDetails, 'deviceList': currentStats.details.deviceList, 'iceStats': RawStatsProcessor.getIceStats(currentStats.stats), 'marker': currentStats.details.marker, 'peerConnectionId': currentStats.details.peerConnectionId, 'receiverStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.receiverStats), 'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats), 'timeZoneOffsetInMinute': currentStats.details.timeZoneOffsetInMinute, 'timestamp': currentStats.details.timestamp, 'userId': currentStats.details.userId }, this._extensionStatsList.hasRecord() && { 'extensions': this._extensionStatsList.pick() });
 	            return payload;
 	        });
 	        // Order is import starts
@@ -18747,15 +18852,7 @@
 	        this.sendDataToTransport(optimizedPayload);
 	    }
 	    onUserMediaError(mediaError) {
-	        const socketPayloads = {
-	            'browserId': mediaError.details.browserId,
-	            'clientDetails': mediaError.details.clientDetails,
-	            'deviceList': mediaError.details.deviceList,
-	            'marker': mediaError.details.marker,
-	            'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
-	            'timestamp': mediaError.details.timestamp,
-	            'userMediaErrors': [{ 'message': mediaError.errName }]
-	        };
+	        const socketPayloads = Object.assign({ 'browserId': mediaError.details.browserId, 'clientDetails': mediaError.details.clientDetails, 'deviceList': mediaError.details.deviceList, 'marker': mediaError.details.marker, 'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute, 'timestamp': mediaError.details.timestamp, 'userMediaErrors': [{ 'message': mediaError.errName }] }, this._extensionStatsList.hasRecord() && { 'extensions': this._extensionStatsList.pick() });
 	        this.sendDataToTransport([socketPayloads]);
 	    }
 	    updateWorkerInstance(workerScope) {
@@ -18771,14 +18868,24 @@
 	            // Don't try to initialize websocket transport
 	            return;
 	        }
-	        this.startWsServer(initialConfig.wsAddress);
+	        this.startWsServer(initialConfig.wsAddress, initialConfig.accessToken);
 	    }
-	    startWsServer(wsServerAddress) {
-	        logger.warn('start websocket server', wsServerAddress);
+	    onAccessToken(accessToken) {
+	        var _a;
+	        (_a = this._webSocketTransport) === null || _a === void 0 ? void 0 : _a.updateAccessToken(accessToken);
+	    }
+	    onExtensionStats(extensionStats) {
+	        this._extensionStatsList.add(extensionStats);
+	    }
+	    requestAccessToken() {
+	        this._processorWorker.requestAccessToken();
+	    }
+	    startWsServer(wsServerAddress, accessToken) {
+	        logger.warn('start websocket server', wsServerAddress, accessToken);
 	        if (this._webSocketTransport) {
 	            this._webSocketTransport.dispose();
 	        }
-	        this._webSocketTransport = new WebSocketTransport(wsServerAddress);
+	        this._webSocketTransport = new WebSocketTransport(wsServerAddress, accessToken, this);
 	    }
 	    startCronTask(intervalDurationInMs = defaultIntervalDurationInMs) {
 	        this._cron.start({ 'execute': this._processorWorker.requestRawStats.bind(this) }, intervalDurationInMs);

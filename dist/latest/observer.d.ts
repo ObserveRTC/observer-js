@@ -239,6 +239,11 @@ interface PeerConnectionSample {
     timeZoneOffsetInMinute?: number;
     userId?: string;
     marker?: string;
+    extensions?: ExtensionStat[];
+}
+interface ExtensionStat {
+    extensionType?: string;
+    payload?: string;
 }
 interface IceStats {
     candidatePairs?: CandidatePairElement[];
@@ -449,7 +454,7 @@ interface UserMediaCallback {
     onMediaError: (errName: string) => void;
 }
 
-declare type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'General';
+declare type Integration = 'Jitsi' | 'TokBox' | 'Mediasoup' | 'Janus' | 'Pion' | 'Medooze' | 'Twilio' | 'PeerJS' | 'General';
 interface UserConfig {
     pc: RTCPeerConnection;
     callId?: string;
@@ -490,11 +495,13 @@ interface InitialConfig {
     wsAddress: string;
     poolingIntervalInMs: number;
     transportType: TransportType;
+    accessToken?: string;
 }
 interface ClientCallback {
     onRequestRawStats: () => void;
     onRequestInitialConfig: () => void;
     onTransportCallback: (peerConnectionSamples?: PeerConnectionSample[]) => void;
+    onRequestAccessToken: () => void;
     onError: (err: any) => void;
 }
 
@@ -504,6 +511,7 @@ declare class Observer implements ClientCallback, UserMediaCallback {
     private _rtcList;
     private _integration?;
     private _localTransport?;
+    private _accessToken?;
     private readonly _collector;
     private readonly _collectorWorker;
     constructor(_initializeConfig: InitialConfig);
@@ -512,23 +520,32 @@ declare class Observer implements ClientCallback, UserMediaCallback {
     onRequestRawStats(): void;
     onRequestInitialConfig(): void;
     onTransportCallback(peerConnectionSamples?: PeerConnectionSample[]): void;
+    onRequestAccessToken(): void;
     setIntegration(integration: Integration): void;
     setLocalTransport(transport: LocalTransport): void;
     updateMarker(marker: string): void;
     setBrowserId(browserId: string): void;
+    setAccessToken(accessToken?: (() => string) | string): void;
     addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void;
     removePC(pc: ObserverPC): void;
+    addExtensionStats(payload: unknown, type?: string): void;
     get rtcList(): ObserverPC[];
     dispose(): void;
 }
 
 declare class Builder {
-    private readonly instance;
+    private _initialConfig;
+    private _transport?;
+    private _marker?;
+    private _browserId?;
+    private _integration?;
+    private _accessToken?;
     constructor(initializeConfig: InitialConfig);
-    withLocalTransport(transport: LocalTransport): Builder;
+    withLocalTransport(transport?: LocalTransport): Builder;
     withIntegration(integration: Integration): Builder;
     withMarker(marker: string): Builder;
     withBrowserId(browserId: string): Builder;
+    withAccessToken(accessToken?: (() => string) | string): Builder;
     build(): Observer;
 }
 
