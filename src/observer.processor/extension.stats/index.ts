@@ -9,6 +9,10 @@ class ExtensionStats {
             const {
                 payload, type
             } = stats
+            // If both empty then ignore them
+            if (!payload && !type) {
+                return
+            }
             this.statsList.push({
                 'payload': typeof payload === 'string'
                     ? payload
