@@ -1,4 +1,5 @@
 import type {
+    ExtensionStatsPayload,
     RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
@@ -20,6 +21,9 @@ import type {
 import type {
     PeerConnectionSample, UserMediaError
 } from '../../schema/v20200114'
+import {
+    ExtensionStats
+} from '../extension.stats'
 import {
     IntegrationOptimizer
 } from '../rtc.integration.optimizer'
@@ -48,6 +52,7 @@ class ObserverProcessor implements WorkerCallback, WsTransportCallback {
     private _webSocketTransport?: WebSocketTransport
     private readonly _processorWorker = new ProcessorWorker(this)
     private _initialConfig?: InitialConfig
+    private readonly _extensionStatsList = new ExtensionStats()
 
     constructor () {
         this.startWsServer = this.startWsServer.bind(this)
@@ -87,7 +92,8 @@ class ObserverProcessor implements WorkerCallback, WsTransportCallback {
                 'senderStats': RawStatsProcessor.getSendRecvStats(currentStats.stats.senderStats as SendRecv[]),
                 'timeZoneOffsetInMinute': currentStats.details.timeZoneOffsetInMinute,
                 'timestamp': currentStats.details.timestamp,
-                'userId': currentStats.details.userId
+                'userId': currentStats.details.userId,
+                ...this._extensionStatsList.hasRecord() && {'extensions': this._extensionStatsList.pick()}
             } as PeerConnectionSample
             return payload
         })
@@ -108,7 +114,8 @@ class ObserverProcessor implements WorkerCallback, WsTransportCallback {
             'marker': mediaError.details.marker,
             'timeZoneOffsetInMinute': mediaError.details.timeZoneOffsetInMinute,
             'timestamp': mediaError.details.timestamp,
-            'userMediaErrors': [{'message': mediaError.errName} as UserMediaError]
+            'userMediaErrors': [{'message': mediaError.errName} as UserMediaError],
+            ...this._extensionStatsList.hasRecord() && {'extensions': this._extensionStatsList.pick()}
         } as PeerConnectionSample
         this.sendDataToTransport([socketPayloads])
     }
@@ -136,6 +143,10 @@ class ObserverProcessor implements WorkerCallback, WsTransportCallback {
 
     onAccessToken (accessToken: string): void {
         this._webSocketTransport?.updateAccessToken(accessToken)
+    }
+
+    onExtensionStats (extensionStats: ExtensionStatsPayload): void {
+        this._extensionStatsList.add(extensionStats)
     }
 
     requestAccessToken (): void {

@@ -50,6 +50,12 @@ export interface PeerConnectionSample {
     timeZoneOffsetInMinute?: number;
     userId?: string;
     marker?: string;
+    extensions?: ExtensionStat[];
+}
+
+export interface ExtensionStat {
+    extensionType?: string;
+    payload?: string;
 }
 
 export interface IceStats {

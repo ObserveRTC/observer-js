@@ -21,6 +21,11 @@ export interface UserMediaErrorPayload {
     details: PCDetails;
 }
 
+export interface ExtensionStatsPayload {
+    type?: string;
+    payload?: unknown;
+}
+
 class RTCCollector {
     private marker?: string
     private browserId?: string

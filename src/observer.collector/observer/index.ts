@@ -30,6 +30,7 @@ import {
     ObserverPC
 } from '../observer.peer'
 import type {
+    ExtensionStatsPayload,
     RawStats
 } from '../rtc.collector'
 import {
@@ -151,6 +152,14 @@ class Observer implements ClientCallback, UserMediaCallback {
 
     public removePC (pc: ObserverPC): void {
         this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
+    }
+
+    public addExtensionStats (payload: unknown, type?: string): void {
+        const extensionStatsPayload = {
+            payload,
+            type
+        } as ExtensionStatsPayload
+        this._collectorWorker.addExtensionStats(extensionStatsPayload)
     }
 
     get rtcList (): ObserverPC[] {

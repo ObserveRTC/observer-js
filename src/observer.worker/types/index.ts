@@ -1,5 +1,7 @@
 import type {
-    RawStats, UserMediaErrorPayload
+    ExtensionStatsPayload,
+    RawStats,
+    UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import type {
     PeerConnectionSample
@@ -11,11 +13,12 @@ type OnRequestRawStats = 'onRequestRawStats'
 type RequestInitialConfig = 'requestInitialConfig'
 type OnRequestInitialConfig = 'onRequestInitialConfig'
 type OnUserMediaError = 'onUserMediaError'
+type OnExtensionStats = 'onExtensionStats'
 type OnLocalTransport = 'onLocalTransport'
 type RequestAccessToken = 'requestAccessToken'
 type OnRequestAccessToken = 'onRequestAccessToken'
 
-type Data = RawStats[] | InitialConfig | UserMediaErrorPayload | string
+type Data = RawStats[] | InitialConfig | UserMediaErrorPayload | ExtensionStatsPayload | string
 
 // Default transport will be remote ( websocket )
 export type TransportType = 'local' | 'remote'
@@ -28,7 +31,7 @@ export interface InitialConfig {
 }
 
 export interface ClientPayload {
-    what: OnRequestRawStats | OnRequestInitialConfig | OnUserMediaError | OnRequestAccessToken;
+    what: OnRequestRawStats | OnRequestInitialConfig | OnUserMediaError | OnRequestAccessToken | OnExtensionStats;
     data: Data;
 }
 
@@ -49,5 +52,6 @@ export interface WorkerCallback {
     onResponseRawStats: (rawStats: RawStats[]) => void;
     onResponseInitialConfig: (rawStats: InitialConfig) => void;
     onUserMediaError: (mediaError: UserMediaErrorPayload) => void;
+    onExtensionStats: (extensionStats: ExtensionStatsPayload) => void;
     onAccessToken: (accessToken: string) => void;
 }

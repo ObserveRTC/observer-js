@@ -1,4 +1,5 @@
 import type {
+    ExtensionStatsPayload,
     RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
@@ -57,6 +58,14 @@ class CollectorWorker {
         const payload = {
             'data': accessToken,
             'what': 'onRequestAccessToken'
+        } as ClientPayload
+        this._worker.postMessage(payload)
+    }
+
+    public addExtensionStats (extensionStats: ExtensionStatsPayload): void {
+        const payload = {
+            'data': extensionStats,
+            'what': 'onExtensionStats'
         } as ClientPayload
         this._worker.postMessage(payload)
     }

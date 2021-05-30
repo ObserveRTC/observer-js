@@ -1,4 +1,5 @@
 import type {
+    ExtensionStatsPayload,
     RawStats, UserMediaErrorPayload
 } from '../../observer.collector/rtc.collector'
 import {
@@ -44,6 +45,9 @@ class ProcessorWorker {
                 return
             case 'onRequestAccessToken':
                 this._workerCallback?.onAccessToken(data.data as string)
+                return
+            case 'onExtensionStats':
+                this._workerCallback?.onExtensionStats(data.data as ExtensionStatsPayload)
                 return
             default:
                 logger.warn(
