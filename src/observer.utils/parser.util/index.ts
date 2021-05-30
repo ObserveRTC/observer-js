@@ -43,7 +43,7 @@ class ParserUtil {
             /^\//,
             ''
         )}`
-        return `${serverURL}/${serviceUUID}/${mediaUnitId}/${statsVersion}/json`
+        return `${serverURL}/pcsamples/${serviceUUID}/${mediaUnitId}/`
     }
 }
 
