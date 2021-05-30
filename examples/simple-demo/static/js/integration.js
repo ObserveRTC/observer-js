@@ -38,6 +38,10 @@ class Integrator {
     stopCollection() {
         this.observer.dispose()
     }
+
+    addExtensionStats(payload, type) {
+        this.observer.addExtensionStats(payload, type)
+    }
 }
 
 if(!observer_server_endpoint){
