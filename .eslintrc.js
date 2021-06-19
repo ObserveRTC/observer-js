@@ -40,6 +40,8 @@ const projectRules = {
   '@typescript-eslint/no-explicit-any': 'off',
   '@typescript-eslint/explicit-member-accessibility': 'off',
   '@typescript-eslint/strict-boolean-expressions': 'off',
+  '@typescript-eslint/ban-ts-comment': 'off',
+  '@typescript-eslint/prefer-ts-expect-error': 'off',
   'quotes': 'off',
   '@typescript-eslint/quotes': ['error', 'single'],
   '@typescript-eslint/semi': [
