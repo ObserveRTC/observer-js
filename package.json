@@ -1,27 +1,20 @@
 {
   "name": "@ObserveRTC/observer-lib",
-  "version": "2105-30",
+  "version": "2106-19",
   "description": "Extractor Development Toolkits for WebRTC Samples",
   "main": "dist/latest/observer.js",
   "types": "dist/latest/observer.d.ts",
   "config": {
     "development": {
-      "collectorLibraryFileName": "observer.js",
-      "workerLibraryFileName": "observer.worker.js"
+      "collectorLibraryFileName": "observer.js"
     },
     "production": {
-      "collectorLibraryFileName": "observer.min.js",
-      "workerLibraryFileName": "observer.worker.min.js"
+      "collectorLibraryFileName": "observer.min.js"
     },
     "libraryFileNameDefinition": "observer.d.ts",
     "collectorRootFilePath": "./src/observer.collector/__package__/index.ts",
-    "workerRootFilePath": "./src/observer.processor/__package__/index.ts",
     "collectorLibraryOutput": {
       "name": "ObserverRTC",
-      "exports": "named"
-    },
-    "workerLibraryOutput": {
-      "name": "ObserverWorkerRTC",
       "exports": "named"
     }
   },
@@ -64,6 +57,7 @@
     "rollup-plugin-glob-import": "^0.4.5",
     "rollup-plugin-license": "^2.2.0",
     "rollup-plugin-terser": "^7.0.2",
+    "rollup-plugin-web-worker-loader": "^1.6.1",
     "terser-webpack-plugin": "^4.2.2",
     "ts-jest": "^26.4.3",
     "ts-loader": "^8.0.4",
