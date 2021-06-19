@@ -27,7 +27,7 @@ export interface CandidatePair {
     requestsSent: number;
     responsesReceived: number;
     responsesSent: number;
-    state: 'frozen' | 'waiting' | 'in-progress' | 'failed' | 'succeeded';
+    state: 'failed' | 'frozen' | 'in-progress' | 'succeeded' | 'waiting';
     timestamp: number;
     totalRoundTripTime: number;
     transportId: string;
@@ -36,36 +36,30 @@ export interface CandidatePair {
 }
 
 export interface RemoteCandidate {
-    candidateType: 'host' | 'srflx' | 'prflx' | 'relay';
+    candidateType: 'host' | 'prflx' | 'relay' | 'srflx';
     deleted: boolean;
     id: string;
     ip: string;
     isRemote: true;
     port: number;
     priority: number;
-    protocol: 'udp' | 'tcp';
+    protocol: 'tcp' | 'udp';
     timestamp: number;
     transportId: string;
     type: 'remote-candidate';
 }
 
 export interface LocalCandidate {
-    candidateType: 'host' | 'srflx' | 'prflx' | 'relay';
+    candidateType: 'host' | 'prflx' | 'relay' | 'srflx';
     deleted: boolean;
     id: string;
     ip: string;
     isRemote: false;
     networkType:
-    | 'bluetooth'
-    | 'cellular'
-    | 'ethernet'
-    | 'wifi'
-    | 'wimax'
-    | 'vpn'
-    | 'unknown';
+    'bluetooth' | 'cellular' | 'ethernet' | 'unknown' | 'vpn' | 'wifi' | 'wimax';
     port: number;
     priority: number;
-    protocol: 'udp' | 'tcp';
+    protocol: 'tcp' | 'udp';
     timestamp: number;
     transportId: string;
     type: 'local-candidate';
@@ -129,7 +123,7 @@ export interface OutboundRTP {
     nackCount: number;
     pliCount: number;
     qpSum: number;
-    qualityLimitationReason: 'none' | 'cpu' | 'bandwidth' | 'other';
+    qualityLimitationReason: 'bandwidth' | 'cpu' | 'none' | 'other';
     qualityLimitationResolutionChanges: number;
     totalEncodeTime: number;
     totalEncodedBytesTarget: number;
@@ -191,12 +185,7 @@ export interface ObserveRTCCIceStats {
 
 export interface ObserveRTCStats {
     rtcStats:
-    | CandidatePair
-    | Track
-    | InboundRTP
-    | MediaSource
-    | OutboundRTP
-    | RemoteInboundRTP;
+    CandidatePair | InboundRTP | MediaSource | OutboundRTP | RemoteInboundRTP | Track;
 }
 
 export interface PeerConnectionSample {

@@ -39,7 +39,7 @@ class Observer implements ClientCallback, UserMediaCallback {
     private _rtcList: ObserverPC[] = []
     private _integration?: Integration
     private _localTransport?: LocalTransport
-    private _accessToken?: (() => string) | string
+    private _accessToken?: string | (() => string)
     private readonly _collector = new RTCCollector()
     private readonly _collectorWorker = new CollectorWorker(this)
     constructor (private readonly _initializeConfig: InitialConfig) {
@@ -126,7 +126,7 @@ class Observer implements ClientCallback, UserMediaCallback {
         this._collector.setBrowserId(browserId)
     }
 
-    public setAccessToken (accessToken?: (() => string) | string): void {
+    public setAccessToken (accessToken?: string | (() => string)): void {
         this._accessToken = accessToken
     }
 

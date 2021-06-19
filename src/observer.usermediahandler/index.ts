@@ -16,7 +16,7 @@ class UserMediaHandler {
             ).then(
                 async (stream) => Promise.resolve(stream),
                 async (err) => {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument,@typescript-eslint/no-unsafe-member-access
                     userMediaCallback.onMediaError(err.name)
                     return Promise.reject(err)
                 }
