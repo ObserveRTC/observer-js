@@ -5,27 +5,25 @@ import type {
 import {
     logger
 } from '../../observer.logger'
+import {
+    getObserverWorker
+} from '../../worker.loader.wrapper'
 import type {
     ClientCallback,
     ClientPayload,
     InitialConfig,
     WorkerPayload
 } from '../types'
-
 class CollectorWorker {
     private _worker!: Worker
 
-    constructor (private readonly loadURL: string, private readonly _clientCallback?: ClientCallback) {
+    constructor (private readonly _clientCallback?: ClientCallback) {
         this.loadWorker = this.loadWorker.bind(this)
     }
 
     public loadWorker (): void {
-        const contentURL = `importScripts( '${this.loadURL}' );`,
-            workerURL = URL.createObjectURL(new Blob(
-                [contentURL],
-                {'type': 'text/javascript'}
-            ))
-        this._worker = new Worker(workerURL)
+        // @ts-ignore
+        this._worker = getObserverWorker()
         this._worker.onerror = this.onError.bind(this)
         this._worker.onmessage = this.onMessage.bind(this)
     }
