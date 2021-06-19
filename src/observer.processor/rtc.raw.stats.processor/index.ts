@@ -34,19 +34,19 @@ class RawStatsProcessor {
         } = observerStats
 
         const localCandidates = [
-            ...receiverStats.map((item) => item as SendRecv).filter((item) => item.type === 'local-candidate'),
-            ...senderStats.map((item) => item as SendRecv).filter((item) => item.type === 'local-candidate')
+            ...receiverStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'local-candidate'),
+            ...senderStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'local-candidate')
         ].map((stats) => StatsMap.localCandidate(stats))
 
         const remoteCandidates = [
-            ...receiverStats.map((item) => item as SendRecv).filter((item) => item.type === 'remote-candidate'),
-            ...senderStats.map((item) => item as SendRecv).filter((item) => item.type === 'remote-candidate')
+            ...receiverStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'remote-candidate'),
+            ...senderStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'remote-candidate')
         ].map((stats) => StatsMap.remoteCandidate(stats))
 
 
         const candidatePairs = [
-            ...receiverStats.map((item) => item as SendRecv).filter((item) => item.type === 'candidate-pair'),
-            ...senderStats.map((item) => item as SendRecv).filter((item) => item.type === 'candidate-pair')
+            ...receiverStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'candidate-pair'),
+            ...senderStats.map((item) => item as unknown as SendRecv).filter((item) => item.type === 'candidate-pair')
         ].map((stats) => StatsMap.candidatePair(stats))
 
         return {

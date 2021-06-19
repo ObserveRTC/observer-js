@@ -28,6 +28,7 @@ class CronInterval {
     }
     private runInternal (): void {
         this._runnable?.execute()
+        // @ts-ignore
         this._runId = setTimeout(
             this.runInternal.bind(this),
             this._intervalDurationInMs
