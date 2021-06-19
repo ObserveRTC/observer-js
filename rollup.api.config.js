@@ -4,9 +4,10 @@ const nodeResolvePlugin = require('@rollup/plugin-node-resolve').nodeResolve
 const typescriptPlugin = require('@rollup/plugin-typescript')
 const terserPlugin = require('rollup-plugin-terser').terser
 const dtsPlugin = require('rollup-plugin-dts').default
-const licensePlugin = require('rollup-plugin-license')
+const banner = require('rollup-plugin-banner2')
 const workerLoader = require('rollup-plugin-web-worker-loader')
 const { version } = require('./package.json')
+const fs = require('fs')
 
 const {
   collectorRootFilePath,
@@ -22,13 +23,12 @@ import replace from '@rollup/plugin-replace'
 
 
 const getLicense = () => {
-  const license = licensePlugin({
-    banner: {
-      content: {
-        file: path.join(__dirname, 'LICENSE.md'),
-      },
-    },
-  })
+  const license = banner(() => {
+    const file = fs.readFileSync(path.join(__dirname, 'LICENSE.md'), 'utf-8')
+    return `/*
+            ${file.toString()}
+            */
+`})
   return license
 }
 
@@ -48,7 +48,7 @@ const getCommonInput = (currentVersion, libraryFileName) => {
         declaration: false,
       }),
       commonjs(),
-      // getLicense(),
+      getLicense(),
       replace({
         __buildDate__: buildDate,
         __buildVersion__: buildVersion,
@@ -56,7 +56,8 @@ const getCommonInput = (currentVersion, libraryFileName) => {
         __isDebug__: JSON.stringify(isProd === false),
       }),
       workerLoader({
-        targetPlatform: "browser",
+        sourcemap: false,
+        targetPlatform: 'browser',
         inline: true,
       }),
     ],
@@ -72,6 +73,7 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`) => {
 
   const buildCollectorLibrary = {
     ...collectorLibraryOutput,
+    sourcemap: false,
     file: `${currentOutputDirectory}/${libraryFileName}`,
     format: 'umd',
     ...(isProduction && { plugins: [commonTerser] }),
@@ -90,10 +92,11 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`) => {
   )
   // TypeScript definition
   buildConfig.push({
-    ...getCommonInput(currentVersion,collectorlibraryFileName),
+    ...getCommonInput(currentVersion, collectorlibraryFileName),
     input: rootFilePath,
     plugins: [dtsPlugin(), getLicense()],
     output: {
+      sourcemap: false,
       file: `${currentOutputDirectory}/${libraryFileNameDefinition}`,
       format: 'es',
     },
@@ -102,7 +105,7 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`) => {
 }
 
 const buildPipe = [
-    ...buildLibrary(isProd, `v${version}`, false),
+  ...buildLibrary(isProd, `v${version}`, false),
 ]
 
 module.exports = buildPipe
