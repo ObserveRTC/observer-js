@@ -11,7 +11,7 @@
 export interface MediaDeviceInfo {
     deviceId?: string;
     groupId?: string;
-    kind?: 'videoinput' | 'audioinput' | 'audiooutput';
+    kind?: 'audioinput' | 'audiooutput' | 'videoinput';
     label?: string;
 }
 

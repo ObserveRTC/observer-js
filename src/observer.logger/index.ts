@@ -7,9 +7,9 @@ const initLogger = (prefix: string, dev = true): Logger.Logger => {
         const _logger = Logger.getLogger(prefix)
         // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
         _logger.methodFactory = (
-            methodName: string,
-            logLevel: Logger.LogLevelNumbers,
-            loggerName: string
+            methodName,
+            logLevel,
+            loggerName
         ) => {
             const originalFactory = Logger.methodFactory,
                 rawMethod = originalFactory(

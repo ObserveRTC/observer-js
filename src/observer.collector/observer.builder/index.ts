@@ -17,7 +17,7 @@ class Builder {
     private _marker?: string
     private _browserId?: string
     private _integration?: Integration
-    private _accessToken?: (() => string) | string
+    private _accessToken?: string | (() => string)
 
     constructor (initializeConfig: InitialConfig) {
         this._initialConfig = initializeConfig
@@ -47,7 +47,7 @@ class Builder {
         return this
     }
 
-    withAccessToken (accessToken?: (() => string) | string): Builder {
+    withAccessToken (accessToken?: string | (() => string)): Builder {
         this._accessToken = accessToken
         return this
     }

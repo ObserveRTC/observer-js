@@ -50,6 +50,7 @@ const getCommonInput = (currentVersion, libraryFileName) => {
       commonjs(),
       getLicense(),
       replace({
+        preventAssignment: true,
         __buildDate__: buildDate,
         __buildVersion__: buildVersion,
         __libraryFileName__: JSON.stringify(libraryFileName),

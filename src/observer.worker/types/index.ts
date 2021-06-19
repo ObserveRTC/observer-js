@@ -18,7 +18,7 @@ type OnLocalTransport = 'onLocalTransport'
 type RequestAccessToken = 'requestAccessToken'
 type OnRequestAccessToken = 'onRequestAccessToken'
 
-type Data = RawStats[] | InitialConfig | UserMediaErrorPayload | ExtensionStatsPayload | string
+type Data = ExtensionStatsPayload | InitialConfig | RawStats[] | UserMediaErrorPayload | string
 
 // Default transport will be remote ( websocket )
 export type TransportType = 'local' | 'remote'
@@ -31,12 +31,12 @@ export interface InitialConfig {
 }
 
 export interface ClientPayload {
-    what: OnRequestRawStats | OnRequestInitialConfig | OnUserMediaError | OnRequestAccessToken | OnExtensionStats;
+    what: OnExtensionStats | OnRequestAccessToken | OnRequestInitialConfig | OnRequestRawStats | OnUserMediaError;
     data: Data;
 }
 
 export interface WorkerPayload {
-    what: RequestRawStats | RequestInitialConfig | OnLocalTransport | RequestAccessToken;
+    what: OnLocalTransport | RequestAccessToken | RequestInitialConfig | RequestRawStats;
     data?: PeerConnectionSample[];
 }
 

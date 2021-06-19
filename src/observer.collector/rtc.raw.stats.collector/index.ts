@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 class RawStatsCollector {
-    public static async getRawStats (senderOrReceiver: RTCRtpSender[] | RTCRtpReceiver[] | undefined): Promise<any> {
+    public static async getRawStats (senderOrReceiver: RTCRtpReceiver[] | RTCRtpSender[] | undefined): Promise<any> {
         if (!senderOrReceiver) {
             return []
         }
