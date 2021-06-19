@@ -5,12 +5,12 @@ const typescriptPlugin = require('@rollup/plugin-typescript')
 const terserPlugin = require('rollup-plugin-terser').terser
 const dtsPlugin = require('rollup-plugin-dts').default
 const licensePlugin = require('rollup-plugin-license')
+const workerLoader = require('rollup-plugin-web-worker-loader')
 const { version } = require('./package.json')
+
 const {
   collectorRootFilePath,
-  workerRootFilePath,
   collectorLibraryOutput,
-  workerLibraryOutput,
   libraryFileNameDefinition,
   development,
   production,
@@ -37,7 +37,7 @@ const buildVersion = JSON.stringify(version)
 const isProd = process.env.npm_lifecycle_event === 'build'
 const commonTerser = terserPlugin(require('./terser.config.js'))
 
-const getCommonInput = (currentVersion, libraryFileName, workerLibraryFileName) => {
+const getCommonInput = (currentVersion, libraryFileName) => {
   const commonInput = {
     plugins: [
       nodeResolvePlugin({
@@ -48,29 +48,30 @@ const getCommonInput = (currentVersion, libraryFileName, workerLibraryFileName) 
         declaration: false,
       }),
       commonjs(),
-      getLicense(),
+      // getLicense(),
       replace({
         __buildDate__: buildDate,
         __buildVersion__: buildVersion,
         __libraryFileName__: JSON.stringify(libraryFileName),
-        __workerLibraryFileName__: JSON.stringify(workerLibraryFileName),
         __isDebug__: JSON.stringify(isProd === false),
+      }),
+      workerLoader({
+        targetPlatform: "browser",
+        inline: true,
       }),
     ],
   }
   return commonInput
 }
 
-const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWorker = false) => {
-  const workerlibraryFileName = isProduction ? production.workerLibraryFileName : development.workerLibraryFileName
+const buildLibrary = (isProduction = false, currentVersion = `v${version}`) => {
   const collectorlibraryFileName = isProduction ? production.collectorLibraryFileName : development.collectorLibraryFileName
-
-  const libraryFileName = isWorker ? workerlibraryFileName : collectorlibraryFileName
+  const libraryFileName = collectorlibraryFileName
   const currentOutputDirectory = `dist/${currentVersion}`
-  const rootFilePath = isWorker ? workerRootFilePath : collectorRootFilePath
+  const rootFilePath = collectorRootFilePath
 
   const buildCollectorLibrary = {
-    ...(isWorker ? workerLibraryOutput : collectorLibraryOutput),
+    ...collectorLibraryOutput,
     file: `${currentOutputDirectory}/${libraryFileName}`,
     format: 'umd',
     ...(isProduction && { plugins: [commonTerser] }),
@@ -80,31 +81,28 @@ const buildLibrary = (isProduction = false, currentVersion = `v${version}`, isWo
   buildConfig.push(
     // Library building
     {
-      ...getCommonInput(currentVersion, collectorlibraryFileName, workerlibraryFileName),
+      ...getCommonInput(currentVersion, collectorlibraryFileName),
       input: rootFilePath,
       output: [
         buildCollectorLibrary,
       ],
     },
   )
-  if (!isWorker) {
-    // TypeScript definition
-    buildConfig.push({
-      ...getCommonInput(currentVersion,collectorlibraryFileName, workerlibraryFileName),
-      input: rootFilePath,
-      plugins: [dtsPlugin(), getLicense()],
-      output: {
-        file: `${currentOutputDirectory}/${libraryFileNameDefinition}`,
-        format: 'es',
-      },
-    })
-  }
+  // TypeScript definition
+  buildConfig.push({
+    ...getCommonInput(currentVersion,collectorlibraryFileName),
+    input: rootFilePath,
+    plugins: [dtsPlugin(), getLicense()],
+    output: {
+      file: `${currentOutputDirectory}/${libraryFileNameDefinition}`,
+      format: 'es',
+    },
+  })
   return buildConfig
 }
 
 const buildPipe = [
     ...buildLibrary(isProd, `v${version}`, false),
-    ...buildLibrary(isProd, `v${version}`, true),
 ]
 
 module.exports = buildPipe
