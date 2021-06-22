@@ -7,17 +7,17 @@ class ExtensionStats {
     add = (stats: ExtensionStatsPayload): void => {
         try {
             const {
-                payload, type
+                extensionType, payload
             } = stats
             // If both empty then ignore them
-            if (!payload && !type) {
+            if (!payload && !extensionType) {
                 return
             }
             this.statsList.push({
+                extensionType,
                 'payload': typeof payload === 'string'
                     ? payload
-                    : JSON.stringify(payload),
-                type
+                    : JSON.stringify(payload)
             })
         } catch (err: unknown) {
             // Ignore

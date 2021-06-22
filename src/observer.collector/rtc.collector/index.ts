@@ -8,6 +8,9 @@ import {
     TimeUtil
 } from '../../observer.utils/time.util'
 import type {
+    ExtensionStat
+} from '../../schema/v20200114'
+import type {
     ObserverPC, ObserverStats, PCDetails
 } from '../observer.peer'
 
@@ -21,10 +24,7 @@ export interface UserMediaErrorPayload {
     details: PCDetails;
 }
 
-export interface ExtensionStatsPayload {
-    type?: string;
-    payload?: unknown;
-}
+export type ExtensionStatsPayload = ExtensionStat
 
 class RTCCollector {
     private marker?: string
