@@ -529,7 +529,7 @@ declare class Observer implements ClientCallback, UserMediaCallback {
     setAccessToken(accessToken?: string | (() => string)): void;
     addPC(pc: RTCPeerConnection, callId?: string, userId?: string): void;
     removePC(pc: ObserverPC): void;
-    addExtensionStats(payload: unknown, type?: string): void;
+    addExtensionStats(payload: unknown, extensionType?: string): void;
     get rtcList(): ObserverPC[];
     dispose(): void;
 }
