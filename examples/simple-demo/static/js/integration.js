@@ -39,8 +39,8 @@ class Integrator {
         this.observer.dispose()
     }
 
-    addExtensionStats(payload, type) {
-        this.observer.addExtensionStats(payload, type)
+    addExtensionStats(payload, extensionType) {
+        this.observer.addExtensionStats(payload, extensionType)
     }
 }
 
