@@ -148,10 +148,10 @@ class Observer implements ClientCallback, UserMediaCallback {
         this._rtcList = this._rtcList.filter((value) => value.id !== pc.id)
     }
 
-    public addExtensionStats (payload: unknown, type?: string): void {
+    public addExtensionStats (payload: unknown, extensionType?: string): void {
         const extensionStatsPayload = {
-            payload,
-            type
+            extensionType,
+            payload
         } as ExtensionStatsPayload
         this._collectorWorker.addExtensionStats(extensionStatsPayload)
     }
