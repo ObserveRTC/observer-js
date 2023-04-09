@@ -1,0 +1,216 @@
+syntax = "proto2";
+
+package org.observertc.observer.models;
+
+import "samples.proto";
+
+message Call {
+  required string serviceId = 1;
+  required string roomId = 2;
+  required string callId = 3;
+  required uint64 started = 4;
+
+  repeated string clientIds = 5;
+
+//  message ClientLog {
+//    required string clientId = 1;
+//    required uint64 timestamp = 2;
+//    required string event = 3;
+//  }
+
+//  repeated ClientLog clientLogs = 6;
+}
+
+message Client {
+  required string serviceId = 1;
+  required string roomId = 2;
+
+  required string callId = 3;
+  required string clientId = 4;
+  required uint64 joined = 5;
+
+  optional uint64 sampleTouched = 6;
+  optional string timeZoneId = 7;
+  optional string mediaUnitId = 8;
+
+  optional string userId = 9;
+  optional string marker = 10;
+
+  repeated string peerConnectionIds = 11;
+
+  optional org.observertc.schemas.protobuf.Samples.ClientSample.Browser browser = 12;
+  
+  optional org.observertc.schemas.protobuf.Samples.ClientSample.OperationSystem operationSystem = 13;
+
+  optional org.observertc.schemas.protobuf.Samples.ClientSample.Platform platform = 14;
+
+  optional org.observertc.schemas.protobuf.Samples.ClientSample.Engine engine = 15;
+
+//  message Stats {
+//    optional double maxRttInS = 1;
+//    optional double minRttInS = 2;
+//    optional string location = 3;
+//  }
+//
+//  optional Stats stats = 13;
+}
+
+message PeerConnection {
+  required string serviceId = 1;
+  required string roomId = 2;
+
+  required string callId = 3;
+  required string clientId = 4;
+  required string peerConnectionId = 5;
+  required uint64 opened = 6;
+
+  optional string mediaUnitId = 7;
+
+  optional string userId = 8;
+  optional string marker = 9;
+  optional string label = 10;
+
+  repeated string inboundTrackIds = 11;
+  repeated string outboundTrackIds = 12;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceLocalCandidate icelocalCandidates = 13;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceRemoteCandidate iceRemoteCandidates = 14;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceCandidatePair iceCandidatePairs = 15;
+}
+
+message InboundTrack {
+  required string serviceId = 1;
+  required string roomId = 2;
+  required string callId = 3;
+  required string clientId = 4;
+  required string peerConnectionId = 5;
+  required string trackId = 6;
+  required string kind = 7;
+  required uint64 added = 8;
+
+  optional string mediaUnitId = 9;
+
+  optional string userId = 10;
+  optional string marker = 11;
+
+  optional string sfuSinkId = 12;
+  optional string sfuStreamId = 13;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 14;
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 15;
+}
+
+message OutboundTrack {
+  required string serviceId = 1;
+  required string roomId = 2;
+  required string callId = 3;
+  required string clientId = 4;
+  required string peerConnectionId = 5;
+  required string trackId = 6;
+  required uint64 added = 7;
+  required string kind = 8;
+
+  optional string mediaUnitId = 9;
+  optional string userId = 10;
+  optional string marker = 11;
+
+  optional string sfuStreamId = 12;
+
+  repeated int64 ssrc = 13;
+  
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundAudioTrack audioStats = 14;
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundVideoTrack videoStats = 15;
+}
+
+message Sfu {
+  required string serviceId = 1;
+
+  required string sfuId = 2;
+  required uint64 joined = 3;
+
+  optional uint64 sampleTouched = 4;
+  optional string mediaUnitId = 5;
+  optional string timeZoneId = 6;
+  optional string marker = 7;
+
+  repeated string sfuTransportIds = 8;
+
+  optional uint64 serverTouched = 9;
+}
+
+message SfuTransport {
+  required string serviceId = 1;
+
+  required string sfuId = 2;
+  required string transportId = 3;
+  required bool internal = 4 [default = false];
+  required uint64 opened = 5;
+
+  optional uint64 sampleTouched = 6;
+  optional string mediaUnitId = 7;
+  optional string marker = 8;
+
+  repeated string inboundRtpPadIds = 9;
+  repeated string outboundRtpPadIds = 10;
+  repeated string sctpChannelIds = 11;
+
+  optional uint64 serverTouched = 12;
+}
+
+
+
+message SfuInboundRtpPad {
+  required string serviceId = 1;
+
+  required string sfuId = 2;
+  required string sfuTransportId = 3;
+  required string sfuStreamId = 4;
+  required string rtpPadId = 5;
+  required int64 ssrc = 6;
+  required bool internal = 7 [default = false];
+  required uint64 added = 8;
+
+  optional uint64 sampleTouched = 9;
+  optional string mediaUnitId = 10;
+  optional string marker = 11;
+
+  optional uint64 serverTouched = 12;
+}
+
+message SfuOutboundRtpPad {
+  required string serviceId = 1;
+
+  required string sfuId = 2;
+  required string sfuTransportId = 3;
+  required string sfuStreamId = 4;
+  required string sfuSinkId = 5;
+  required string rtpPadId = 6;
+  required int64 ssrc = 7;
+  required bool internal = 8 [default = false];
+  required uint64 added = 9;
+
+  optional uint64 sampleTouched = 10;
+  optional string mediaUnitId = 11;
+  optional string marker = 12;
+
+  optional uint64 serverTouched = 13;
+}
+
+message SfuSctpChannel {
+  required string serviceId = 1;
+
+  required string sfuId = 2;
+  required string sfuTransportId = 3;
+  required string sfuSctpStreamId = 4;
+  required string sfuSctpChannelId = 5;
+  required uint64 opened = 6;
+
+  optional uint64 sampleTouched = 7;
+  optional string mediaUnitId = 8;
+  optional string marker = 9;
+
+  optional uint64 serverTouched = 10;
+
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@observertc/observer-js",
+  "version": "2.0.0",
+  "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run lint",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "./node_modules/.bin/eslint -c .eslintrc.js src/*",
+    "build": "tsc",
+    "test": "jest --config jest.config.js"
+  },
+  "keywords": [
+    "webrtc",
+    "getStats",
+    "observertc",
+    "client",
+    "integration"
+  ],
+  "author": "Balazs Kreith",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@bufbuild/protobuf": "^1.1.1",
+    "@observertc/report-schemas-js": "2.2.1-rc.0",
+    "@observertc/sample-schemas-js": "2.2.1-rc.0",
+    "@types/events": "^3.0.0",
+    "@types/uuid": "^8.3.4",
+    "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^27.5.2",
+    "@typescript-eslint/eslint-plugin": "^5.38.0",
+    "@typescript-eslint/parser": "^5.38.0",
+    "bufferutil": "^4.0.6",
+    "eslint": "^8.24.0",
+    "jest": "^27.5.0",
+    "ts-jest": "^27.1.5",
+    "typedoc": "^0.22.18",
+    "typescript": "^4.8.3",
+    "utf-8-validate": "^5.0.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/observertc/client-monitor-js"
+  }
+}
