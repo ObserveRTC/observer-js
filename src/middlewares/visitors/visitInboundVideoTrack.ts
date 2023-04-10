@@ -16,7 +16,7 @@ export function visitInboundVideoTrack(
 ) {
 	const { trackId } = observedInboundVideoTrack;
 
-	const { peerConnectionLabel, peerConnectionId } = observedInboundVideoTrack.peerConnection;
+	const { peerConnectionId } = observedInboundVideoTrack.peerConnection;
 
 	const {
 		mediaUnitId,
@@ -80,7 +80,7 @@ export function visitInboundVideoTrack(
 				...sample
 			} = inboundVideoSample;
 
-			const ssrc: bigint = BigInt(sample_ssrc);
+			const ssrc = BigInt(sample_ssrc);
 			const videoStats = new Samples_ClientSample_InboundVideoTrack({
 				ssrc,
 				bytesReceived: BigInt(sample_bytesReceived ?? -1),

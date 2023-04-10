@@ -76,7 +76,7 @@ export function visitOutboundVideoTrack(
 				...sample
 			} = outboundVideoSample;
 
-			const ssrc: bigint = BigInt(sample_ssrc);
+			const ssrc = BigInt(sample_ssrc);
 			const videoStats = new Samples_ClientSample_OutboundVideoTrack({
 				ssrc,
 				bytesSent: BigInt(sample_bytesSent ?? -1),

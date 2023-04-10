@@ -151,15 +151,13 @@ export class Evaluator {
 			});
 		});
 		const nextBlockingPoint = new Promise<void>((resolve) => {
-			result.then(() => {});
-			result
-				.finally(() => {
-					this._evaluations.delete(index);
-					resolve();
-				})
-				.catch(() => {
-					/*eslint-disable @typescript-eslint/no-empty */
-				});
+			result.then(() => {
+				this._evaluations.delete(index);
+				resolve();
+			}).catch(() => {
+				this._evaluations.delete(index);
+				resolve();
+			});
 		});
 		this._evaluations.set(index, nextBlockingPoint);
 		return result;

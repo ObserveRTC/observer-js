@@ -127,4 +127,13 @@ export class Sources {
 			}, this.config.maxTimeInMs);
 		}
 	}
+
+	public close() {
+		for (const clientSource of this._clientSources.values()) {
+			if (!clientSource.closed) {
+				clientSource.close();
+			}
+		}
+		this._emitSamples();
+	}
 }

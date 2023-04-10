@@ -15,7 +15,9 @@ export interface ObservedCalls {
 
 export class ObservedCallsBuilder {
 	private _builders = new Map<string, ObservedCallBuilder>();
-	public constructor() {}
+	public constructor() {
+		// nothing
+	}
 
 	public getOrCreateObservedCallBuilder(
 		callId: string,

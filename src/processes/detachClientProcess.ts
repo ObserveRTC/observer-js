@@ -69,8 +69,6 @@ export function createDetachClientProcess(
 						closed: detached,
 					});
 				}
-				if (0 < deletedClient.peerConnectionIds.length) {
-				}
 
 				reports.addCallEventReport(
 					createClientLeftEventReport(serviceId, mediaUnitId, roomId, callId, clientId, detached, marker)

@@ -7,7 +7,9 @@ import { createSimpleSemaphoreProvider, SemaphoreProvider } from './common/Semap
 import { ObservedCallSourceConfig, ObservedCallSource } from './sources/ObservedCallSource';
 import { ObservedClientSource, ObservedClientSourceConfig } from './sources/ObservedClientSource';
 import { PartialBy } from './common/utils';
-import { LogLevel } from './common/logger';
+import { createLogger, LogLevel } from './common/logger';
+
+const logger = createLogger('Observer');
 
 export type ObserverConfig = {
 	/**
@@ -37,8 +39,6 @@ export type ObserverConfig = {
 
 	logLevel: LogLevel;
 };
-
-export type ObserverEventsMap = {};
 
 export class Observer {
 	public static create(providedConfig: Partial<ObserverConfig>): Observer {
@@ -95,6 +95,9 @@ export class Observer {
 	public createCallSource(
 		config: PartialBy<ObservedCallSourceConfig, 'serviceId' | 'mediaUnitId'>
 	): ObservedCallSource {
+		if (this._closed) {
+			throw new Error(`Attempted to create a call source on a closed observer`);
+		}
 		let closed = false;
 		const serviceId = config.serviceId ?? this.config.defaultServiceId;
 		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
@@ -136,6 +139,9 @@ export class Observer {
 	public createClientSource(
 		config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId'>
 	): ObservedClientSource {
+		if (this._closed) {
+			throw new Error(`Attempted to create a client source on a closed observer`);
+		}
 		const serviceId = config.serviceId ?? this.config.defaultServiceId;
 		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
 		return this._sources.createClientSource({
@@ -150,10 +156,16 @@ export class Observer {
 	}
 
 	public addEvaluator(process: EvaluatorProcess) {
+		if (this._closed) {
+			throw new Error(`Attempted to add an evaluator to a closed observer`);
+		}
 		this._evaluator.addProcess(process);
 	}
 
 	public removeEvaluator(process: EvaluatorProcess) {
+		if (this._closed) {
+			throw new Error(`Attempted to remove an evaluator from a closed observer`);
+		}
 		this._evaluator.removeProcess(process);
 	}
 
@@ -344,5 +356,12 @@ export class Observer {
 		return this._closed;
 	}
 
-	public close() {}
+	public close() {
+		if (this._closed) {
+			logger.warn(`Attempted to close twice`);
+			return;
+		}
+		this._sources.close();
+		this._closed = true;
+	}
 }

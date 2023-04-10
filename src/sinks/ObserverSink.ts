@@ -76,7 +76,7 @@ export type SinkEventsMap = {
 	};
 };
 
-export type SinkConfig = {};
+export type SinkConfig = Record<string, unknown>;
 
 export interface ObserverSink {
 	on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
@@ -105,7 +105,9 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 	private _sfuTransportReports: SFUTransportReport[] = [];
 	private _sfuMetaReports: SfuMetaReport[] = [];
 
-	public constructor(public readonly config: SinkConfig) {}
+	public constructor(public readonly config: SinkConfig) {
+		// empty block
+	}
 
 	public on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.addListener(event, listener);

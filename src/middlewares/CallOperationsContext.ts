@@ -14,12 +14,11 @@ export type CallOperationsContext = {
 
 export type CallOperation =
 	| (ObservedClientSourceConfig & {
-			type: 'join';
-	  })
-	| (ObservedClientSourceConfig & {
-			type: 'detach';
-			detached: number;
-	  });
+        type: 'join';
+    }) | (ObservedClientSourceConfig & {
+        type: 'detach';
+        detached: number;
+    });
 
 export function createCallOperationContext(
 	clientOperations: Map<string, CallOperation>,

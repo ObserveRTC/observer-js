@@ -1,10 +1,15 @@
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
 export interface Logger {
+	// eslint-disable @typescript-eslint/no-explicit-any
 	trace(...args: any[]): void;
+	// eslint-disable @typescript-eslint/no-explicit-any
 	debug(...args: any[]): void;
+	// eslint-disable @typescript-eslint/no-explicit-any
 	info(...args: any[]): void;
+	// eslint-disable @typescript-eslint/no-explicit-any
 	warn(...args: any[]): void;
+	// eslint-disable @typescript-eslint/no-explicit-any
 	error(...args: any[]): void;
 }
 

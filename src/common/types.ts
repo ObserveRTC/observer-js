@@ -66,7 +66,7 @@ export interface EvaluatorContext {
 	readonly reports: ReportsCollector;
 }
 
-export interface EvaluatorMiddleware extends Middleware<EvaluatorContext> {}
+export type EvaluatorMiddleware = Middleware<EvaluatorContext>;
 
 // const c: EvaluatorContext;
 

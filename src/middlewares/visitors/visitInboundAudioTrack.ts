@@ -78,7 +78,7 @@ export function visitInboundAudioTrack(
 				...sample
 			} = inboundAudioSample;
 
-			const ssrc: bigint = BigInt(sample_ssrc);
+			const ssrc = BigInt(sample_ssrc);
 			const videoStats = new Samples_ClientSample_InboundAudioTrack({
 				ssrc,
 				bytesReceived: BigInt(sample_bytesReceived ?? -1),

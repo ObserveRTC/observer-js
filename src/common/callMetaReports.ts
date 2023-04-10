@@ -34,59 +34,46 @@ export type CallMetaReportType =
 	| {
 			type: CallMetaType.CERTIFICATE;
 			payload: Certificate;
-	  }
-	| {
+	} | {
 			type: CallMetaType.CODEC;
 			payload: MediaCodecStats;
-	  }
-	| {
+	} | {
 			type: CallMetaType.ICE_LOCAL_CANDIDATE;
 			payload: IceLocalCandidate;
-	  }
-	| {
+	} | {
 			type: CallMetaType.ICE_REMOTE_CANDIDATE;
 			payload: IceRemoteCandidate;
-	  }
-	| {
+	} | {
 			type: CallMetaType.ICE_SERVER;
 			payload: string;
-	  }
-	| {
+	} | {
 			type: CallMetaType.MEDIA_CONSTRAINT;
 			payload: string;
-	  }
-	| {
+	} | {
 			type: CallMetaType.MEDIA_DEVICE;
 			payload: MediaDevice;
-	  }
-	| {
+	} | {
 			type: CallMetaType.MEDIA_SOURCE;
 			payload: MediaSourceStat;
-	  }
-	| {
+	} | {
 			type: CallMetaType.USER_MEDIA_ERROR;
 			payload: string;
-	  }
-	| {
+	} | {
 			type: CallMetaType.OPERATION_SYSTEM;
 			payload: OperationSystem;
-	  }
-	| {
+	} | {
 			type: CallMetaType.PLATFORM;
 			payload: Platform;
-	  }
-	| {
+	} | {
 			type: CallMetaType.ENGINE;
 			payload: Engine;
-	  }
-	| {
+	} | {
 			type: CallMetaType.LOCAL_SDP;
 			payload: string;
-	  }
-	| {
+	} | {
 			type: CallMetaType.BROWSER;
 			payload: Browser;
-	  };
+	};
 
 export function createCallMetaReport(
 	serviceId: string,
