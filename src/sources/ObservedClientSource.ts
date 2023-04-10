@@ -1,21 +1,19 @@
 import { ClientSample } from '@observertc/sample-schemas-js';
 
 export type ObservedClientSourceConfig = {
-	readonly serviceId: string,
-	readonly mediaUnitId: string,
-	readonly roomId: string,
-	readonly clientId: string,
-	readonly callId: string,
+	readonly serviceId: string;
+	readonly mediaUnitId: string;
+	readonly roomId: string;
+	readonly clientId: string;
+	readonly callId: string;
 	readonly joined: number;
-	
-	marker?: string,
+
+	marker?: string;
 	userId?: string;
 	timeZoneId?: string;
-	
-}
+};
 
 export interface ObservedClientSource extends ObservedClientSourceConfig {
-	
 	readonly closed: boolean;
 
 	accept(...samples: ClientSample[]): void;

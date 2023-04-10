@@ -1,20 +1,29 @@
-import { IceCandidatePair, IceLocalCandidate, IceRemoteCandidate, InboundAudioTrack, InboundVideoTrack, OutboundAudioTrack, OutboundVideoTrack, PeerConnectionTransport } from "@observertc/sample-schemas-js";
-import { ObservedClient } from "./ObservedClient";
-import { ObservedInboundAudioTrack, ObservedInboundAudioTrackBuilder } from "./ObservedInboundAudioTrack";
-import { ObservedInboundVideoTrack, ObservedInboundVideoTrackBuilder } from "./ObservedInboundVideoTrack";
-import { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackBuilder } from "./ObservedOutboundAudioTrack";
-import { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackBuilder } from "./ObservedOutboundVideoTrack";
+import {
+	IceCandidatePair,
+	IceLocalCandidate,
+	IceRemoteCandidate,
+	InboundAudioTrack,
+	InboundVideoTrack,
+	OutboundAudioTrack,
+	OutboundVideoTrack,
+	PeerConnectionTransport,
+} from '@observertc/sample-schemas-js';
+import { ObservedClient } from './ObservedClient';
+import { ObservedInboundAudioTrack, ObservedInboundAudioTrackBuilder } from './ObservedInboundAudioTrack';
+import { ObservedInboundVideoTrack, ObservedInboundVideoTrackBuilder } from './ObservedInboundVideoTrack';
+import { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackBuilder } from './ObservedOutboundAudioTrack';
+import { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackBuilder } from './ObservedOutboundVideoTrack';
 
 export interface ObservedPeerConnection {
 	readonly client: ObservedClient;
-	peerConnectionLabel?: string,
+	peerConnectionLabel?: string;
 	readonly peerConnectionId: string;
 
 	inboundAudioTracks(): IterableIterator<ObservedInboundAudioTrack>;
 	inboundVideoTracks(): IterableIterator<ObservedInboundVideoTrack>;
 	outboundAudioTracks(): IterableIterator<ObservedOutboundAudioTrack>;
 	outboundVideoTracks(): IterableIterator<ObservedOutboundVideoTrack>;
-	
+
 	transportSamples(): IterableIterator<PeerConnectionTransport>;
 	iceCandidatePairs(): IterableIterator<IceCandidatePair>;
 	iceRemoteCandidates(): IterableIterator<IceRemoteCandidate>;
@@ -22,18 +31,18 @@ export interface ObservedPeerConnection {
 }
 
 export class ObservedPeerConnectionBuilder {
-	
 	private _inboundAudioTracks = new Map<string, ObservedInboundAudioTrackBuilder>();
 	private _inboundVideoTracks = new Map<string, ObservedInboundVideoTrackBuilder>();
-    private _outboundAudioTracks = new Map<string, ObservedOutboundAudioTrackBuilder>();
-    private _outboundVideoTracks = new Map<string, ObservedOutboundVideoTrackBuilder>();
+	private _outboundAudioTracks = new Map<string, ObservedOutboundAudioTrackBuilder>();
+	private _outboundVideoTracks = new Map<string, ObservedOutboundVideoTrackBuilder>();
 	private _transportSamples: PeerConnectionTransport[] = [];
 	private _iceCandidatePairs: IceCandidatePair[] = [];
 	private _iceRemoteCandidates: IceRemoteCandidate[] = [];
 	private _iceLocalCandidates: IceLocalCandidate[] = [];
 	private _peerConnectionLabel?: string;
 	public constructor(
-		private _config: Omit<ObservedPeerConnection, 
+		private _config: Omit<
+			ObservedPeerConnection,
 			| keyof IterableIterator<ObservedPeerConnection>
 			| 'client'
 			| 'inboundAudioTracks'
@@ -45,9 +54,7 @@ export class ObservedPeerConnectionBuilder {
 			| 'iceRemoteCandidates'
 			| 'iceLocalCandidates'
 		>
-	) {
-		
-	}
+	) {}
 
 	public set peerConnectionLabel(value: string) {
 		this._peerConnectionLabel = value;
@@ -62,7 +69,6 @@ export class ObservedPeerConnectionBuilder {
 			const builder = this._getInboundAudioTrackBuilder(inboundAudioTrackSample.trackId);
 			builder.addSample(inboundAudioTrackSample);
 		}
-		
 	}
 
 	public addIceCandidatePair(iceCandidatePair: IceCandidatePair) {
@@ -80,7 +86,7 @@ export class ObservedPeerConnectionBuilder {
 		if (!result) {
 			result = new ObservedInboundAudioTrackBuilder({
 				trackId,
-			})
+			});
 		}
 		return result;
 	}
@@ -91,7 +97,7 @@ export class ObservedPeerConnectionBuilder {
 			builder.addSample(outboundAudioTrackSample);
 		}
 	}
-	
+
 	private _getOutboundAudioTrackBuilder(trackId: string): ObservedOutboundAudioTrackBuilder {
 		let result = this._outboundAudioTracks.get(trackId);
 		if (!result) {
@@ -102,14 +108,14 @@ export class ObservedPeerConnectionBuilder {
 		}
 		return result;
 	}
-	
+
 	public addInboundVideoTrack(inboundVideoTrackSample: InboundVideoTrack) {
 		if (inboundVideoTrackSample.trackId) {
 			const builder = this._getInboundVideoTrackBuilder(inboundVideoTrackSample.trackId);
 			builder.addSample(inboundVideoTrackSample);
 		}
 	}
-	
+
 	private _getInboundVideoTrackBuilder(trackId: string): ObservedInboundVideoTrackBuilder {
 		let result = this._inboundVideoTracks.get(trackId);
 		if (!result) {
@@ -120,14 +126,14 @@ export class ObservedPeerConnectionBuilder {
 		}
 		return result;
 	}
-	
+
 	public addOutboundVideoTrack(outboundVideoTrackSample: OutboundVideoTrack) {
 		if (outboundVideoTrackSample.trackId) {
 			const builder = this._getOutboundVideoTrackBuilder(outboundVideoTrackSample.trackId);
 			builder.addSample(outboundVideoTrackSample);
 		}
 	}
-	
+
 	private _getOutboundVideoTrackBuilder(trackId: string): ObservedOutboundVideoTrackBuilder {
 		let result = this._outboundVideoTracks.get(trackId);
 		if (!result) {
@@ -138,14 +144,13 @@ export class ObservedPeerConnectionBuilder {
 		}
 		return result;
 	}
-	
 
 	public build(client: ObservedClient): ObservedPeerConnection {
 		const inboundAudioTracks = new Map<string, ObservedInboundAudioTrack>();
 		const outboundAudioTracks = new Map<string, ObservedOutboundAudioTrack>();
 		const inboundVideoTracks = new Map<string, ObservedInboundVideoTrack>();
 		const outboundVideoTracks = new Map<string, ObservedOutboundVideoTrack>();
-	
+
 		const result: ObservedPeerConnection = {
 			client,
 			...this._config,
@@ -159,27 +164,27 @@ export class ObservedPeerConnectionBuilder {
 			inboundVideoTracks: () => inboundVideoTracks.values(),
 			outboundVideoTracks: () => outboundVideoTracks.values(),
 		};
-	
+
 		for (const builder of this._inboundAudioTracks.values()) {
 			const observedInboundAudioTrack = builder.build(result);
 			inboundAudioTracks.set(observedInboundAudioTrack.trackId, observedInboundAudioTrack);
 		}
-	
+
 		for (const builder of this._outboundAudioTracks.values()) {
 			const observedOutboundAudioTrack = builder.build(result);
 			outboundAudioTracks.set(observedOutboundAudioTrack.trackId, observedOutboundAudioTrack);
 		}
-	
+
 		for (const builder of this._inboundVideoTracks.values()) {
 			const observedInboundVideoTrack = builder.build(result);
 			inboundVideoTracks.set(observedInboundVideoTrack.trackId, observedInboundVideoTrack);
 		}
-	
+
 		for (const builder of this._outboundVideoTracks.values()) {
 			const observedOutboundVideoTrack = builder.build(result);
 			outboundVideoTracks.set(observedOutboundVideoTrack.trackId, observedOutboundVideoTrack);
 		}
-	
+
 		return result;
 	}
 }

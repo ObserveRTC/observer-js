@@ -1,6 +1,6 @@
-import { ObserverStorage } from "./ObserverStorage";
+import { ObserverStorage } from './ObserverStorage';
 import * as Models from '../models/Models';
-import { SimpleStorage } from "./SimpleStorage";
+import { SimpleStorage } from './SimpleStorage';
 
 export interface StorageFactory {
 	createCallStorage(): Promise<ObserverStorage<string, Models.Call>>;
@@ -13,47 +13,46 @@ export interface StorageFactory {
 	createSfuInboundRtpPadStorage(): Promise<ObserverStorage<string, Models.SfuInboundRtpPad>>;
 	createSfuOutboundRtpPadStorage(): Promise<ObserverStorage<string, Models.SfuOutboundRtpPad>>;
 	createSfuSctpChannelStorage(): Promise<ObserverStorage<string, Models.SfuSctpChannel>>;
-  }
-  
-  export class MapBasedStorageFactory implements StorageFactory {
+}
+
+export class MapBasedStorageFactory implements StorageFactory {
 	public async createCallStorage(): Promise<ObserverStorage<string, Models.Call>> {
-	  return new SimpleStorage<string, Models.Call>('ObserverCallStorage');
+		return new SimpleStorage<string, Models.Call>('ObserverCallStorage');
 	}
-  
+
 	public async createClientStorage(): Promise<ObserverStorage<string, Models.Client>> {
-	  return new SimpleStorage<string, Models.Client>('ObserverClientStorage');
+		return new SimpleStorage<string, Models.Client>('ObserverClientStorage');
 	}
-  
+
 	public async createPeerConnectionStorage(): Promise<ObserverStorage<string, Models.PeerConnection>> {
-	  return new SimpleStorage<string, Models.PeerConnection>('ObserverPeerConnectionStorage');
+		return new SimpleStorage<string, Models.PeerConnection>('ObserverPeerConnectionStorage');
 	}
-  
+
 	public async createInboundTrackStorage(): Promise<ObserverStorage<string, Models.InboundTrack>> {
-	  return new SimpleStorage<string, Models.InboundTrack>('ObserverInboundTrackStorage');
+		return new SimpleStorage<string, Models.InboundTrack>('ObserverInboundTrackStorage');
 	}
-  
+
 	public async createOutboundTrackStorage(): Promise<ObserverStorage<string, Models.OutboundTrack>> {
-	  return new SimpleStorage<string, Models.OutboundTrack>('ObserverOutboundTrackStorage');
+		return new SimpleStorage<string, Models.OutboundTrack>('ObserverOutboundTrackStorage');
 	}
-  
+
 	public async createSfuStorage(): Promise<ObserverStorage<string, Models.Sfu>> {
-	  return new SimpleStorage<string, Models.Sfu>('ObserverSfuStorage');
+		return new SimpleStorage<string, Models.Sfu>('ObserverSfuStorage');
 	}
-  
+
 	public async createSfuTransportStorage(): Promise<ObserverStorage<string, Models.SfuTransport>> {
-	  return new SimpleStorage<string, Models.SfuTransport>('ObserverSfuTransportStorage');
+		return new SimpleStorage<string, Models.SfuTransport>('ObserverSfuTransportStorage');
 	}
-  
+
 	public async createSfuInboundRtpPadStorage(): Promise<ObserverStorage<string, Models.SfuInboundRtpPad>> {
-	  return new SimpleStorage<string, Models.SfuInboundRtpPad>('ObserverSfuInboundRtpPadStorage');
+		return new SimpleStorage<string, Models.SfuInboundRtpPad>('ObserverSfuInboundRtpPadStorage');
 	}
-  
+
 	public async createSfuOutboundRtpPadStorage(): Promise<ObserverStorage<string, Models.SfuOutboundRtpPad>> {
-	  return new SimpleStorage<string, Models.SfuOutboundRtpPad>('ObserverSfuOutboundRtpPadStorage');
+		return new SimpleStorage<string, Models.SfuOutboundRtpPad>('ObserverSfuOutboundRtpPadStorage');
 	}
-  
+
 	public async createSfuSctpChannelStorage(): Promise<ObserverStorage<string, Models.SfuSctpChannel>> {
-	  return new SimpleStorage<string, Models.SfuSctpChannel>('ObserverSfuSctpChannelStorage');
+		return new SimpleStorage<string, Models.SfuSctpChannel>('ObserverSfuSctpChannelStorage');
 	}
-  }
-  
+}

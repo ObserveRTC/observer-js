@@ -16,10 +16,8 @@ import {
 	SfuMetaReport,
 	SfuOutboundRtpPadReport,
 	SfuSctpStreamReport,
-	SFUTransportReport
+	SFUTransportReport,
 } from '@observertc/report-schemas-js';
-
-
 
 export interface ReportsCollector {
 	addCallEventReport(report: CallEventReport): void;

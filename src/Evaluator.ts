@@ -1,32 +1,31 @@
-import { createLogger } from "./common/logger";
-import { Semaphore } from "./common/Semaphore";
-import { EvaluatorContext } from "./common/types";
-import { ReportsCollector } from "./common/ReportsCollector";
-import { ObservedClientSourceConfig } from "./sources/ObservedClientSource";
-import { SourcesEvents } from "./sources/Sources";
-import { StorageProvider } from "./storages/StorageProvider";
-import { createProcessor, Processor } from "./middlewares/Processor";
-import { createTransactionContext, TransactionContext } from "./middlewares/TransactionContext";
-import { Middleware } from "./middlewares/Middleware";
-import { CallOperationsContext, CallOperation, createCallOperationContext } from "./middlewares/CallOperationsContext";
-import { createCallProcessor } from "./middlewares/CallProcessor";
-import { createTransactionProcessor } from "./middlewares/TransactoinProcessor";
-import { EventEmitter } from "events";
+import { createLogger } from './common/logger';
+import { Semaphore } from './common/Semaphore';
+import { EvaluatorContext } from './common/types';
+import { ReportsCollector } from './common/ReportsCollector';
+import { ObservedClientSourceConfig } from './sources/ObservedClientSource';
+import { SourcesEvents } from './sources/Sources';
+import { StorageProvider } from './storages/StorageProvider';
+import { createProcessor, Processor } from './middlewares/Processor';
+import { createTransactionContext, TransactionContext } from './middlewares/TransactionContext';
+import { Middleware } from './middlewares/Middleware';
+import { CallOperationsContext, CallOperation, createCallOperationContext } from './middlewares/CallOperationsContext';
+import { createCallProcessor } from './middlewares/CallProcessor';
+import { createTransactionProcessor } from './middlewares/TransactoinProcessor';
+import { EventEmitter } from 'events';
 
 const logger = createLogger('Evaluator');
 
 export type EvaluatorEvents = {
-	'ready': undefined,
-}
+	ready: undefined;
+};
 
 export type EvaluatorConfig = {
-	fetchSamples: boolean,
-}
+	fetchSamples: boolean;
+};
 
 export type EvaluatorProcess = (evaluatorContext: EvaluatorContext) => Promise<void>;
 
 export class Evaluator {
-	
 	private _index = 0;
 	private _clientOperations = new Map<string, CallOperation>();
 	private _emitter = new EventEmitter();
@@ -34,26 +33,22 @@ export class Evaluator {
 	private _evaluatorProcesses = new Map<EvaluatorProcess, Middleware<EvaluatorContext>>();
 	private _callProcessor: Processor<CallOperationsContext>;
 	private _transactionProcessor: Processor<TransactionContext>;
-	private _customProcessor: Processor<EvaluatorContext>
+	private _customProcessor: Processor<EvaluatorContext>;
 
 	private _evaluations = new Map<number, Promise<void>>();
-	
+
 	public constructor(
 		public readonly config: EvaluatorConfig,
 		private readonly _callSemaphore: Semaphore,
 		private readonly _storageProvider: StorageProvider,
-		private readonly _reportsCollector: ReportsCollector,
+		private readonly _reportsCollector: ReportsCollector
 	) {
-		
-		this._callProcessor = createCallProcessor(
-			_storageProvider,
-			_reportsCollector
-		);
+		this._callProcessor = createCallProcessor(_storageProvider, _reportsCollector);
 
 		this._transactionProcessor = createTransactionProcessor(
 			_storageProvider,
 			_reportsCollector,
-			this.config.fetchSamples,
+			this.config.fetchSamples
 		);
 
 		this._customProcessor = createProcessor();
@@ -88,7 +83,7 @@ export class Evaluator {
 	public addCreatedClientSource(clientSource: ObservedClientSourceConfig) {
 		this._clientOperations.set(clientSource.clientId, {
 			type: 'join',
-			...clientSource
+			...clientSource,
 		});
 	}
 
@@ -96,7 +91,7 @@ export class Evaluator {
 		this._emitter.addListener(event, listener);
 		return this;
 	}
-	
+
 	public off<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
 		this._emitter.removeListener(event, listener);
 		return this;
@@ -105,7 +100,6 @@ export class Evaluator {
 	private _emit<K extends keyof EvaluatorEvents>(event: K, data: EvaluatorEvents[K]): boolean {
 		return this._emitter.emit(event, data);
 	}
-
 
 	public addObservedSamples(samples: SourcesEvents['observed-samples']): void {
 		// this triggers the evaluation
@@ -131,58 +125,53 @@ export class Evaluator {
 			removedOutboundVideoTracks: [],
 		};
 
-		const callOperations = createCallOperationContext(
-			this._clientOperations,
-			evaluatorContext,
-		);
+		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);
 		this._clientOperations.clear();
 
-		this._eval(
-			callOperations,
-			evaluatorContext
-		).then(() => {
-			logger.debug(`Evaluator is successfully performed eval process`);
-		}).catch(err => {
-			logger.warn(`Error occurred while evaluating`, err);
-		}).finally(() => {
-			this._emit('ready', undefined);
-		})
+		this._eval(callOperations, evaluatorContext)
+			.then(() => {
+				logger.debug(`Evaluator is successfully performed eval process`);
+			})
+			.catch((err) => {
+				logger.warn(`Error occurred while evaluating`, err);
+			})
+			.finally(() => {
+				this._emit('ready', undefined);
+			});
 	}
 
-    private async _eval(
-		callOperationsContext: CallOperationsContext,
-		evaluatorContext: EvaluatorContext,
-	): Promise<void> {
+	private async _eval(callOperationsContext: CallOperationsContext, evaluatorContext: EvaluatorContext): Promise<void> {
 		const actualBlockingPoint = this._evaluations.get(this._index) ?? Promise.resolve();
-        const index = ++this._index;
-        const result = new Promise<void>((resolve, reject) => {
-            actualBlockingPoint.then(() => {
-				this._process(
-					callOperationsContext,
-					evaluatorContext
-				).then(() => resolve()).catch(err => reject(err));
-            });
-        });
-        const nextBlockingPoint = new Promise<void>(resolve => {
-			result.then(() => {})
-            result.finally(() => {
-                this._evaluations.delete(index);
-                resolve();
-            }).catch(() => {
-                /*eslint-disable @typescript-eslint/no-empty */
-            });
-        });
-        this._evaluations.set(index, nextBlockingPoint);
-        return result;
+		const index = ++this._index;
+		const result = new Promise<void>((resolve, reject) => {
+			actualBlockingPoint.then(() => {
+				this._process(callOperationsContext, evaluatorContext)
+					.then(() => resolve())
+					.catch((err) => reject(err));
+			});
+		});
+		const nextBlockingPoint = new Promise<void>((resolve) => {
+			result.then(() => {});
+			result
+				.finally(() => {
+					this._evaluations.delete(index);
+					resolve();
+				})
+				.catch(() => {
+					/*eslint-disable @typescript-eslint/no-empty */
+				});
+		});
+		this._evaluations.set(index, nextBlockingPoint);
+		return result;
 	}
-	
+
 	public get ongoingProcess(): number {
-		return this._evaluations.size
+		return this._evaluations.size;
 	}
 
 	private async _process(
 		callOperationsContext: CallOperationsContext,
-		evaluatorContext: EvaluatorContext,
+		evaluatorContext: EvaluatorContext
 	): Promise<void> {
 		await this._callSemaphore.acquire();
 		await this._callProcessor.use(callOperationsContext).finally(() => {
@@ -191,14 +180,13 @@ export class Evaluator {
 		const transactionContext = await createTransactionContext(
 			evaluatorContext,
 			this._storageProvider,
-			evaluatorContext.observedCalls,
+			evaluatorContext.observedCalls
 		);
 
 		await this._transactionProcessor.use(transactionContext);
 
 		await this._customProcessor.use(evaluatorContext);
-		
+
 		this._emit('ready', undefined);
 	}
-
 }

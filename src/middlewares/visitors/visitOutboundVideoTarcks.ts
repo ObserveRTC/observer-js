@@ -1,8 +1,8 @@
 import * as Models from '../../models/Models';
-import { ReportsCollector } from "../../common/ReportsCollector";
-import { ObservedOutboundVideoTrack } from "../../samples/ObservedOutboundVideoTrack";
-import { OutboundVideoTrackReport } from "@observertc/report-schemas-js";
-import { logger } from "../VisitObservedCallsMiddleware";
+import { ReportsCollector } from '../../common/ReportsCollector';
+import { ObservedOutboundVideoTrack } from '../../samples/ObservedOutboundVideoTrack';
+import { OutboundVideoTrackReport } from '@observertc/report-schemas-js';
+import { logger } from '../VisitObservedCallsMiddleware';
 import { Samples_ClientSample_OutboundVideoTrack } from '../../models/samples_pb';
 
 export function visitOutboundVideoTrack(
@@ -12,13 +12,9 @@ export function visitOutboundVideoTrack(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ) {
-	const {
-		trackId,
-	} = observedOutboundVideoTrack;
+	const { trackId } = observedOutboundVideoTrack;
 
-	const {
-		peerConnectionId,
-	} = observedOutboundVideoTrack.peerConnection;
+	const { peerConnectionId } = observedOutboundVideoTrack.peerConnection;
 
 	const {
 		mediaUnitId,
@@ -28,11 +24,7 @@ export function visitOutboundVideoTrack(
 		minTimestamp: timestamp,
 	} = observedOutboundVideoTrack.peerConnection.client;
 
-	const {
-		serviceId,
-		roomId,
-		callId,
-	} = observedOutboundVideoTrack.peerConnection.client.call;
+	const { serviceId, roomId, callId } = observedOutboundVideoTrack.peerConnection.client.call;
 
 	let storedOutboundVideoTrack = storedOutboundTracks.get(trackId);
 	if (!storedOutboundVideoTrack) {
@@ -49,10 +41,12 @@ export function visitOutboundVideoTrack(
 			marker,
 		});
 		storedOutboundTracks.set(trackId, storedOutboundVideoTrack);
-		if (!storedPeerConnection.outboundTrackIds.find(tId => tId === trackId)) {
+		if (!storedPeerConnection.outboundTrackIds.find((tId) => tId === trackId)) {
 			storedPeerConnection.outboundTrackIds.push(trackId);
 		} else {
-			logger.warn(`Attempted to add trackId to storedPeerConnection twice. serviceId: ${serviceId}, callId: ${callId}, clientId: ${clientId}, pcId: ${peerConnectionId}`);
+			logger.warn(
+				`Attempted to add trackId to storedPeerConnection twice. serviceId: ${serviceId}, callId: ${callId}, clientId: ${clientId}, pcId: ${peerConnectionId}`
+			);
 		}
 	}
 
@@ -81,7 +75,7 @@ export function visitOutboundVideoTrack(
 				totalEncodedBytesTarget: samples_totalEncodedBytesTarget,
 				...sample
 			} = outboundVideoSample;
-			
+
 			const ssrc: bigint = BigInt(sample_ssrc);
 			const videoStats = new Samples_ClientSample_OutboundVideoTrack({
 				ssrc,
@@ -90,7 +84,7 @@ export function visitOutboundVideoTrack(
 				retransmittedBytesSent: BigInt(samples_retransmittedBytesSent ?? -1),
 				totalEncodedBytesTarget: BigInt(samples_totalEncodedBytesTarget ?? -1),
 				qpSum: BigInt(samples_qpSum ?? -1),
-				...sample
+				...sample,
 			});
 
 			statsMap.set(ssrc, videoStats);

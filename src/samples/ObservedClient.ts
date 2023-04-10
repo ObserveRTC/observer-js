@@ -1,6 +1,6 @@
-import { ClientSample } from "@observertc/sample-schemas-js";
-import { ObservedPeerConnection, ObservedPeerConnectionBuilder } from "./ObservedPeerConnection";
-import { ObservedCall } from "./ObservedCall";
+import { ClientSample } from '@observertc/sample-schemas-js';
+import { ObservedPeerConnection, ObservedPeerConnectionBuilder } from './ObservedPeerConnection';
+import { ObservedCall } from './ObservedCall';
 
 export interface ObservedClient {
 	readonly call: ObservedCall;
@@ -16,18 +16,18 @@ export interface ObservedClient {
 	readonly userId?: string;
 	readonly timeZoneId?: string;
 
-	minTimestamp: number,
+	minTimestamp: number;
 	maxTimestamp: number;
 }
 
 export class ObservedClientBuilder {
-	
 	private _minTimestamp?: number;
 	private _maxTimestamp?: number;
 	private _peerConnections = new Map<string, ObservedPeerConnectionBuilder>();
 	private _clientSamples: ClientSample[] = [];
 	public constructor(
-		private _config: Omit<ObservedClient, 
+		private _config: Omit<
+			ObservedClient,
 			| keyof IterableIterator<ObservedPeerConnection>
 			| 'samples'
 			| 'call'
@@ -36,12 +36,9 @@ export class ObservedClientBuilder {
 			| 'minTimestamp'
 			| 'maxTimestamp'
 		>
-	) {
-		
-	}
+	) {}
 
 	public addClientSample(clientSample: ClientSample) {
-		
 		this._clientSamples.push(clientSample);
 
 		if (clientSample.pcTransports) {
@@ -80,9 +77,8 @@ export class ObservedClientBuilder {
 		if (clientSample.inboundAudioTracks) {
 			for (const trackSample of clientSample.inboundAudioTracks) {
 				const { trackId, peerConnectionId } = trackSample;
-				if (!trackId || !peerConnectionId) 
-					continue;
-				
+				if (!trackId || !peerConnectionId) continue;
+
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
 				builder.addInboundAudioTrack(trackSample);
 			}
@@ -91,31 +87,28 @@ export class ObservedClientBuilder {
 		if (clientSample.inboundVideoTracks) {
 			for (const trackSample of clientSample.inboundVideoTracks) {
 				const { trackId, peerConnectionId } = trackSample;
-				if (!trackId || !peerConnectionId)
-					continue;
-	
+				if (!trackId || !peerConnectionId) continue;
+
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
 				builder.addInboundVideoTrack(trackSample);
 			}
 		}
-	
+
 		if (clientSample.outboundAudioTracks) {
 			for (const trackSample of clientSample.outboundAudioTracks) {
 				const { trackId, peerConnectionId } = trackSample;
-				if (!trackId || !peerConnectionId)
-					continue;
-	
+				if (!trackId || !peerConnectionId) continue;
+
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
 				builder.addOutboundAudioTrack(trackSample);
 			}
 		}
-	
+
 		if (clientSample.outboundVideoTracks) {
 			for (const trackSample of clientSample.outboundVideoTracks) {
 				const { trackId, peerConnectionId } = trackSample;
-				if (!trackId || !peerConnectionId)
-					continue;
-	
+				if (!trackId || !peerConnectionId) continue;
+
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
 				builder.addOutboundVideoTrack(trackSample);
 			}
@@ -124,7 +117,7 @@ export class ObservedClientBuilder {
 		if (this._minTimestamp === undefined || clientSample.timestamp < this._minTimestamp) {
 			this._minTimestamp = clientSample.timestamp;
 		}
-		
+
 		if (this._maxTimestamp === undefined || this._maxTimestamp < clientSample.timestamp) {
 			this._maxTimestamp = clientSample.timestamp;
 		}

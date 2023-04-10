@@ -1,81 +1,68 @@
-import { ObserverSink, SinkConfig, SinkImpl } from "./sinks/ObserverSink";
-import { Sources, SourcesConfig } from "./sources/Sources";
-import { createSimpleStorageProvider, StorageProvider } from "./storages/StorageProvider";
+import { ObserverSink, SinkConfig, SinkImpl } from './sinks/ObserverSink';
+import { Sources, SourcesConfig } from './sources/Sources';
+import { createSimpleStorageProvider, StorageProvider } from './storages/StorageProvider';
 import * as Models from './models/Models';
-import { Evaluator, EvaluatorConfig, EvaluatorProcess } from "./Evaluator";
-import { createSimpleSemaphoreProvider, SemaphoreProvider } from "./common/Semaphore";
-import { ObservedCallConfig, ObservedCallSource } from "./sources/ObservedCallSource";
-import { ObservedClientSource, ObservedClientSourceConfig } from "./sources/ObservedClientSource";
-import { PartialBy } from "./common/utils";
-import { LogLevel } from "./common/logger";
+import { Evaluator, EvaluatorConfig, EvaluatorProcess } from './Evaluator';
+import { createSimpleSemaphoreProvider, SemaphoreProvider } from './common/Semaphore';
+import { ObservedCallSourceConfig, ObservedCallSource } from './sources/ObservedCallSource';
+import { ObservedClientSource, ObservedClientSourceConfig } from './sources/ObservedClientSource';
+import { PartialBy } from './common/utils';
+import { LogLevel } from './common/logger';
 
 export type ObserverConfig = {
 	/**
-	 * 
-	 * Sets the default serviceId for samples. 
-	 * 
+	 *
+	 * Sets the default serviceId for samples.
+	 *
 	 * For more information about a serviceId please visit https://observertc.org
-	 * 
+	 *
 	 */
-	defaultServiceId: string,
+	defaultServiceId: string;
 
 	/**
 	 * Sets the default mediaUnitId for samples.
-	 * 
+	 *
 	 * For more information about a mediaUnitId please visit https://observertc.org
 	 */
-	defaultMediaUnitId: string,
+	defaultMediaUnitId: string;
 
 	/**
 	 * Setup the sources
 	 */
-	sources: SourcesConfig,
-	evaluator: EvaluatorConfig,
-	sink: SinkConfig,
-	storages?: StorageProvider,
-	semaphores?: SemaphoreProvider
+	sources: SourcesConfig;
+	evaluator: EvaluatorConfig;
+	sink: SinkConfig;
+	storages?: StorageProvider;
+	semaphores?: SemaphoreProvider;
 
-	logLevel: LogLevel,
-}
+	logLevel: LogLevel;
+};
 
-
-export type ObserverEventsMap = {
-
-}
-
+export type ObserverEventsMap = {};
 
 export class Observer {
-
 	public static create(providedConfig: Partial<ObserverConfig>): Observer {
-		
-		const config: ObserverConfig = Object.assign({
-			defaultServiceId: 'default-service-id',
-			defaultMediaUnitId: 'default-media-unit-id',
-			sources: {
-				maxSamples: 1000,
-				maxTimeInMs: 10000,
+		const config: ObserverConfig = Object.assign(
+			{
+				defaultServiceId: 'default-service-id',
+				defaultMediaUnitId: 'default-media-unit-id',
+				sources: {
+					maxSamples: 1000,
+					maxTimeInMs: 10000,
+				},
+				evaluator: {
+					fetchSamples: true,
+				},
+				sink: {},
+				logLevel: 'info',
 			},
-			evaluator: {
-				fetchSamples: false,
-			},
-			sink: {
-
-			},
-			logLevel: 'info',
-		}, providedConfig);
-
-		const semaphores = 
-			providedConfig.semaphores ?? 
-			createSimpleSemaphoreProvider();
-		
-		const storages = 
-			providedConfig.storages ??
-			createSimpleStorageProvider();
-		return new Observer(
-			config,
-			storages,
-			semaphores,
+			providedConfig
 		);
+
+		const semaphores = providedConfig.semaphores ?? createSimpleSemaphoreProvider();
+
+		const storages = providedConfig.storages ?? createSimpleStorageProvider();
+		return new Observer(config, storages, semaphores);
 	}
 
 	private _sources: Sources;
@@ -85,16 +72,11 @@ export class Observer {
 	public constructor(
 		public readonly config: ObserverConfig,
 		private readonly _storages: StorageProvider,
-		private readonly _semaphores: SemaphoreProvider,
+		private readonly _semaphores: SemaphoreProvider
 	) {
 		this._sources = new Sources(config.sources);
 		this._sink = new SinkImpl(config.sink);
-		this._evaluator = new Evaluator(
-			this.config.evaluator,
-			this._semaphores.callSemaphore,
-			this._storages,
-			this._sink
-		);
+		this._evaluator = new Evaluator(this.config.evaluator, this._semaphores.callSemaphore, this._storages, this._sink);
 
 		this._sources.on('observed-samples', (event) => {
 			this._evaluator.addObservedSamples(event);
@@ -107,10 +89,12 @@ export class Observer {
 		});
 		this._evaluator.on('ready', () => {
 			this._sink.emit();
-		})
+		});
 	}
 
-	public createCallSource(config: PartialBy<ObservedCallConfig, 'serviceId' | 'mediaUnitId'>): ObservedCallSource {
+	public createCallSource(
+		config: PartialBy<ObservedCallSourceConfig, 'serviceId' | 'mediaUnitId'>
+	): ObservedCallSource {
 		let closed = false;
 		const serviceId = config.serviceId ?? this.config.defaultServiceId;
 		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
@@ -130,7 +114,7 @@ export class Observer {
 				clientSource.close = () => {
 					closeClientSource();
 					clientSources.delete(context.clientId);
-				}
+				};
 				clientSources.set(context.clientId, clientSource);
 				return clientSource;
 			},
@@ -145,11 +129,13 @@ export class Observer {
 				closed = true;
 			},
 			closed,
-		}
+		};
 		return callSource;
 	}
 
-	public createClientSource(config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId'>): ObservedClientSource {
+	public createClientSource(
+		config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId'>
+	): ObservedClientSource {
 		const serviceId = config.serviceId ?? this.config.defaultServiceId;
 		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
 		return this._sources.createClientSource({
@@ -158,7 +144,7 @@ export class Observer {
 			mediaUnitId,
 		});
 	}
-	
+
 	public get sink(): ObserverSink {
 		return this._sink;
 	}
@@ -207,32 +193,20 @@ export class Observer {
 	}
 
 	public async getTrack(trackId: string) {
-		const { 
-			inboundTrackStorage,
-			outboundTrackStorage
-		} = this._storages;
-		const [
-			inbTrack, 
-			outbTrack
-		] = await Promise.all([
+		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
+		const [inbTrack, outbTrack] = await Promise.all([
 			inboundTrackStorage.get(trackId),
-			outboundTrackStorage.get(trackId)
+			outboundTrackStorage.get(trackId),
 		]);
 		if (inbTrack) return inbTrack;
 		else if (outbTrack) return outbTrack;
 	}
 
 	public async getAllTracks(trackIds: Iterable<string>) {
-		const { 
-			inboundTrackStorage,
-			outboundTrackStorage
-		} = this._storages;
-		const [
-			inbTracks, 
-			outbTracks
-		] = await Promise.all([
+		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
+		const [inbTracks, outbTracks] = await Promise.all([
 			inboundTrackStorage.getAll(trackIds),
-			outboundTrackStorage.getAll(trackIds)
+			outboundTrackStorage.getAll(trackIds),
 		]);
 		return new Map([...inbTracks, ...outbTracks]);
 	}
@@ -267,7 +241,7 @@ export class Observer {
 		return sfuStorage.get(sfuId);
 	}
 
-	public async getAllSfus(sfuIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Sfu>>  {
+	public async getAllSfus(sfuIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Sfu>> {
 		const { sfuStorage } = this._storages;
 		return sfuStorage.getAll(sfuIds);
 	}
@@ -277,7 +251,9 @@ export class Observer {
 		return sfuTransportStorage.get(sfuTransportId);
 	}
 
-	public async getAllSfuTransports(sfuTransportIds: Iterable<string>): Promise<ReadonlyMap<string, Models.SfuTransport>> {
+	public async getAllSfuTransports(
+		sfuTransportIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.SfuTransport>> {
 		const { sfuTransportStorage } = this._storages;
 		return sfuTransportStorage.getAll(sfuTransportIds);
 	}
@@ -287,7 +263,9 @@ export class Observer {
 		return sfuInboundRtpPadStorage.get(sfuInboundRtpPadId);
 	}
 
-	public async getAllSfuInboundRtpPads(sfuInboundRtpPadIds: Iterable<string>): Promise<ReadonlyMap<string, Models.SfuInboundRtpPad>> {
+	public async getAllSfuInboundRtpPads(
+		sfuInboundRtpPadIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.SfuInboundRtpPad>> {
 		const { sfuInboundRtpPadStorage } = this._storages;
 		return sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds);
 	}
@@ -297,7 +275,9 @@ export class Observer {
 		return sfuOutboundRtpPadStorage.get(sfuOutboundRtpPadId);
 	}
 
-	public async getAllSfuOutboundRtpPads(sfuOutboundRtpPadIds: Iterable<string>): Promise<ReadonlyMap<string, Models.SfuOutboundRtpPad>> {
+	public async getAllSfuOutboundRtpPads(
+		sfuOutboundRtpPadIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.SfuOutboundRtpPad>> {
 		const { sfuOutboundRtpPadStorage } = this._storages;
 		return sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds);
 	}
@@ -317,7 +297,9 @@ export class Observer {
 		return peerConnectionStorage.get(peerConnectionId);
 	}
 
-	public async getAllPeerConnections(peerConnectionIds: Iterable<string>): Promise<ReadonlyMap<string, Models.PeerConnection>> {
+	public async getAllPeerConnections(
+		peerConnectionIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.PeerConnection>> {
 		const { peerConnectionStorage } = this._storages;
 		return peerConnectionStorage.getAll(peerConnectionIds);
 	}
@@ -327,7 +309,9 @@ export class Observer {
 		return inboundTrackStorage.get(inboundTrackId);
 	}
 
-	public async getAllInboundTracks(inboundTrackIds: Iterable<string>): Promise<ReadonlyMap<string, Models.InboundTrack>> {
+	public async getAllInboundTracks(
+		inboundTrackIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.InboundTrack>> {
 		const { inboundTrackStorage } = this._storages;
 		return inboundTrackStorage.getAll(inboundTrackIds);
 	}
@@ -337,7 +321,9 @@ export class Observer {
 		return outboundTrackStorage.get(outboundTrackId);
 	}
 
-	public async getAllOutboundTracks(outboundTrackIds: Iterable<string>): Promise<ReadonlyMap<string, Models.OutboundTrack>> {
+	public async getAllOutboundTracks(
+		outboundTrackIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.OutboundTrack>> {
 		const { outboundTrackStorage } = this._storages;
 		return outboundTrackStorage.getAll(outboundTrackIds);
 	}
@@ -347,17 +333,16 @@ export class Observer {
 		return sfuSctpChannelStorage.get(sctpChannelId);
 	}
 
-	public async getAllSfuSctpChannel(sctpChannelIds: Iterable<string>): Promise<ReadonlyMap<string, Models.SfuSctpChannel>> {
+	public async getAllSfuSctpChannel(
+		sctpChannelIds: Iterable<string>
+	): Promise<ReadonlyMap<string, Models.SfuSctpChannel>> {
 		const { sfuSctpChannelStorage } = this._storages;
 		return sfuSctpChannelStorage.getAll(sctpChannelIds);
 	}
-
 
 	public get closed() {
 		return this._closed;
 	}
 
-	public close() {
-
-	}
+	public close() {}
 }

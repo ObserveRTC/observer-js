@@ -1,5 +1,5 @@
-import { 
-	CallEventReport, 
+import {
+	CallEventReport,
 	CallMetaReport,
 	ClientDataChannelReport,
 	ClientExtensionReport,
@@ -23,64 +23,60 @@ import { ReportsCollector } from '../common/ReportsCollector';
 
 export type SinkEventsMap = {
 	'call-event': {
-		reports: CallEventReport[]
-	},
+		reports: CallEventReport[];
+	};
 	'call-meta': {
-		reports: CallMetaReport[]
-	},
-	'client-data-channel': { 
-		reports: ClientDataChannelReport[] 
-	},
-	'client-extension': { 
-		reports: ClientExtensionReport[] 
-	},
-	'ice-candidate-pair': { 
-		reports: IceCandidatePairReport[] 
-	},
-  	'inbound-audio-track': { 
-		reports: InboundAudioTrackReport[] 
-	},
-  	'inbound-video-track': { 
-		reports: InboundVideoTrackReport[] 
-	},
+		reports: CallMetaReport[];
+	};
+	'client-data-channel': {
+		reports: ClientDataChannelReport[];
+	};
+	'client-extension': {
+		reports: ClientExtensionReport[];
+	};
+	'ice-candidate-pair': {
+		reports: IceCandidatePairReport[];
+	};
+	'inbound-audio-track': {
+		reports: InboundAudioTrackReport[];
+	};
+	'inbound-video-track': {
+		reports: InboundVideoTrackReport[];
+	};
 	'peer-connection-transport': {
-		reports: PeerConnectionTransportReport[],
-	},
-	'observer-event': 
-	  { reports: ObserverEventReport[] 
-	}
-  	'outbound-audio-track': { 
-		reports: OutboundAudioTrackReport[] 
-	},
-  	'outbound-video-track': { 
-		reports: OutboundVideoTrackReport[] 
-	},
-  	'sfu-event': { 
-		reports: SfuEventReport[] 
-	},
-  	'sfu-extension': { 
-		reports: SfuExtensionReport[] 
-	},
-  	'sfu-inbound-rtp-pad': { 
-		reports: SfuInboundRtpPadReport[] 
-	},
-  	'sfu-outbound-rtp-pad': { 
-		reports: SfuOutboundRtpPadReport[] 
-	},
-  	'sfu-sctp-stream': { 
-		reports: SfuSctpStreamReport[] 
-	},
-  	'sfu-transport': { 
-		reports: SFUTransportReport[] 
-	},
-  	'sfu-meta': { 
-		reports: SfuMetaReport[] 
-	},
-}
+		reports: PeerConnectionTransportReport[];
+	};
+	'observer-event': { reports: ObserverEventReport[] };
+	'outbound-audio-track': {
+		reports: OutboundAudioTrackReport[];
+	};
+	'outbound-video-track': {
+		reports: OutboundVideoTrackReport[];
+	};
+	'sfu-event': {
+		reports: SfuEventReport[];
+	};
+	'sfu-extension': {
+		reports: SfuExtensionReport[];
+	};
+	'sfu-inbound-rtp-pad': {
+		reports: SfuInboundRtpPadReport[];
+	};
+	'sfu-outbound-rtp-pad': {
+		reports: SfuOutboundRtpPadReport[];
+	};
+	'sfu-sctp-stream': {
+		reports: SfuSctpStreamReport[];
+	};
+	'sfu-transport': {
+		reports: SFUTransportReport[];
+	};
+	'sfu-meta': {
+		reports: SfuMetaReport[];
+	};
+};
 
-export type SinkConfig = {
-
-}
+export type SinkConfig = {};
 
 export interface ObserverSink {
 	on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
@@ -88,9 +84,7 @@ export interface ObserverSink {
 	once<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 }
 
-
 export class SinkImpl implements ReportsCollector, ObserverSink {
-	
 	private _emitter = new EventEmitter();
 	private _callEventReports: CallEventReport[] = [];
 	private _callMetaReports: CallMetaReport[] = [];
@@ -99,7 +93,7 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 	private _iceCandidatePairReports: IceCandidatePairReport[] = [];
 	private _inboundAudioTrackReports: InboundAudioTrackReport[] = [];
 	private _inboundVideoTrackReports: InboundVideoTrackReport[] = [];
-	private _peerConnectionTransportReports: PeerConnectionTransportReport[] = []
+	private _peerConnectionTransportReports: PeerConnectionTransportReport[] = [];
 	private _observerEventReports: ObserverEventReport[] = [];
 	private _outboundAudioTrackReports: OutboundAudioTrackReport[] = [];
 	private _outboundVideoTrackReports: OutboundVideoTrackReport[] = [];
@@ -111,16 +105,13 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 	private _sfuTransportReports: SFUTransportReport[] = [];
 	private _sfuMetaReports: SfuMetaReport[] = [];
 
-	public constructor(
-		public readonly config: SinkConfig,
-	) {
-	}
+	public constructor(public readonly config: SinkConfig) {}
 
 	public on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.addListener(event, listener);
 		return this;
 	}
-	
+
 	public off<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.removeListener(event, listener);
 		return this;
@@ -207,63 +198,63 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 		let result = 0;
 		const checkAndEmit = (eventName: keyof SinkEventsMap, reports: any[]) => {
 			if (reports.length > 0) {
-			this._emit(eventName, { reports });
-			result += reports.length;
+				this._emit(eventName, { reports });
+				result += reports.length;
 			}
 		};
 
-		checkAndEmit("call-event", this._callEventReports);
+		checkAndEmit('call-event', this._callEventReports);
 		this._callEventReports = [];
 
-		checkAndEmit("call-meta", this._callMetaReports);
+		checkAndEmit('call-meta', this._callMetaReports);
 		this._callMetaReports = [];
 
-		checkAndEmit("client-data-channel", this._clientDataChannelReports);
+		checkAndEmit('client-data-channel', this._clientDataChannelReports);
 		this._clientDataChannelReports = [];
 
-		checkAndEmit("client-extension", this._clientExtensionReports);
+		checkAndEmit('client-extension', this._clientExtensionReports);
 		this._clientExtensionReports = [];
 
-		checkAndEmit("ice-candidate-pair", this._iceCandidatePairReports);
+		checkAndEmit('ice-candidate-pair', this._iceCandidatePairReports);
 		this._iceCandidatePairReports = [];
 
-		checkAndEmit("inbound-audio-track", this._inboundAudioTrackReports);
+		checkAndEmit('inbound-audio-track', this._inboundAudioTrackReports);
 		this._inboundAudioTrackReports = [];
 
-		checkAndEmit("inbound-video-track", this._inboundVideoTrackReports);
+		checkAndEmit('inbound-video-track', this._inboundVideoTrackReports);
 		this._inboundVideoTrackReports = [];
 
-		checkAndEmit("peer-connection-transport", this._peerConnectionTransportReports);
+		checkAndEmit('peer-connection-transport', this._peerConnectionTransportReports);
 		this._peerConnectionTransportReports = [];
 
-		checkAndEmit("observer-event", this._observerEventReports);
+		checkAndEmit('observer-event', this._observerEventReports);
 		this._observerEventReports = [];
 
-		checkAndEmit("outbound-audio-track", this._outboundAudioTrackReports);
+		checkAndEmit('outbound-audio-track', this._outboundAudioTrackReports);
 		this._outboundAudioTrackReports = [];
 
-		checkAndEmit("outbound-video-track", this._outboundVideoTrackReports);
+		checkAndEmit('outbound-video-track', this._outboundVideoTrackReports);
 		this._outboundVideoTrackReports = [];
 
-		checkAndEmit("sfu-event", this._sfuEventReports);
+		checkAndEmit('sfu-event', this._sfuEventReports);
 		this._sfuEventReports = [];
 
-		checkAndEmit("sfu-extension", this._sfuExtensionReports);
+		checkAndEmit('sfu-extension', this._sfuExtensionReports);
 		this._sfuExtensionReports = [];
 
-		checkAndEmit("sfu-inbound-rtp-pad", this._sfuInboundRtpPadReports);
+		checkAndEmit('sfu-inbound-rtp-pad', this._sfuInboundRtpPadReports);
 		this._sfuInboundRtpPadReports = [];
 
-		checkAndEmit("sfu-outbound-rtp-pad", this._sfuOutboundRtpPadReports);
+		checkAndEmit('sfu-outbound-rtp-pad', this._sfuOutboundRtpPadReports);
 		this._sfuOutboundRtpPadReports = [];
 
-		checkAndEmit("sfu-sctp-stream", this._sfuSctpStreamReports);
+		checkAndEmit('sfu-sctp-stream', this._sfuSctpStreamReports);
 		this._sfuSctpStreamReports = [];
 
-		checkAndEmit("sfu-transport", this._sfuTransportReports);
+		checkAndEmit('sfu-transport', this._sfuTransportReports);
 		this._sfuTransportReports = [];
 
-		checkAndEmit("sfu-meta", this._sfuMetaReports);
+		checkAndEmit('sfu-meta', this._sfuMetaReports);
 		this._sfuMetaReports = [];
 
 		return result;

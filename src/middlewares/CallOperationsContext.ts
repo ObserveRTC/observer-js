@@ -1,27 +1,29 @@
-import { Semaphore } from "../common/Semaphore";
-import { EvaluatorContext } from "../common/types";
-import { Writable } from "../common/utils";
-import { ObservedClientSourceConfig } from "../sources/ObservedClientSource";
+import { Semaphore } from '../common/Semaphore';
+import { EvaluatorContext } from '../common/types';
+import { Writable } from '../common/utils';
+import { ObservedClientSourceConfig } from '../sources/ObservedClientSource';
 
 export type CallOperationsContext = {
-	joinedClients: ObservedClientSourceConfig[],
+	joinedClients: ObservedClientSourceConfig[];
 	detachedClients: (ObservedClientSourceConfig & {
-		detached: number,
-	})[],
+		detached: number;
+	})[];
 
-	evaluatorContext?: Writable<EvaluatorContext>,
-}
+	evaluatorContext?: Writable<EvaluatorContext>;
+};
 
-export type CallOperation = (ObservedClientSourceConfig & {
-	type: 'join'
-}) | (ObservedClientSourceConfig & {
-	type: 'detach',
-	detached: number,
-});
+export type CallOperation =
+	| (ObservedClientSourceConfig & {
+			type: 'join';
+	  })
+	| (ObservedClientSourceConfig & {
+			type: 'detach';
+			detached: number;
+	  });
 
 export function createCallOperationContext(
 	clientOperations: Map<string, CallOperation>,
-	evaluatorContext?: Writable<EvaluatorContext>,
+	evaluatorContext?: Writable<EvaluatorContext>
 ): CallOperationsContext {
 	const joinedClients: CallOperationsContext['joinedClients'] = [];
 	const detachedClients: CallOperationsContext['detachedClients'] = [];
@@ -29,7 +31,7 @@ export function createCallOperationContext(
 		switch (clientOperation.type) {
 			case 'join': {
 				const joinedClient: CallOperationsContext['joinedClients'][number] = {
-					...clientOperation
+					...clientOperation,
 				};
 				joinedClients.push(joinedClient);
 				break;
@@ -48,5 +50,5 @@ export function createCallOperationContext(
 		detachedClients,
 
 		evaluatorContext,
-	}
+	};
 }

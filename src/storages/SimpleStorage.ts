@@ -1,15 +1,10 @@
 import { ObserverStorage } from './ObserverStorage';
 
 export class SimpleStorage<K, V> implements ObserverStorage<K, V> {
-	
 	private _map = new Map<K, V>();
-	
-	public constructor(
-		public readonly id: string
-	) {
 
-	}
-	
+	public constructor(public readonly id: string) {}
+
 	public async size(): Promise<number> {
 		return this._map.size;
 	}
@@ -91,9 +86,8 @@ export class SimpleStorage<K, V> implements ObserverStorage<K, V> {
 	}
 
 	public async *[Symbol.asyncIterator](): AsyncIterableIterator<[K, V]> {
-        for (const entry of this._map.entries()) {
-            yield entry;
-        }
-    }
-
+		for (const entry of this._map.entries()) {
+			yield entry;
+		}
+	}
 }

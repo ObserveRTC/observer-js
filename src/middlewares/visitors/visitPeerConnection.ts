@@ -1,8 +1,8 @@
-import { ObservedPeerConnection } from "../../samples/ObservedPeerConnection";
+import { ObservedPeerConnection } from '../../samples/ObservedPeerConnection';
 import * as Models from '../../models/Models';
-import { ReportsCollector } from "../../common/ReportsCollector";
-import { logger } from "../VisitObservedCallsMiddleware";
-import { PeerConnectionTransportReport } from "@observertc/report-schemas-js";
+import { ReportsCollector } from '../../common/ReportsCollector';
+import { logger } from '../VisitObservedCallsMiddleware';
+import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 
 export function visitPeerConnection(
 	observedPeerConnection: ObservedPeerConnection,
@@ -11,24 +11,11 @@ export function visitPeerConnection(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ) {
-	const {
-		peerConnectionLabel,
-		peerConnectionId,
-	} = observedPeerConnection;
+	const { peerConnectionLabel, peerConnectionId } = observedPeerConnection;
 
-	const {
-		mediaUnitId,
-		clientId,
-		userId,
-		marker,
-		minTimestamp: timestamp,
-	} = observedPeerConnection.client;
+	const { mediaUnitId, clientId, userId, marker, minTimestamp: timestamp } = observedPeerConnection.client;
 
-	const {
-		serviceId,
-		roomId,
-		callId,
-	} = observedPeerConnection.client.call;
+	const { serviceId, roomId, callId } = observedPeerConnection.client.call;
 
 	let storedPeerConnection = storedPeerConnections.get(peerConnectionId);
 	if (!storedPeerConnection) {
@@ -46,7 +33,7 @@ export function visitPeerConnection(
 			label: peerConnectionLabel,
 		});
 		storedPeerConnections.set(peerConnectionId, storedPeerConnection);
-		if (!storedClient.peerConnectionIds.find(pcId => pcId === peerConnectionId)) {
+		if (!storedClient.peerConnectionIds.find((pcId) => pcId === peerConnectionId)) {
 			storedClient.peerConnectionIds.push(peerConnectionId);
 		} else {
 			logger.warn(``);
@@ -63,8 +50,8 @@ export function visitPeerConnection(
 			...pcTransport,
 			timestamp,
 			sampleSeq: -1, // deprecated
-		}
-		reports.addPeerConnectionTransportReports(report)
+		};
+		reports.addPeerConnectionTransportReports(report);
 	}
 
 	if (fetchSamples) {

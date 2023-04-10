@@ -1,4 +1,4 @@
-Server side component for WebRTC monitoring
+Server side component for monitoring WebRTC stack
 ---
 
 Table of Contents:
@@ -46,19 +46,18 @@ observer.addEvaluator(async context => {
         const elapsedTimeInMins = (endedCall.ended -  Number(endedCall.started)) / (60 * 1000);
         console.log(`Call ${endedCall.callId} duration was ${elapsedTimeInMins} minutes`);
     }
-})
+});
+
 ```
 
 The above example do as follows:
- 1. create a client monitor, which collect stats every 5s
- 2. setup a stats collector from a peer connection
- 3. register an event called after stats are collected
- 4. print out the inbound rtps and then close the stats collector we registered in step 3.
+ 1. create an observer to evaluate samples from clients and sfus
+ 2. create a client source object to accept client samples
+ 3. add an evaluator process to evaluate ended calls
 
+## API documentation
 
-## Configurations
-
-
+https://observertc.org/docs/api/observer-js
 
 ## NPM package
 

@@ -1,26 +1,26 @@
-import { ClientSample } from "@observertc/sample-schemas-js";
-import { ObservedCalls, ObservedCallsBuilder } from "../samples/ObservedCalls";
-import { ObservedClientSource, ObservedClientSourceConfig } from "./ObservedClientSource";
+import { ClientSample } from '@observertc/sample-schemas-js';
+import { ObservedCalls, ObservedCallsBuilder } from '../samples/ObservedCalls';
+import { ObservedClientSource, ObservedClientSourceConfig } from './ObservedClientSource';
 import { EventEmitter } from 'events';
-import { createLogger } from "../common/logger";
-import { PartialBy } from "../common/utils";
-import { ObservedCallSource, ObservedCallConfig } from "./ObservedCallSource";
+import { createLogger } from '../common/logger';
+import { PartialBy } from '../common/utils';
+import { ObservedCallSource, ObservedCallSourceConfig } from './ObservedCallSource';
 
 const logger = createLogger('Sources');
 
 export type SourcesConfig = {
 	maxSamples: number;
 	maxTimeInMs: number;
-}
+};
 
 export type SourcesEvents = {
 	'observed-samples': {
-		observedCalls: ObservedCalls,
-		numberOfSamples: number,
-	},
-	'removed-client-source': ObservedClientSourceConfig,
-	'added-client-source': ObservedClientSourceConfig,
-}
+		observedCalls: ObservedCalls;
+		numberOfSamples: number;
+	};
+	'removed-client-source': ObservedClientSourceConfig;
+	'added-client-source': ObservedClientSourceConfig;
+};
 
 export class Sources {
 	private _clientSources = new Map<string, ObservedClientSource>();
@@ -29,17 +29,13 @@ export class Sources {
 	private _timer?: ReturnType<typeof setTimeout>;
 	private _numberOfSamples = 0;
 
-	public constructor(
-		public readonly config: SourcesConfig,
-	) {
-
-	}
+	public constructor(public readonly config: SourcesConfig) {}
 
 	public on<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
 		this._emitter.addListener(event, listener);
 		return this;
 	}
-	
+
 	public off<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
 		this._emitter.removeListener(event, listener);
 		return this;
@@ -65,22 +61,16 @@ export class Sources {
 				if (closed) {
 					throw new Error('Closed ClientSource cannot accept samples');
 				}
-				const observedCallBuilder = this._observedCallsBuilder.getOrCreateObservedCallBuilder(
-					config.callId,
-					() => {
-						return {
-							...source
-						}
-					}
-				);
-				const observedClientBuilder = observedCallBuilder.getOrCreateObservedClientBuilder(
-					config.clientId,
-					() => {
-						return {
-							...source
-						}
-					}
-				);
+				const observedCallBuilder = this._observedCallsBuilder.getOrCreateObservedCallBuilder(config.callId, () => {
+					return {
+						...source,
+					};
+				});
+				const observedClientBuilder = observedCallBuilder.getOrCreateObservedClientBuilder(config.clientId, () => {
+					return {
+						...source,
+					};
+				});
 
 				for (const sample of samples) {
 					observedClientBuilder.addClientSample(sample);
@@ -116,7 +106,7 @@ export class Sources {
 		this._resetTimer();
 		const observedCalls = this._observedCallsBuilder.build();
 		this._observedCallsBuilder = new ObservedCallsBuilder();
-		
+
 		this._emit('observed-samples', {
 			observedCalls,
 			// observedSfus,
@@ -137,5 +127,4 @@ export class Sources {
 			}, this.config.maxTimeInMs);
 		}
 	}
-	
 }

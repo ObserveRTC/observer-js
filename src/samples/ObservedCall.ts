@@ -1,4 +1,4 @@
-import { ObservedClient, ObservedClientBuilder } from "./ObservedClient";
+import { ObservedClient, ObservedClientBuilder } from './ObservedClient';
 
 export interface ObservedCall {
 	readonly serviceId: string;
@@ -10,18 +10,10 @@ export interface ObservedCall {
 
 export class ObservedCallBuilder {
 	private _observedClientBuilders = new Map<string, ObservedClientBuilder>();
-	public constructor(
-		private _config: Omit<
-			ObservedCall, 
-			| 'observedClients'
-			| 'getObservedClient'
-		>
-	) {
-		
-	}
+	public constructor(private _config: Omit<ObservedCall, 'observedClients' | 'getObservedClient'>) {}
 
 	public getOrCreateObservedClientBuilder(
-		clientId: string, 
+		clientId: string,
 		configSupplier: () => ConstructorParameters<typeof ObservedClientBuilder>[0]
 	) {
 		let result = this._observedClientBuilders.get(clientId);
@@ -35,7 +27,7 @@ export class ObservedCallBuilder {
 
 	public build(): ObservedCall {
 		const observedClients = new Map<string, ObservedClient>();
-		
+
 		const observedCall: ObservedCall = {
 			...this._config,
 			observedClients: () => observedClients.values(),

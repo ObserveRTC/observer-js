@@ -1,5 +1,5 @@
-import { InboundAudioTrack } from "@observertc/sample-schemas-js";
-import { ObservedPeerConnection } from "./ObservedPeerConnection";
+import { InboundAudioTrack } from '@observertc/sample-schemas-js';
+import { ObservedPeerConnection } from './ObservedPeerConnection';
 
 export interface ObservedInboundAudioTrack {
 	readonly peerConnection: ObservedPeerConnection;
@@ -9,17 +9,13 @@ export interface ObservedInboundAudioTrack {
 }
 
 export class ObservedInboundAudioTrackBuilder {
-	
 	private _trackSamples: InboundAudioTrack[] = [];
 	public constructor(
-		private _config: Omit<ObservedInboundAudioTrack, 
-			| keyof IterableIterator<ObservedPeerConnection>
-			| 'peerConnection'
-			| 'samples'
+		private _config: Omit<
+			ObservedInboundAudioTrack,
+			keyof IterableIterator<ObservedPeerConnection> | 'peerConnection' | 'samples'
 		>
-	) {
-		
-	}
+	) {}
 
 	public addSample(inboundAudioTrack: InboundAudioTrack) {
 		this._trackSamples.push(inboundAudioTrack);
