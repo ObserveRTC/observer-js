@@ -31,6 +31,7 @@
     "@observertc/sample-schemas-js": "2.2.1-rc.0",
     "@types/events": "^3.0.0",
     "@types/uuid": "^8.3.4",
+    "package-lock-only": "^0.0.4",
     "uuid": "^8.3.2"
   },
   "devDependencies": {
@@ -40,12 +41,11 @@
     "bufferutil": "^4.0.6",
     "eslint": "^8.24.0",
     "jest": "^27.5.0",
+    "pkgfiles": "^2.3.0",
     "prettier": "2.8.7",
     "ts-jest": "^27.1.5",
-    "typedoc": "^0.22.18",
     "typescript": "^4.8.3",
-    "utf-8-validate": "^5.0.8",
-    "pkgfiles": "2.3.0"
+    "utf-8-validate": "^5.0.8"
   },
   "repository": {
     "type": "git",
