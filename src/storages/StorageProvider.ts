@@ -1,4 +1,3 @@
-import { StorageFactory } from './StorageFactory';
 import { ObserverStorage } from './ObserverStorage';
 import * as Models from '../models/Models';
 import { SimpleStorage } from './SimpleStorage';

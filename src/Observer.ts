@@ -8,6 +8,7 @@ import { ObservedCallSourceConfig, ObservedCallSource } from './sources/Observed
 import { ObservedClientSource, ObservedClientSourceConfig } from './sources/ObservedClientSource';
 import { PartialBy } from './common/utils';
 import { createLogger, LogLevel } from './common/logger';
+import { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
 
 const logger = createLogger('Observer');
 
@@ -90,6 +91,7 @@ export class Observer {
 		this._evaluator.on('ready', () => {
 			this._sink.emit();
 		});
+		logger.debug(`Observer is created with config`, this.config);
 	}
 
 	public createCallSource(
@@ -137,17 +139,36 @@ export class Observer {
 	}
 
 	public createClientSource(
-		config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId'>
+		config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId' | 'joined'>
 	): ObservedClientSource {
 		if (this._closed) {
 			throw new Error(`Attempted to create a client source on a closed observer`);
 		}
 		const serviceId = config.serviceId ?? this.config.defaultServiceId;
 		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
+		const joined = config.joined ?? Date.now();
 		return this._sources.createClientSource({
 			...config,
 			serviceId,
 			mediaUnitId,
+			joined,
+		});
+	}
+
+	public createSfuSource(
+		config: PartialBy<ObservedSfuSourceConfig, 'serviceId' | 'mediaUnitId' | 'joined'>
+	): ObservedSfuSource {
+		if (this._closed) {
+			throw new Error(`Attempted to create a sfu source on a closed observer`);
+		}
+		const serviceId = config.serviceId ?? this.config.defaultServiceId;
+		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
+		const joined = config.joined ?? Date.now();
+		return this._sources.createSfuSource({
+			...config,
+			serviceId,
+			mediaUnitId,
+			joined,
 		});
 	}
 

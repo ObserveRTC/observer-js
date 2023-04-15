@@ -14,6 +14,7 @@ import * as Models from '../models/Models';
 import { StorageProvider } from '../storages/StorageProvider';
 import { Message } from '@bufbuild/protobuf';
 import { Middleware } from '../middlewares/Middleware';
+import { ObservedSfus } from '../samples/ObservedSfus';
 
 export type ObserverReport =
 	| CallEventReport
@@ -61,7 +62,28 @@ export interface EvaluatorContext {
 		removed: number;
 	})[];
 
+	readonly joinedSfuIds: string[];
+	readonly detachedSfus: (Omit<Models.Sfu, keyof Message> & {
+		detached: number;
+	})[];
+
+	readonly openedSfuTransportIds: string[];
+	readonly closedSfuTransports: (Omit<Models.SfuTransport, keyof Message> & {
+		closed: number;
+	})[];
+
+	readonly addedSfuInbounRtpPadIds: string[];
+	readonly removedSfuInbounRtpPadIds: (Omit<Models.SfuInboundRtpPad, keyof Message> & {
+		removed: number;
+	})[];
+
+	readonly addedSfuOutbounRtpPadIds: string[];
+	readonly removedSfuOutbounRtpPadIds: (Omit<Models.SfuOutboundRtpPad, keyof Message> & {
+		removed: number;
+	})[];
+
 	readonly observedCalls: ObservedCalls;
+	readonly observedSfus: ObservedSfus;
 	readonly storages: StorageProvider;
 	readonly reports: ReportsCollector;
 }

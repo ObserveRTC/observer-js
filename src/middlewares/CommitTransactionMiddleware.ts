@@ -1,10 +1,4 @@
 import { createLogger } from '../common/logger';
-import { EvaluatorContext } from '../common/types';
-import { ObservedCall } from '../samples/ObservedCall';
-import { ObservedCalls } from '../samples/ObservedCalls';
-import { ObservedClient } from '../samples/ObservedClient';
-import { ObservedPeerConnection } from '../samples/ObservedPeerConnection';
-import { createPeerConnectionOpenedEventReport } from '../sinks/callEventReports';
 import { ObserverStorage } from '../storages/ObserverStorage';
 import { StorageProvider } from '../storages/StorageProvider';
 import { Middleware } from './Middleware';
@@ -266,6 +260,40 @@ export function createCommitTransactionMiddleware(storageProvider: StorageProvid
 		evaluatorContext.removedOutboundVideoTracks.push(...removedUnits(removedOutboundVideoTrackModels));
 		evaluatorContext.addedOutboundVideoTrackIds.push(
 			...addedUnits(oldOutboundVideoTrackModels, updatedOutboundVideoTracks)
+		);
+
+		evaluatorContext.joinedSfuIds.push(
+			...addedUnits(oldSfuModels, updatedSfus)
+		);
+		evaluatorContext.detachedSfus.push(
+			...Array.from(removedSfuModels.values()).map((o) => {
+				return {
+					...o,
+					detached: Date.now(),
+				};
+			})
+		);
+
+		evaluatorContext.openedSfuTransportIds.push(
+			...addedUnits(oldSfuTransportModels, updatedSfuTransports)
+		);
+		evaluatorContext.closedSfuTransports.push(
+			...Array.from(removedSfuTransportModels.values()).map((o) => {
+				return {
+					...o,
+					closed: Date.now(),
+				};
+			})
+		);
+
+		evaluatorContext.removedSfuInbounRtpPadIds.push(...removedUnits(removedSfuInboundRtpPadModels));
+		evaluatorContext.addedSfuInbounRtpPadIds.push(
+			...addedUnits(oldSfuInboundRtpPadModels, updatedSfuInboundRtpPads)
+		);
+
+		evaluatorContext.removedSfuOutbounRtpPadIds.push(...removedUnits(removedSfuOutboundRtpPadModels));
+		evaluatorContext.addedSfuOutbounRtpPadIds.push(
+			...addedUnits(oldSfuOutboundRtpPadModels, updatedSfuOutboundRtpPads)
 		);
 	};
 

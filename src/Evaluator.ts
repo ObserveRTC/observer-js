@@ -103,10 +103,11 @@ export class Evaluator {
 
 	public addObservedSamples(samples: SourcesEvents['observed-samples']): void {
 		// this triggers the evaluation
-		const { observedCalls } = samples;
+		const { observedCalls, observedSfus } = samples;
 
 		const evaluatorContext: EvaluatorContext = {
 			observedCalls,
+			observedSfus,
 			reports: this._reportsCollector,
 			storages: this._storageProvider,
 			joinedClientIds: [],
@@ -123,6 +124,14 @@ export class Evaluator {
 			removedOutboundAudioTracks: [],
 			addedOutboundVideoTrackIds: [],
 			removedOutboundVideoTracks: [],
+			joinedSfuIds: [],
+			detachedSfus: [],
+			openedSfuTransportIds: [],
+			closedSfuTransports: [],
+			addedSfuInbounRtpPadIds: [],
+			removedSfuInbounRtpPadIds: [],
+			addedSfuOutbounRtpPadIds: [],
+			removedSfuOutbounRtpPadIds: [],
 		};
 
 		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);
@@ -178,7 +187,8 @@ export class Evaluator {
 		const transactionContext = await createTransactionContext(
 			evaluatorContext,
 			this._storageProvider,
-			evaluatorContext.observedCalls
+			evaluatorContext.observedCalls,
+			evaluatorContext.observedSfus,
 		);
 
 		await this._transactionProcessor.use(transactionContext);

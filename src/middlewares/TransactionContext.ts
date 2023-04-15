@@ -6,10 +6,12 @@ import { ReportsCollector } from '../common/ReportsCollector';
 import { v4 as uuid } from 'uuid';
 import { EvaluatorContext } from '../common/types';
 import { Writable } from '../common/utils';
+import { ObservedSfus } from '../samples/ObservedSfus';
 
 export type TransactionContext = {
 	id: string;
 	observedCalls: ObservedCalls;
+	observedSfus: ObservedSfus;
 
 	clients: ReadonlyMap<string, Models.Client>;
 
@@ -44,13 +46,14 @@ export type TransactionContext = {
 	deletedSfuSctpChannels: Set<string>;
 
 	// build for another middleware
-	evaluatorContext: Writable<Omit<EvaluatorContext, 'observedCalls'>>;
+	evaluatorContext: Writable<Omit<EvaluatorContext, 'observedCalls' | 'observedSfus'>>;
 };
 
 export async function createTransactionContext(
 	evaluatorContext: EvaluatorContext,
 	storageProvider: StorageProvider,
-	observedCalls: ObservedCalls
+	observedCalls: ObservedCalls,
+	observedSfus: ObservedSfus,
 ): Promise<TransactionContext> {
 	const {
 		clientStorage,
@@ -103,7 +106,8 @@ export async function createTransactionContext(
 	const transactionContext: TransactionContext = {
 		id: uuid(),
 		observedCalls,
-
+		observedSfus,
+		
 		clients,
 		updatedPeerConnections: new Map<string, Models.PeerConnection>(peerConnections.entries()),
 		deletedPeerConnections: new Set<string>(),

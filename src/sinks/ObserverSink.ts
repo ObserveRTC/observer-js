@@ -37,16 +37,18 @@ export type SinkEventsMap = {
 	'ice-candidate-pair': {
 		reports: IceCandidatePairReport[];
 	};
+	'peer-connection-transport': {
+		reports: PeerConnectionTransportReport[];
+	};
 	'inbound-audio-track': {
 		reports: InboundAudioTrackReport[];
 	};
 	'inbound-video-track': {
 		reports: InboundVideoTrackReport[];
 	};
-	'peer-connection-transport': {
-		reports: PeerConnectionTransportReport[];
+	'observer-event': { 
+		reports: ObserverEventReport[] 
 	};
-	'observer-event': { reports: ObserverEventReport[] };
 	'outbound-audio-track': {
 		reports: OutboundAudioTrackReport[];
 	};

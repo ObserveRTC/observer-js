@@ -85,6 +85,7 @@ export function visitClient(
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
+		
 
 		if (clientSample.localSDPs && 0 < clientSample.localSDPs.length) {
 			for (const localSDP of clientSample.localSDPs) {
@@ -107,6 +108,20 @@ export function visitClient(
 					timestamp: Date.now(),
 					payload: extensionStats.payload,
 					extensionType: extensionStats.type,
+				});
+			}
+		}
+
+		if (clientSample.customCallEvents && 0 < clientSample.customCallEvents.length) {
+			for (const callEvent of clientSample.customCallEvents) {
+				reports.addCallEventReport({
+					serviceId,
+					mediaUnitId,
+					roomId,
+					callId,
+					clientId,
+					timestamp: Date.now(),
+					...callEvent,
 				});
 			}
 		}

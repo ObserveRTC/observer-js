@@ -1,10 +1,12 @@
-import { ClientSample } from '@observertc/sample-schemas-js';
+import { ClientSample, SfuSample } from '@observertc/sample-schemas-js';
 import { ObservedCalls, ObservedCallsBuilder } from '../samples/ObservedCalls';
 import { ObservedClientSource, ObservedClientSourceConfig } from './ObservedClientSource';
 import { EventEmitter } from 'events';
 import { createLogger } from '../common/logger';
 import { PartialBy } from '../common/utils';
 import { ObservedCallSource, ObservedCallSourceConfig } from './ObservedCallSource';
+import { ObservedSfuSourceConfig, ObservedSfuSource } from './ObservedSfuSource';
+import { ObservedSfus, ObservedSfusBuilder } from '../samples/ObservedSfus';
 
 const logger = createLogger('Sources');
 
@@ -16,15 +18,20 @@ export type SourcesConfig = {
 export type SourcesEvents = {
 	'observed-samples': {
 		observedCalls: ObservedCalls;
+		observedSfus: ObservedSfus;
 		numberOfSamples: number;
 	};
 	'removed-client-source': ObservedClientSourceConfig;
 	'added-client-source': ObservedClientSourceConfig;
+	'removed-sfu-source': ObservedSfuSourceConfig;
+	'added-sfu-source': ObservedSfuSourceConfig;
 };
 
 export class Sources {
 	private _clientSources = new Map<string, ObservedClientSource>();
+	private _sfuSources = new Map<string, ObservedSfuSource>();
 	private _observedCallsBuilder = new ObservedCallsBuilder();
+	private _observedSfusBuilder = new ObservedSfusBuilder();
 	private _emitter = new EventEmitter();
 	private _timer?: ReturnType<typeof setTimeout>;
 	private _numberOfSamples = 0;
@@ -94,6 +101,50 @@ export class Sources {
 		return source;
 	}
 
+	public createSfuSource(config: PartialBy<ObservedSfuSourceConfig, 'joined'>): ObservedSfuSource {
+		const existingSfuSource = this._sfuSources.get(config.sfuId);
+		if (existingSfuSource) {
+			logger.warn(`Attempted to add a SfuSource for sfu ${config.sfuId} twice`);
+			return existingSfuSource;
+		}
+		let closed = false;
+		// config.joined = config.joined ?? Date.now();
+		const source: ObservedSfuSource = {
+			...config,
+			joined: config.joined ?? Date.now(),
+
+			accept: (...samples: SfuSample[]) => {
+				if (closed) {
+					throw new Error('Closed ClientSource cannot accept samples');
+				}
+				const observedSfuBuilder = this._observedSfusBuilder.getOrCreateObservedSfuBuilder(config.sfuId, () => {
+					return {
+						...source,
+					};
+				});
+
+				for (const sample of samples) {
+					observedSfuBuilder.addSfuSample(sample);
+				}
+				this._incrementSamples(samples.length);
+			},
+			close: () => {
+				if (closed) {
+					return;
+				}
+				closed = true;
+				this._emit('removed-sfu-source', source);
+			},
+			closed,
+		};
+		if (this._sfuSources.size < 1) {
+			this._resetTimer();
+		}
+		this._sfuSources.set(config.sfuId, source);
+		this._emit('added-sfu-source', source);
+		return source;
+	}
+
 	private _incrementSamples(increment = 1) {
 		this._numberOfSamples += increment;
 		if (this.config.maxSamples < 1 || this._numberOfSamples < this.config.maxSamples) {
@@ -106,10 +157,10 @@ export class Sources {
 		this._resetTimer();
 		const observedCalls = this._observedCallsBuilder.build();
 		this._observedCallsBuilder = new ObservedCallsBuilder();
-
+		const observedSfus = this._observedSfusBuilder.build();
 		this._emit('observed-samples', {
 			observedCalls,
-			// observedSfus,
+			observedSfus,
 			numberOfSamples: this._numberOfSamples,
 		});
 		this._numberOfSamples = 0;

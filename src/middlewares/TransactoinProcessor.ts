@@ -4,6 +4,7 @@ import { createCommitTransactionMiddleware } from './CommitTransactionMiddleware
 import { Processor, createProcessor } from './Processor';
 import { TransactionContext } from './TransactionContext';
 import { createVisitObservedCallsMiddleware } from './VisitObservedCallsMiddleware';
+import { createVisitObservedSfusMiddleware } from './VisitObservedSfusMiddleware';
 
 export function createTransactionProcessor(
 	storageProvider: StorageProvider,
@@ -11,8 +12,9 @@ export function createTransactionProcessor(
 	fetchSamples: boolean
 ): Processor<TransactionContext> {
 	return createProcessor(
-		// all of these middleware must execute sequentially!
+		// all of these middlewares must execute sequentially!
 		createVisitObservedCallsMiddleware(reportsCollector, fetchSamples),
+		createVisitObservedSfusMiddleware(reportsCollector, fetchSamples),
 
 		// must be the last one!
 		createCommitTransactionMiddleware(storageProvider)
