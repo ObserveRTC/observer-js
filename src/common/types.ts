@@ -82,6 +82,11 @@ export interface EvaluatorContext {
 		removed: number;
 	})[];
 
+	readonly openedSfuSctpChannelIds: string[];
+	readonly closedSfuSctpChannels: (Omit<Models.SfuSctpChannel, keyof Message> & {
+		closed: number;
+	})[];
+
 	readonly observedCalls: ObservedCalls;
 	readonly observedSfus: ObservedSfus;
 	readonly storages: StorageProvider;

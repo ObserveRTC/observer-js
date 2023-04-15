@@ -60,6 +60,13 @@ export class ObservedSfuBuilder {
 			}
 		}
 
+		if (sfuSample.sctpChannels) {
+			for (const sctpChannel of sfuSample.sctpChannels) {
+				const builder = this._getOrCreateSfuTransportBuilder(sctpChannel.transportId);
+				builder.addSfuSctpChannel(sctpChannel);
+			}
+		}
+
 		if (this._minTimestamp === undefined || sfuSample.timestamp < this._minTimestamp) {
 			this._minTimestamp = sfuSample.timestamp;
 		}

@@ -24,9 +24,7 @@ export function createSimpleStorageProvider(): StorageProvider {
 	const sfuStorage = new SimpleStorage<string, Models.Sfu>('ObserverSfuStorage');
 	const sfuTransportStorage = new SimpleStorage<string, Models.SfuTransport>('ObserverSfuTransportStorage');
 	const sfuInboundRtpPadStorage = new SimpleStorage<string, Models.SfuInboundRtpPad>('ObserverSfuInboundRtpPadStorage');
-	const sfuOutboundRtpPadStorage = new SimpleStorage<string, Models.SfuOutboundRtpPad>(
-		'ObserverSfuOutboundRtpPadStorage'
-	);
+	const sfuOutboundRtpPadStorage = new SimpleStorage<string, Models.SfuOutboundRtpPad>('ObserverSfuOutboundRtpPadStorage');
 	const sfuSctpChannelStorage = new SimpleStorage<string, Models.SfuSctpChannel>('ObserverSfuSctpChannelStorage');
 
 	return {

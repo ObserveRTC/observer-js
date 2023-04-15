@@ -1,16 +1,12 @@
 import { Middleware } from './Middleware';
 import { TransactionContext } from './TransactionContext';
 import { ReportsCollector } from '../common/ReportsCollector';
-import { visitClient } from './visitors/visitClient';
-import { visitPeerConnection } from './visitors/visitPeerConnection';
 import { createLogger } from '../common/logger';
-import { visitInboundAudioTrack } from './visitors/visitInboundAudioTrack';
-import { visitOutboundAudioTrack } from './visitors/visitOutboundAudioTrack';
-import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarcks';
 import { visitSfu } from './visitors/visitSfu';
 import { visitSfuTransport } from './visitors/visitSfuTransport';
 import { visitSfuInboundRtpPad } from './visitors/visitSfuInboundRtpPad';
 import { visitSfuOutboundRtpPad } from './visitors/visitSfuOutboundRtpPad';
+import { visitSfuSctpChannel } from './visitors/visitSfuSctpChannel';
 
 export const logger = createLogger('VisitObservedCallsMiddleware');
 
@@ -33,12 +29,16 @@ export function createVisitObservedSfusMiddleware(
 			updatedSfuOutboundRtpPads,
 			deletedSfuOutboundRtpPads,
 
+			updatedSfuSctpChannels,
+			deletedSfuSctpChannels
+
 		} = transaction;
 
 		const visitedSfuIds = new Set<string>();
 		const visitedSfuTransportIds = new Set<string>();
 		const visitedSfuInboundRtpPadIds = new Set<string>();
 		const visitedSfuOutboundRtpPadIds = new Set<string>();
+		const visitedSfuSctpChannels = new Set<string>();
 
 		for (const observedSfu of observedSfus.observedSfus()) {
 			const { sfuId } = observedSfu;
@@ -74,6 +74,12 @@ export function createVisitObservedSfusMiddleware(
 					visitSfuOutboundRtpPad(sfuOutboundRtpPad, storedSfuTransport, updatedSfuOutboundRtpPads, reports, fetchSamples);
 
 					visitedSfuInboundRtpPadIds.add(sfuOutboundRtpPad.padId);
+				}
+
+				for (const sfuSctpChannel of observedSfuTransport.sfuSctpChannels()) {
+					visitSfuSctpChannel(sfuSctpChannel, storedSfuTransport, updatedSfuSctpChannels, reports, fetchSamples);
+
+					visitedSfuSctpChannels.add(sfuSctpChannel.channelId);
 				}
 			}
 		}
@@ -162,6 +168,29 @@ export function createVisitObservedSfusMiddleware(
 			// also update the sfu transport model
 			if (storedSfuTransport) {
 				storedSfuTransport.outboundRtpPadIds = storedSfuTransport.outboundRtpPadIds.filter((tId) => tId !== rtpPadId);
+			}
+		}
+
+		for (const [channelId, sfuSctpChannel] of Array.from(updatedSfuSctpChannels.entries())) {
+			if (visitedSfuSctpChannels.has(channelId)) {
+				continue;
+			}
+
+			// delete Sfu Outbound Rtp Pad
+			const { serviceId, sfuSctpChannelId, sfuTransportId } = sfuSctpChannel;
+
+			if (!serviceId || !sfuTransportId || !sfuSctpChannelId) {
+				continue;
+			}
+
+			const storedSfuTransport = updatedSfuTransports.get(sfuTransportId);
+
+			updatedSfuSctpChannels.delete(sfuSctpChannelId);
+			deletedSfuSctpChannels.add(sfuSctpChannelId);
+
+			// also update the sfu transport model
+			if (storedSfuTransport) {
+				storedSfuTransport.sctpChannelIds = storedSfuTransport.sctpChannelIds.filter((tId) => tId !== sfuSctpChannelId);
 			}
 		}
 	};

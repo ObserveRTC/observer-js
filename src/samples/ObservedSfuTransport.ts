@@ -1,11 +1,13 @@
 import {
 	SfuInboundRtpPad,
 	SfuOutboundRtpPad,
+	SfuSctpChannel,
 	SfuTransport,
 } from '@observertc/sample-schemas-js';
 import { ObservedSfu } from './ObservedSfu';
 import { ObservedSfuInboundRtpPad, ObservedSfuInboundRtpPadBuilder } from './ObservedSfuInboundRtpPad';
 import { ObservedSfuOutboundRtpPad, ObservedSfuOutboundRtpPadBuilder } from './ObservedSfuOutboundRtpPad';
+import { ObservedSfuSctpChannel, ObservedSfuSctpChannelBuilder } from './ObservedSfuSctpChannel';
 
 export interface ObservedSfuTransport {
 	readonly sfu: ObservedSfu;
@@ -13,6 +15,7 @@ export interface ObservedSfuTransport {
 
 	inboundRtpPads(): IterableIterator<ObservedSfuInboundRtpPad>;
 	outboundRtpPads(): IterableIterator<ObservedSfuOutboundRtpPad>;
+	sfuSctpChannels(): IterableIterator<ObservedSfuSctpChannel>;
 
 	transportSamples(): IterableIterator<SfuTransport>;
 }
@@ -20,6 +23,7 @@ export interface ObservedSfuTransport {
 export class ObservedSfuTransportBuilder {
 	private _inboundRtpPads = new Map<string, ObservedSfuInboundRtpPadBuilder>();
 	private _outboundRtpPads = new Map<string, ObservedSfuOutboundRtpPadBuilder>();
+	private _sctpChannels = new Map<string, ObservedSfuSctpChannelBuilder>();
 	private _transportSamples: SfuTransport[] = [];
 	public constructor(
 		private _config: Omit<
@@ -28,6 +32,7 @@ export class ObservedSfuTransportBuilder {
 			| 'sfu'
 			| 'inboundRtpPads'
 			| 'outboundRtpPads'
+			| 'sfuSctpChannels'
 			| 'transportSamples'
 		>
 	) {}
@@ -72,9 +77,28 @@ export class ObservedSfuTransportBuilder {
 		return result;
 	}
 
+	public addSfuSctpChannel(sfuSctpChannel: SfuSctpChannel) {
+		if (sfuSctpChannel.channelId) {
+			const builder = this._getSfuSctpChannel(sfuSctpChannel.channelId);
+			builder.addSample(sfuSctpChannel);
+		}
+	}
+
+	private _getSfuSctpChannel(channelId: string): ObservedSfuSctpChannelBuilder {
+		let result = this._sctpChannels.get(channelId);
+		if (!result) {
+			result = new ObservedSfuSctpChannelBuilder({
+				channelId,
+			});
+			this._sctpChannels.set(channelId, result);
+		}
+		return result;
+	}
+
 	public build(sfu: ObservedSfu): ObservedSfuTransport {
 		const sfuInboundRtpPads = new Map<string, ObservedSfuInboundRtpPad>();
 		const sfuOutboundRtpPads = new Map<string, ObservedSfuOutboundRtpPad>();
+		const sfuSctpChannelsMap = new Map<string, ObservedSfuSctpChannel>();
 
 		const result: ObservedSfuTransport = {
 			sfu,
@@ -83,6 +107,7 @@ export class ObservedSfuTransportBuilder {
 
 			inboundRtpPads: () => sfuInboundRtpPads.values(),
 			outboundRtpPads: () => sfuOutboundRtpPads.values(),
+			sfuSctpChannels: () => sfuSctpChannelsMap.values(),
 		};
 
 		for (const builder of this._inboundRtpPads.values()) {
@@ -93,6 +118,11 @@ export class ObservedSfuTransportBuilder {
 		for (const builder of this._outboundRtpPads.values()) {
 			const observedOutboundRtpPad = builder.build(result);
 			sfuOutboundRtpPads.set(observedOutboundRtpPad.padId, observedOutboundRtpPad);
+		}
+
+		for (const builder of this._sctpChannels.values()) {
+			const observedSfuSctpChannel = builder.build(result);
+			sfuSctpChannelsMap.set(observedSfuSctpChannel.channelId, observedSfuSctpChannel);
 		}
 
 		return result;

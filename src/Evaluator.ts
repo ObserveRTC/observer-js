@@ -132,6 +132,8 @@ export class Evaluator {
 			removedSfuInbounRtpPadIds: [],
 			addedSfuOutbounRtpPadIds: [],
 			removedSfuOutbounRtpPadIds: [],
+			openedSfuSctpChannelIds: [],
+			closedSfuSctpChannels: [],
 		};
 
 		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);

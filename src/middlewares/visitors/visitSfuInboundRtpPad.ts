@@ -1,7 +1,6 @@
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
-import { SfuInboundRtpPadReport, SFUTransportReport } from '@observertc/report-schemas-js';
-import { ObservedSfuTransport } from '../../samples/ObservedSfuTransport';
+import { SfuInboundRtpPadReport } from '@observertc/report-schemas-js';
 import { ObservedSfuInboundRtpPad } from '../../samples/ObservedSfuInboundRtpPad';
 
 export function visitSfuInboundRtpPad(

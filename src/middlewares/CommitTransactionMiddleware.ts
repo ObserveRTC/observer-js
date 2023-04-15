@@ -295,6 +295,18 @@ export function createCommitTransactionMiddleware(storageProvider: StorageProvid
 		evaluatorContext.addedSfuOutbounRtpPadIds.push(
 			...addedUnits(oldSfuOutboundRtpPadModels, updatedSfuOutboundRtpPads)
 		);
+
+		evaluatorContext.openedSfuSctpChannelIds.push(
+			...addedUnits(oldSfuSctpChannelModels, updatedSfuSctpChannels)
+		);
+		evaluatorContext.closedSfuSctpChannels.push(
+			...Array.from(removedSfuSctpChannelModels.values()).map((o) => {
+				return {
+					...o,
+					closed: Date.now(),
+				};
+			})
+		);
 	};
 
 	const result = async (context: TransactionContext, next?: Middleware<TransactionContext>) => {

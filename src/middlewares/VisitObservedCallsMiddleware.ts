@@ -6,7 +6,7 @@ import { visitPeerConnection } from './visitors/visitPeerConnection';
 import { createLogger } from '../common/logger';
 import { visitInboundAudioTrack } from './visitors/visitInboundAudioTrack';
 import { visitOutboundAudioTrack } from './visitors/visitOutboundAudioTrack';
-import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarcks';
+import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarck';
 
 export const logger = createLogger('VisitObservedCallsMiddleware');
 
