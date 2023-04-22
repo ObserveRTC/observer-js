@@ -176,18 +176,22 @@ export class Observer {
 		return this._sink;
 	}
 
-	public addEvaluator(process: EvaluatorProcess) {
+	public addEvaluators(...processes: EvaluatorProcess[]) {
 		if (this._closed) {
 			throw new Error(`Attempted to add an evaluator to a closed observer`);
 		}
-		this._evaluator.addProcess(process);
+		for (const process of processes) {
+			this._evaluator.addProcess(process);
+		}
 	}
 
-	public removeEvaluator(process: EvaluatorProcess) {
+	public removeEvaluators(...processes: EvaluatorProcess[]) {
 		if (this._closed) {
 			throw new Error(`Attempted to remove an evaluator from a closed observer`);
 		}
-		this._evaluator.removeProcess(process);
+		for (const process of processes) {
+			this._evaluator.removeProcess(process);
+		}
 	}
 
 	public calls(): AsyncIterableIterator<[string, Models.Call]> {
