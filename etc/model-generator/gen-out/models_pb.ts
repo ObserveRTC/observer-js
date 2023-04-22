@@ -5,7 +5,7 @@
 
 import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto2 } from "@bufbuild/protobuf";
-import { Samples_ClientSample_Browser, Samples_ClientSample_Engine, Samples_ClientSample_IceCandidatePair, Samples_ClientSample_IceLocalCandidate, Samples_ClientSample_IceRemoteCandidate, Samples_ClientSample_InboundAudioTrack, Samples_ClientSample_InboundVideoTrack, Samples_ClientSample_OperationSystem, Samples_ClientSample_OutboundAudioTrack, Samples_ClientSample_OutboundVideoTrack, Samples_ClientSample_Platform } from "./samples_pb.js";
+import { Samples_ClientSample_Browser, Samples_ClientSample_Engine, Samples_ClientSample_IceCandidatePair, Samples_ClientSample_IceLocalCandidate, Samples_ClientSample_IceRemoteCandidate, Samples_ClientSample_InboundAudioTrack, Samples_ClientSample_InboundVideoTrack, Samples_ClientSample_OperationSystem, Samples_ClientSample_OutboundAudioTrack, Samples_ClientSample_OutboundVideoTrack, Samples_ClientSample_PeerConnectionTransport, Samples_ClientSample_Platform } from "./samples_pb.js";
 
 /**
  * @generated from message org.observertc.observer.models.Call
@@ -268,6 +268,11 @@ export class PeerConnection extends Message<PeerConnection> {
    */
   iceCandidatePairs: Samples_ClientSample_IceCandidatePair[] = [];
 
+  /**
+   * @generated from field: repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
+   */
+  transports: Samples_ClientSample_PeerConnectionTransport[] = [];
+
   constructor(data?: PartialMessage<PeerConnection>) {
     super();
     proto2.util.initPartial(data, this);
@@ -291,6 +296,7 @@ export class PeerConnection extends Message<PeerConnection> {
     { no: 13, name: "icelocalCandidates", kind: "message", T: Samples_ClientSample_IceLocalCandidate, repeated: true },
     { no: 14, name: "iceRemoteCandidates", kind: "message", T: Samples_ClientSample_IceRemoteCandidate, repeated: true },
     { no: 15, name: "iceCandidatePairs", kind: "message", T: Samples_ClientSample_IceCandidatePair, repeated: true },
+    { no: 16, name: "transports", kind: "message", T: Samples_ClientSample_PeerConnectionTransport, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PeerConnection {

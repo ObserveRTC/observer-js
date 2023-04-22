@@ -78,6 +78,8 @@ message PeerConnection {
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceRemoteCandidate iceRemoteCandidates = 14;
 
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceCandidatePair iceCandidatePairs = 15;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
 }
 
 message InboundTrack {
