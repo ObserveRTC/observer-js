@@ -58,38 +58,59 @@ export function visitPeerConnection(
 	if (fetchSamples) {
 		storedPeerConnection.icelocalCandidates = [];
 		for (const iceLocalCandidate of observedPeerConnection.iceLocalCandidates()) {
+			const {
+				priority,
+				...sample
+			} = iceLocalCandidate;
 			storedPeerConnection.icelocalCandidates.push(new Samples_ClientSample_IceLocalCandidate({
-				...iceLocalCandidate,
-				priority: BigInt(iceLocalCandidate.priority)
+				...sample,
+				priority: BigInt(priority ?? -1)
 			}));
 		}
 
 		storedPeerConnection.iceRemoteCandidates = [];
 		for (const iceRemoteCandidate of observedPeerConnection.iceRemoteCandidates()) {
+			const {
+				priority,
+				...sample
+			} = iceRemoteCandidate;
 			storedPeerConnection.iceRemoteCandidates.push(new Samples_ClientSample_IceRemoteCandidate({
-				...iceRemoteCandidate,
-				priority: BigInt(iceRemoteCandidate.priority)
+				...sample,
+				priority: BigInt(priority ?? -1)
 			}));
 		}
 
 		storedPeerConnection.iceCandidatePairs = [];
 		for (const iceCandidatePair of observedPeerConnection.iceCandidatePairs()) {
+			const {
+				bytesDiscardedOnSend,
+				bytesReceived,
+				bytesSent,
+				lastPacketReceivedTimestamp,
+				lastPacketSentTimestamp,
+				...sample
+			} = iceCandidatePair;
 			storedPeerConnection.iceCandidatePairs.push(new Samples_ClientSample_IceCandidatePair({
-				...iceCandidatePair,
-				bytesDiscardedOnSend: BigInt(iceCandidatePair.bytesDiscardedOnSend),
-				bytesReceived: BigInt(iceCandidatePair.bytesReceived),
-				bytesSent: BigInt(iceCandidatePair.bytesSent),
-				lastPacketReceivedTimestamp: BigInt(iceCandidatePair.lastPacketReceivedTimestamp),
-				lastPacketSentTimestamp: BigInt(iceCandidatePair.lastPacketSentTimestamp),
+				...sample,
+				bytesDiscardedOnSend: BigInt(bytesDiscardedOnSend ?? -1),
+				bytesReceived: BigInt(bytesReceived ?? -1),
+				bytesSent: BigInt(bytesSent ?? -1),
+				lastPacketReceivedTimestamp: BigInt(lastPacketReceivedTimestamp ?? -1),
+				lastPacketSentTimestamp: BigInt(lastPacketSentTimestamp ?? -1),
 			}));
 		}
 
 		storedPeerConnection.transports = [];
 		for (const pcTransport of observedPeerConnection.transportSamples()) {
+			const {
+				bytesReceived,
+				bytesSent,
+				...sample
+			} = pcTransport;
 			storedPeerConnection.transports.push(new Samples_ClientSample_PeerConnectionTransport({
-				...pcTransport,
-				bytesReceived: BigInt(pcTransport.bytesReceived),
-				bytesSent: BigInt(pcTransport.bytesSent),
+				...sample,
+				bytesReceived: BigInt(bytesReceived ?? -1),
+				bytesSent: BigInt(bytesSent ?? -1),
 			}));
 		}
 	}
