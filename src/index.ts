@@ -34,6 +34,7 @@ export type {
 	SfuOutboundRtpPad,
 	SfuSctpChannel,
 	SfuExtensionStats,
+	DataChannel,
 } from '@observertc/sample-schemas-js';
 
 export type {
