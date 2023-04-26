@@ -60,6 +60,8 @@ export type {
 
 export type { ObservedClientSource, ObservedClientSourceConfig } from './sources/ObservedClientSource';
 
+export type { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
+
 export type { ObservedCallSource, ObservedCallSourceConfig as ObservedCallConfig } from './sources/ObservedCallSource';
 
 export type { EvaluatorContext, EvaluatorMiddleware } from './common/types';
