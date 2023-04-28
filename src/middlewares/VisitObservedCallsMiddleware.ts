@@ -7,6 +7,7 @@ import { createLogger } from '../common/logger';
 import { visitInboundAudioTrack } from './visitors/visitInboundAudioTrack';
 import { visitOutboundAudioTrack } from './visitors/visitOutboundAudioTrack';
 import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarck';
+import { CallEventReport, ClientExtensionReport } from '@observertc/report-schemas-js';
 
 export const logger = createLogger('VisitObservedCallsMiddleware');
 
@@ -39,7 +40,7 @@ export function createVisitObservedCallsMiddleware(
 		const visitedInboundVideoTrackIds = new Set<string>();
 		const visitedOutboundAudioTrackIds = new Set<string>();
 		const visitedOutboundVideoTrackIds = new Set<string>();
-
+		
 		for (const observedCall of observedCalls.observedCalls()) {
 			const { callId, serviceId, roomId } = observedCall;
 
@@ -53,8 +54,13 @@ export function createVisitObservedCallsMiddleware(
 					logger.warn('Client has not been registered');
 					continue;
 				}
-
-				visitClient(observedClient, storedClient, reports, fetchSamples);
+				
+				visitClient(
+					observedClient, 
+					storedClient, 
+					reports, 
+					fetchSamples
+				);
 
 				for (const observedPeerConnection of observedClient.observedPeerConnections()) {
 					const { peerConnectionId } = observedPeerConnection;

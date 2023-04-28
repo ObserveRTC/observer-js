@@ -1,4 +1,5 @@
 import { createLogger } from '../common/logger';
+import { ReportsCollector } from '../common/ReportsCollector';
 import { ObserverStorage } from '../storages/ObserverStorage';
 import { StorageProvider } from '../storages/StorageProvider';
 import { Middleware } from './Middleware';
@@ -6,7 +7,10 @@ import { TransactionContext } from './TransactionContext';
 
 const logger = createLogger('CallUpdateMiddleware');
 
-export function createCommitTransactionMiddleware(storageProvider: StorageProvider): Middleware<TransactionContext> {
+export function createCommitTransactionMiddleware(
+	storageProvider: StorageProvider,
+	reports: ReportsCollector,
+): Middleware<TransactionContext> {
 	const process = async (transaction: TransactionContext) => {
 		const {
 			clientStorage,
@@ -307,6 +311,11 @@ export function createCommitTransactionMiddleware(storageProvider: StorageProvid
 				};
 			})
 		);
+
+		evaluatorContext.callEvents = [...reports.getCallEventReports()];
+		evaluatorContext.clientExtensionStats = [...reports.getClientExtensionReports()];
+		evaluatorContext.sfuEvents = [...reports.getSfuEventReports()];
+		evaluatorContext.sfuExtensionStats = [...reports.getSfuExtensionReports()];
 	};
 
 	const result = async (context: TransactionContext, next?: Middleware<TransactionContext>) => {

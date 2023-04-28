@@ -17,6 +17,6 @@ export function createTransactionProcessor(
 		createVisitObservedSfusMiddleware(reportsCollector, fetchSamples),
 
 		// must be the last one!
-		createCommitTransactionMiddleware(storageProvider)
+		createCommitTransactionMiddleware(storageProvider, reportsCollector)
 	);
 }

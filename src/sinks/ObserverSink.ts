@@ -198,6 +198,22 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 		this._sfuMetaReports.push(report);
 	}
 
+	public getCallEventReports(): CallEventReport[] {
+		return this._callEventReports;
+	}
+
+	public getClientExtensionReports(): ClientExtensionReport[] {
+		return this._clientExtensionReports;
+	}
+
+	public getSfuEventReports(): SfuEventReport[] {
+		return this._sfuEventReports;
+	}
+
+	public getSfuExtensionReports(): SfuExtensionReport[] {
+		return this._sfuExtensionReports;
+	}
+
 	public emit(): number {
 		let result = 0;
 		const checkAndEmit = (eventName: keyof SinkEventsMap, reports: any[]) => {

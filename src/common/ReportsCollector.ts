@@ -38,4 +38,9 @@ export interface ReportsCollector {
 	addSfuSctpStreamReport(report: SfuSctpStreamReport): void;
 	addSfuTransportReport(report: SFUTransportReport): void;
 	addSfuMetaReport(report: SfuMetaReport): void;
+
+	getCallEventReports(): CallEventReport[];
+	getClientExtensionReports(): ClientExtensionReport[];
+	getSfuEventReports(): SfuEventReport[];
+	getSfuExtensionReports(): SfuExtensionReport[];
 }

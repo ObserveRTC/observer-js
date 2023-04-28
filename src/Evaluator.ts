@@ -134,6 +134,11 @@ export class Evaluator {
 			removedSfuOutbounRtpPadIds: [],
 			openedSfuSctpChannelIds: [],
 			closedSfuSctpChannels: [],
+			
+			clientExtensionStats: [],
+			callEvents: [],
+			sfuEvents: [],
+			sfuExtensionStats: [],
 		};
 
 		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);

@@ -7,6 +7,8 @@ import {
 	OutboundAudioTrackReport,
 	OutboundVideoTrackReport,
 	PeerConnectionTransportReport,
+	SfuEventReport,
+	SfuExtensionReport,
 } from '@observertc/report-schemas-js';
 import { ObservedCalls } from '../samples/ObservedCalls';
 import { ReportsCollector } from './ReportsCollector';
@@ -91,6 +93,11 @@ export interface EvaluatorContext {
 	readonly observedSfus: ObservedSfus;
 	readonly storages: StorageProvider;
 	readonly reports: ReportsCollector;
+
+	readonly clientExtensionStats: ClientExtensionReport[],
+	readonly callEvents: CallEventReport[],
+	readonly sfuEvents: SfuEventReport[],
+	readonly sfuExtensionStats: SfuExtensionReport[],
 }
 
 export type EvaluatorMiddleware = Middleware<EvaluatorContext>;
