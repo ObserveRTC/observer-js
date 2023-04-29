@@ -85,13 +85,13 @@ export type SinkEventsMap = {
 export type SinkConfig = Record<string, unknown>;
 export type ObserverSinkProcess = (observerSinkContext: ObserverSinkContext) => Promise<void>;
 
-export interface ObserverSinkEmitter {
+export interface ObserverReportsEmitter {
 	on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 	off<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 	once<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 }
 
-export class SinkImpl implements ReportsCollector, ObserverSinkEmitter {
+export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 	private _index = 0;
 	private _processes = new Map<number, Promise<void>>();
 	private _customProcesses = new Map<ObserverSinkProcess, Middleware<ObserverSinkContext>>();

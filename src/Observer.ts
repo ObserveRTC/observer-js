@@ -1,4 +1,4 @@
-import { ObserverSinkEmitter, ObserverSinkProcess, SinkConfig, SinkImpl } from './sinks/ObserverSink';
+import { ObserverReportsEmitter, ObserverSinkProcess, SinkConfig, SinkImpl } from './sinks/ObserverSink';
 import { Sources, SourcesConfig } from './sources/Sources';
 import { createSimpleStorageProvider, StorageProvider } from './storages/StorageProvider';
 import * as Models from './models/Models';
@@ -172,7 +172,7 @@ export class Observer {
 		});
 	}
 
-	public get sink(): ObserverSinkEmitter {
+	public get reports(): ObserverReportsEmitter {
 		return this._sink;
 	}
 

@@ -5,7 +5,7 @@ export type { EvaluatorConfig, EvaluatorProcess } from './Evaluator';
 export type { SourcesConfig } from './sources/Sources';
 
 export { Observer } from './Observer';
-export type { ObserverSinkEmitter as ObserverSink } from './sinks/ObserverSink';
+export type { ObserverReportsEmitter, ObserverSinkProcess } from './sinks/ObserverSink';
 export type { ObserverStorage } from './storages/ObserverStorage';
 export type { StorageProvider } from './storages/StorageProvider';
 export * as Models from './models/Models';
