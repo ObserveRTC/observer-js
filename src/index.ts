@@ -5,7 +5,7 @@ export type { EvaluatorConfig, EvaluatorProcess } from './Evaluator';
 export type { SourcesConfig } from './sources/Sources';
 
 export { Observer } from './Observer';
-export type { ObserverSink } from './sinks/ObserverSink';
+export type { ObserverSinkEmitter as ObserverSink } from './sinks/ObserverSink';
 export type { ObserverStorage } from './storages/ObserverStorage';
 export type { StorageProvider } from './storages/StorageProvider';
 export * as Models from './models/Models';
@@ -64,7 +64,7 @@ export type { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/Obser
 
 export type { ObservedCallSource, ObservedCallSourceConfig as ObservedCallConfig } from './sources/ObservedCallSource';
 
-export type { EvaluatorContext, EvaluatorMiddleware } from './common/types';
+export type { EvaluatorContext, EvaluatorMiddleware, ObserverSinkContext, ObserverSinkMiddleware } from './common/types';
 
 import { Observer, ObserverConfig } from './Observer';
 export function createObserver(config?: Partial<ObserverConfig>) {

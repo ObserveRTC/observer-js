@@ -20,6 +20,10 @@ import {
 } from '@observertc/report-schemas-js';
 import { EventEmitter } from 'events';
 import { ReportsCollector } from '../common/ReportsCollector';
+import { ObserverSinkContext } from '../common/types';
+import { Middleware } from '../middlewares/Middleware';
+import { createProcessor, Processor } from '../middlewares/Processor';
+import { logger } from '../middlewares/VisitObservedCallsMiddleware';
 
 export type SinkEventsMap = {
 	'call-event': {
@@ -79,14 +83,20 @@ export type SinkEventsMap = {
 };
 
 export type SinkConfig = Record<string, unknown>;
+export type ObserverSinkProcess = (observerSinkContext: ObserverSinkContext) => Promise<void>;
 
-export interface ObserverSink {
+export interface ObserverSinkEmitter {
 	on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 	off<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 	once<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
 }
 
-export class SinkImpl implements ReportsCollector, ObserverSink {
+export class SinkImpl implements ReportsCollector, ObserverSinkEmitter {
+	private _index = 0;
+	private _processes = new Map<number, Promise<void>>();
+	private _customProcesses = new Map<ObserverSinkProcess, Middleware<ObserverSinkContext>>();
+	private readonly _processor: Processor<ObserverSinkContext>;
+	
 	private _emitter = new EventEmitter();
 	private _callEventReports: CallEventReport[] = [];
 	private _callMetaReports: CallMetaReport[] = [];
@@ -108,8 +118,9 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 	private _sfuMetaReports: SfuMetaReport[] = [];
 
 	public constructor(public readonly config: SinkConfig) {
-		// empty block
+		this._processor = createProcessor();
 	}
+
 
 	public on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.addListener(event, listener);
@@ -214,6 +225,55 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 		return this._sfuExtensionReports;
 	}
 
+	public addProcess(process: ObserverSinkProcess) {
+		const middleware: Middleware<ObserverSinkContext> = async (context, next) => {
+			await process(context);
+			if (next) await next(context);
+		};
+		this._customProcesses.set(process, middleware);
+		this._processor.addMiddleware(middleware);
+	}
+
+	public removeProcess(process: ObserverSinkProcess) {
+		const middleware = this._customProcesses.get(process);
+		if (!middleware) {
+			return;
+		}
+		this._customProcesses.delete(process);
+		this._processor.removeMiddleware(middleware);
+	}
+
+	private async _process(context: ObserverSinkContext): Promise<void> {
+		if (this._processor.getSize() < 1) {
+			// no process to execute
+			return;
+		}
+		if (this._processes.has(this._index)) {
+			logger.warn(`The sink process has been called while the previous process has not yet completed. This may indicate that the observer is attempting to process more reports than it can handle.`);
+		}
+
+		const actualBlockingPoint = this._processes.get(this._index) ?? Promise.resolve();
+		const index = ++this._index;
+		const result = new Promise<void>((resolve, reject) => {
+			actualBlockingPoint.then(() => {
+				this._processor.use(context)
+					.then(() => resolve())
+					.catch((err) => reject(err));
+			});
+		});
+		const nextBlockingPoint = new Promise<void>((resolve) => {
+			result.then(() => {
+				this._processes.delete(index);
+				resolve();
+			}).catch(() => {
+				this._processes.delete(index);
+				resolve();
+			});
+		});
+		this._processes.set(index, nextBlockingPoint);
+		return result;
+	}
+
 	public emit(): number {
 		let result = 0;
 		const checkAndEmit = (eventName: keyof SinkEventsMap, reports: any[]) => {
@@ -222,6 +282,11 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 				result += reports.length;
 			}
 		};
+		
+		const context = this._createObserverSinkContext();
+		this._process(context).catch(err => {
+			logger.error(`Error occurred while processing reports`, err);
+		})
 
 		checkAndEmit('call-event', this._callEventReports);
 		this._callEventReports = [];
@@ -283,4 +348,46 @@ export class SinkImpl implements ReportsCollector, ObserverSink {
 	private _emit<K extends keyof SinkEventsMap>(event: K, reports: SinkEventsMap[K]): boolean {
 		return this._emitter.emit(event, reports);
 	}
+
+	private  _createObserverSinkContext(): ObserverSinkContext {
+		const callEventReports = [...this._callEventReports];
+		const callMetaReports = [...this._callMetaReports];
+		const clientDataChannelReports = [...this._clientDataChannelReports];
+		const clientExtensionReports = [...this._clientExtensionReports];
+		const iceCandidatePairReports = [...this._iceCandidatePairReports];
+		const inboundAudioTrackReports = [...this._inboundAudioTrackReports];
+		const inboundVideoTrackReports = [...this._inboundVideoTrackReports];
+		const peerConnectionTransportReports = [...this._peerConnectionTransportReports];
+		const observerEventReports = [...this._observerEventReports];
+		const outboundAudioTrackReports = [...this._outboundAudioTrackReports];
+		const outboundVideoTrackReports = [...this._outboundVideoTrackReports];
+		const sfuEventReports = [...this._sfuEventReports];
+		const sfuExtensionReports = [...this._sfuExtensionReports];
+		const sfuInboundRtpPadReports = [...this._sfuInboundRtpPadReports];
+		const sfuOutboundRtpPadReports = [...this._sfuOutboundRtpPadReports];
+		const sfuSctpStreamReports = [...this._sfuSctpStreamReports];
+		const sfuTransportReports = [...this._sfuTransportReports];
+		const sfuMetaReports = [...this._sfuMetaReports];
+	  
+		return {
+		  callEventReports,
+		  callMetaReports,
+		  clientDataChannelReports,
+		  clientExtensionReports,
+		  iceCandidatePairReports,
+		  inboundAudioTrackReports,
+		  inboundVideoTrackReports,
+		  peerConnectionTransportReports,
+		  observerEventReports,
+		  outboundAudioTrackReports,
+		  outboundVideoTrackReports,
+		  sfuEventReports,
+		  sfuExtensionReports,
+		  sfuInboundRtpPadReports,
+		  sfuOutboundRtpPadReports,
+		  sfuSctpStreamReports,
+		  sfuTransportReports,
+		  sfuMetaReports,
+		};
+	  }
 }

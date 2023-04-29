@@ -1,14 +1,22 @@
 import {
 	CallEventReport,
 	CallMetaReport,
+	ClientDataChannelReport,
 	ClientExtensionReport,
+	IceCandidatePairReport,
 	InboundAudioTrackReport,
 	InboundVideoTrackReport,
+	ObserverEventReport,
 	OutboundAudioTrackReport,
 	OutboundVideoTrackReport,
 	PeerConnectionTransportReport,
 	SfuEventReport,
 	SfuExtensionReport,
+	SfuInboundRtpPadReport,
+	SfuMetaReport,
+	SfuOutboundRtpPadReport,
+	SfuSctpStreamReport,
+	SFUTransportReport,
 } from '@observertc/report-schemas-js';
 import { ObservedCalls } from '../samples/ObservedCalls';
 import { ReportsCollector } from './ReportsCollector';
@@ -102,6 +110,25 @@ export interface EvaluatorContext {
 
 export type EvaluatorMiddleware = Middleware<EvaluatorContext>;
 
-// const c: EvaluatorContext;
+export interface ObserverSinkContext {
+	readonly callEventReports: CallEventReport[];
+	readonly callMetaReports: CallMetaReport[];
+	readonly clientDataChannelReports: ClientDataChannelReport[];
+	readonly clientExtensionReports: ClientExtensionReport[];
+	readonly iceCandidatePairReports: IceCandidatePairReport[];
+	readonly inboundAudioTrackReports: InboundAudioTrackReport[];
+	readonly inboundVideoTrackReports: InboundVideoTrackReport[];
+	readonly peerConnectionTransportReports: PeerConnectionTransportReport[];
+	readonly observerEventReports: ObserverEventReport[];
+	readonly outboundAudioTrackReports: OutboundAudioTrackReport[];
+	readonly outboundVideoTrackReports: OutboundVideoTrackReport[];
+	readonly sfuEventReports: SfuEventReport[];
+	readonly sfuExtensionReports: SfuExtensionReport[];
+	readonly sfuInboundRtpPadReports: SfuInboundRtpPadReport[];
+	readonly sfuOutboundRtpPadReports: SfuOutboundRtpPadReport[];
+	readonly sfuSctpStreamReports: SfuSctpStreamReport[];
+	readonly sfuTransportReports: SFUTransportReport[];
+	readonly sfuMetaReports: SfuMetaReport[];
+}
 
-// c.endedCalls[0].
+export type ObserverSinkMiddleware = Middleware<ObserverSinkContext>;

@@ -7,6 +7,7 @@ export interface Processor<T> {
 	use(value: T): Promise<void | T>;
 	addMiddleware(...middlewares: Middleware<T>[]): Processor<T>;
 	removeMiddleware(...middlewares: Middleware<T>[]): Processor<T>;
+	getSize(): number;
 }
 
 export function createProcessor<T>(...processes: Middleware<T>[]): Processor<T> {
@@ -44,6 +45,9 @@ export function createProcessor<T>(...processes: Middleware<T>[]): Processor<T> 
 
 			return executeMiddleware(value, 0);
 		},
+		getSize: (): number => {
+			return stack.length;
+		}
 	};
 
 	return result;

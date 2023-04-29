@@ -1,6 +1,6 @@
 import { createLogger } from './common/logger';
 import { Semaphore } from './common/Semaphore';
-import { EvaluatorContext } from './common/types';
+import { EvaluatorContext, ObserverSinkContext } from './common/types';
 import { ReportsCollector } from './common/ReportsCollector';
 import { ObservedClientSourceConfig } from './sources/ObservedClientSource';
 import { SourcesEvents } from './sources/Sources';
@@ -27,6 +27,8 @@ export type EvaluatorProcess = (evaluatorContext: EvaluatorContext) => Promise<v
 
 export class Evaluator {
 	private _index = 0;
+	private _evaluations = new Map<number, Promise<void>>();
+
 	private _clientOperations = new Map<string, CallOperation>();
 	private _emitter = new EventEmitter();
 
@@ -35,7 +37,7 @@ export class Evaluator {
 	private _transactionProcessor: Processor<TransactionContext>;
 	private _customProcessor: Processor<EvaluatorContext>;
 
-	private _evaluations = new Map<number, Promise<void>>();
+	
 
 	public constructor(
 		public readonly config: EvaluatorConfig,

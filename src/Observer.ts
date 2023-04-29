@@ -1,4 +1,4 @@
-import { ObserverSink, SinkConfig, SinkImpl } from './sinks/ObserverSink';
+import { ObserverSinkEmitter, ObserverSinkProcess, SinkConfig, SinkImpl } from './sinks/ObserverSink';
 import { Sources, SourcesConfig } from './sources/Sources';
 import { createSimpleStorageProvider, StorageProvider } from './storages/StorageProvider';
 import * as Models from './models/Models';
@@ -172,7 +172,7 @@ export class Observer {
 		});
 	}
 
-	public get sink(): ObserverSink {
+	public get sink(): ObserverSinkEmitter {
 		return this._sink;
 	}
 
@@ -191,6 +191,24 @@ export class Observer {
 		}
 		for (const process of processes) {
 			this._evaluator.removeProcess(process);
+		}
+	}
+
+	public addSinks(...processes: ObserverSinkProcess[]) {
+		if (this._closed) {
+			throw new Error(`Attempted to add an evaluator to a closed observer`);
+		}
+		for (const process of processes) {
+			this._sink.addProcess(process);
+		}
+	}
+
+	public removeSinks(...processes: ObserverSinkProcess[]) {
+		if (this._closed) {
+			throw new Error(`Attempted to remove an evaluator from a closed observer`);
+		}
+		for (const process of processes) {
+			this._sink.removeProcess(process);
 		}
 	}
 
