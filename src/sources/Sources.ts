@@ -66,7 +66,7 @@ export class Sources {
 
 			accept: (...samples: ClientSample[]) => {
 				if (closed) {
-					throw new Error('Closed ClientSource cannot accept samples');
+					throw new Error('Cannot accept ClientSample, because the ClientSource is closed');
 				}
 				const observedCallBuilder = this._observedCallsBuilder.getOrCreateObservedCallBuilder(config.callId, () => {
 					return {
@@ -89,6 +89,7 @@ export class Sources {
 					return;
 				}
 				closed = true;
+				this._clientSources.delete(config.clientId);
 				this._emit('removed-client-source', source);
 			},
 			closed,
@@ -115,7 +116,7 @@ export class Sources {
 
 			accept: (...samples: SfuSample[]) => {
 				if (closed) {
-					throw new Error('Closed ClientSource cannot accept samples');
+					throw new Error('Cannot accept SfuSample, because the SfuSource is closed');
 				}
 				const observedSfuBuilder = this._observedSfusBuilder.getOrCreateObservedSfuBuilder(config.sfuId, () => {
 					return {
@@ -133,6 +134,7 @@ export class Sources {
 					return;
 				}
 				closed = true;
+				this._sfuSources.delete(config.sfuId);
 				this._emit('removed-sfu-source', source);
 			},
 			closed,
@@ -158,6 +160,7 @@ export class Sources {
 		const observedCalls = this._observedCallsBuilder.build();
 		this._observedCallsBuilder = new ObservedCallsBuilder();
 		const observedSfus = this._observedSfusBuilder.build();
+		this._observedSfusBuilder = new ObservedSfusBuilder();
 		this._emit('observed-samples', {
 			observedCalls,
 			observedSfus,
