@@ -3,11 +3,9 @@ import { StorageProvider } from '../storages/StorageProvider';
 import * as Models from '../models/Models';
 import { createCallStartedEventReport, createClientJoinedEventReport } from '../sinks/callEventReports';
 import { ReportsCollector } from '../common/ReportsCollector';
-import { createClosePeerConnectionProcess } from './closePeerConnectionProcess';
 import { createLogger } from '../common/logger';
 import { ObservedClientSourceConfig } from '../sources/ObservedClientSource';
 import { Writable } from '../common/utils';
-import { Semaphore } from '../common/Semaphore';
 
 const logger = createLogger('ClientLeftProcess');
 
@@ -21,7 +19,6 @@ export function createJoinClientProcess(
 	storageProvider: StorageProvider,
 	reports: ReportsCollector
 ): (input: JoinClientProcessInput) => Promise<void> {
-	const peerConnectionClosedProcess = createClosePeerConnectionProcess(storageProvider);
 	const process = async (context: JoinClientProcessInput) => {
 		const { clients: joinedClients, evaluatorContext } = context;
 		if (joinedClients.length < 1) {
@@ -60,6 +57,7 @@ export function createJoinClientProcess(
 					roomId,
 					callId,
 					clientId,
+					joined: BigInt(timestamp),
 					timeZoneId,
 					marker,
 				})

@@ -152,9 +152,6 @@ export class Evaluator {
 			})
 			.catch((err) => {
 				logger.warn(`Error occurred while evaluating`, err);
-			})
-			.finally(() => {
-				this._emit('ready', undefined);
 			});
 	}
 

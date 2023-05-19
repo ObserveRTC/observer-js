@@ -87,6 +87,7 @@ export class ObservedPeerConnectionBuilder {
 			result = new ObservedInboundAudioTrackBuilder({
 				trackId,
 			});
+			this._inboundAudioTracks.set(trackId, result);
 		}
 		return result;
 	}

@@ -7,7 +7,7 @@ import { createLogger } from '../common/logger';
 import { visitInboundAudioTrack } from './visitors/visitInboundAudioTrack';
 import { visitOutboundAudioTrack } from './visitors/visitOutboundAudioTrack';
 import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarck';
-import { CallEventReport, ClientExtensionReport } from '@observertc/report-schemas-js';
+import { visitInboundVideoTrack } from './visitors/visitInboundVideoTrack';
 
 export const logger = createLogger('VisitObservedCallsMiddleware');
 
@@ -80,7 +80,6 @@ export function createVisitObservedCallsMiddleware(
 
 					for (const observedInboundAudioTrack of observedPeerConnection.inboundAudioTracks()) {
 						const { trackId } = observedInboundAudioTrack;
-
 						visitInboundAudioTrack(
 							observedInboundAudioTrack,
 							storedPeerConnection,
@@ -95,7 +94,7 @@ export function createVisitObservedCallsMiddleware(
 					for (const observedInboundVideoTrack of observedPeerConnection.inboundVideoTracks()) {
 						const { trackId } = observedInboundVideoTrack;
 
-						visitInboundAudioTrack(
+						visitInboundVideoTrack(
 							observedInboundVideoTrack,
 							storedPeerConnection,
 							updatedInboundVideoTracks,

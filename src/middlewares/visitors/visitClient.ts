@@ -20,13 +20,17 @@ export function visitClient(
 	const { callId, serviceId, roomId } = observedClient.call;
 
 	for (const clientSample of observedClient.samples()) {
-		if (clientSample.os) {
+		if (clientSample.os && (
+			client.operationSystem?.name !== clientSample.os.name || 
+			client.operationSystem?.version !== clientSample.os.version ||
+			client.operationSystem?.versionName !== clientSample.os.versionName
+		)) {
 			if (fetchSamples) {
 				client.operationSystem = new Samples_ClientSample_OperationSystem({
 					...clientSample.os,
 				});
 			}
-
+			
 			const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 				type: CallMetaType.OPERATION_SYSTEM,
 				payload: clientSample.os,
@@ -34,7 +38,10 @@ export function visitClient(
 			reports.addCallMetaReport(callMetaReport);
 		}
 
-		if (clientSample.engine) {
+		if (clientSample.engine && (
+			client.engine?.name !== clientSample.engine.name || 
+			client.engine?.version !== clientSample.engine.version
+		)) {
 			if (fetchSamples) {
 				client.engine = new Samples_ClientSample_Engine({
 					...clientSample.engine,
@@ -48,7 +55,11 @@ export function visitClient(
 			reports.addCallMetaReport(callMetaReport);
 		}
 
-		if (clientSample.platform) {
+		if (clientSample.platform && (
+			client.platform?.model !== clientSample.platform.model || 
+			client.platform?.type !== clientSample.platform.type ||
+			client.platform?.vendor !== clientSample.platform.vendor
+		)) {
 			if (fetchSamples) {
 				client.platform = new Samples_ClientSample_Platform({
 					...clientSample.platform,
@@ -62,7 +73,10 @@ export function visitClient(
 			reports.addCallMetaReport(callMetaReport);
 		}
 
-		if (clientSample.browser) {
+		if (clientSample.browser && (
+			client.browser?.name !== clientSample.browser.name || 
+			client.browser?.version !== clientSample.browser.version
+		)) {
 			if (fetchSamples) {
 				client.browser = new Samples_ClientSample_Browser({
 					...clientSample.browser,
