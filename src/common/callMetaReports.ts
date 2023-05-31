@@ -82,6 +82,7 @@ export function createCallMetaReport(
 	callId: string,
 	clientId: string,
 	reportType: CallMetaReportType,
+	userId?: string,
 	timestamp?: number
 ) {
 	const report: CallMetaReport = {
@@ -91,6 +92,7 @@ export function createCallMetaReport(
 		roomId,
 		callId,
 		clientId,
+		userId,
 		payload: JSON.stringify(reportType.payload),
 		timestamp: timestamp ?? Date.now(),
 	};

@@ -10,9 +10,12 @@ export function visitInboundAudioTrack(
 	storedPeerConnection: Models.PeerConnection,
 	storedInboundTracks: Map<string, Models.InboundTrack>,
 	reports: ReportsCollector,
-	fetchSamples: boolean
+	fetchSamples: boolean,
+	remoteTrackId?: string,
+	remotePeerConnectionId?: string,
+	remoteClientId?: string,
 ) {
-	const { trackId } = observedInboundAudioTrack;
+	const { trackId, sfuStreamId, sfuSinkId } = observedInboundAudioTrack;
 
 	const { peerConnectionId } = observedInboundAudioTrack.peerConnection;
 
@@ -25,7 +28,7 @@ export function visitInboundAudioTrack(
 	} = observedInboundAudioTrack.peerConnection.client;
 
 	const { serviceId, roomId, callId } = observedInboundAudioTrack.peerConnection.client.call;
-
+	
 	let storedInboundAudioTrack = storedInboundTracks.get(trackId);
 	if (!storedInboundAudioTrack) {
 		storedInboundAudioTrack = new Models.InboundTrack({
@@ -33,10 +36,13 @@ export function visitInboundAudioTrack(
 			roomId,
 			callId,
 			clientId,
+			kind: 'audio',
 			peerConnectionId,
 			mediaUnitId,
 			trackId,
-
+			sfuSinkId,
+			sfuStreamId,
+			
 			userId,
 			marker,
 		});
@@ -58,11 +64,15 @@ export function visitInboundAudioTrack(
 			roomId,
 			callId,
 			clientId,
+			userId,
 			mediaUnitId,
 			peerConnectionId,
 			...inboundAudioSample,
 			timestamp,
 			sampleSeq: -1,
+			remoteClientId,
+			remotePeerConnectionId,
+			remoteTrackId,
 		};
 		reports.addInboundAudioTrackReport(report);
 
@@ -93,6 +103,6 @@ export function visitInboundAudioTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
-
+	storedInboundAudioTrack.ssrc = [...statsMap.keys()];
 	storedInboundAudioTrack.videoStats = Array.from(statsMap.values());
 }

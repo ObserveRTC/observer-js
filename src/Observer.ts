@@ -53,6 +53,7 @@ export class Observer {
 				},
 				evaluator: {
 					fetchSamples: true,
+					maxIdleTimeInMs: 300 * 1000,
 				},
 				sink: {},
 				logLevel: 'info',

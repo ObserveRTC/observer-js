@@ -2,7 +2,7 @@ import { ObservedPeerConnection } from '../../samples/ObservedPeerConnection';
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { logger } from '../VisitObservedCallsMiddleware';
-import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
+import { IceCandidatePairReport, PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 import { Samples_ClientSample_IceCandidatePair, Samples_ClientSample_IceLocalCandidate, Samples_ClientSample_IceRemoteCandidate, Samples_ClientSample_PeerConnectionTransport } from '../../models/samples_pb';
 
 export function visitPeerConnection(
@@ -47,12 +47,28 @@ export function visitPeerConnection(
 			roomId,
 			callId,
 			clientId,
+			userId,
 			mediaUnitId,
 			...pcTransport,
 			timestamp,
 			sampleSeq: -1, // deprecated
 		};
 		reports.addPeerConnectionTransportReports(report);
+	}
+
+	for (const iceCandidatePair of observedPeerConnection.iceCandidatePairs()) {
+		const report: IceCandidatePairReport = {
+			serviceId,
+			roomId,
+			callId,
+			userId,
+			clientId,
+			mediaUnitId,
+			...iceCandidatePair,
+			timestamp,
+			sampleSeq: -1, // deprecated
+		};
+		reports.addIceCandidatePairReport(report);
 	}
 
 	if (fetchSamples) {

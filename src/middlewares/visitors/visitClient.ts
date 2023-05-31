@@ -15,7 +15,7 @@ export function visitClient(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ) {
-	const { mediaUnitId, clientId } = observedClient;
+	const { mediaUnitId, clientId, userId } = observedClient;
 
 	const { callId, serviceId, roomId } = observedClient.call;
 
@@ -34,7 +34,7 @@ export function visitClient(
 			const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 				type: CallMetaType.OPERATION_SYSTEM,
 				payload: clientSample.os,
-			});
+			}, userId);
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -51,7 +51,7 @@ export function visitClient(
 			const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 				type: CallMetaType.ENGINE,
 				payload: clientSample.engine,
-			});
+			}, userId);
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -69,7 +69,7 @@ export function visitClient(
 			const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 				type: CallMetaType.PLATFORM,
 				payload: clientSample.platform,
-			});
+			}, userId);
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -86,7 +86,7 @@ export function visitClient(
 			const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 				type: CallMetaType.BROWSER,
 				payload: clientSample.browser,
-			});
+			}, userId);
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -95,7 +95,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.MEDIA_CONSTRAINT,
 					payload: mediaConstraint,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -106,7 +106,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.LOCAL_SDP,
 					payload: localSDP,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -119,6 +119,7 @@ export function visitClient(
 					roomId,
 					callId,
 					clientId,
+					userId,
 					timestamp: Date.now(),
 					payload: extensionStats.payload,
 					extensionType: extensionStats.type,
@@ -134,6 +135,7 @@ export function visitClient(
 					roomId,
 					callId,
 					clientId,
+					userId,
 					timestamp: Date.now(),
 					...callEvent,
 				});
@@ -145,7 +147,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.USER_MEDIA_ERROR,
 					payload: userMediaError,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -155,7 +157,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.CERTIFICATE,
 					payload: certificate,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -165,7 +167,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.CODEC,
 					payload: codec,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -175,7 +177,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.ICE_SERVER,
 					payload: iceServer,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -185,7 +187,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.MEDIA_DEVICE,
 					payload: mediaDevice,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -195,7 +197,7 @@ export function visitClient(
 				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
 					type: CallMetaType.MEDIA_SOURCE,
 					payload: mediaSource,
-				});
+				}, userId);
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}

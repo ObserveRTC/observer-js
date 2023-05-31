@@ -90,4 +90,9 @@ export interface ObserverStorage<K, V> {
 	 * Returns an async iterable iterator for the key-value pairs in the storage.
 	 */
 	[Symbol.asyncIterator](): AsyncIterableIterator<[K, V]>;
+
+	/**
+	 * Returns an iterable iterator for the key-value pairs stored in this local instance of the storage.
+	 */
+	localEntries(): IterableIterator<[K, V]>;
 }

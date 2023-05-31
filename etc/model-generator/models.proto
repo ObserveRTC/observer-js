@@ -80,6 +80,8 @@ message PeerConnection {
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceCandidatePair iceCandidatePairs = 15;
 
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
+
+  optional uint64 touched = 17;
 }
 
 message InboundTrack {
@@ -100,8 +102,12 @@ message InboundTrack {
   optional string sfuSinkId = 12;
   optional string sfuStreamId = 13;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 14;
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 15;
+  repeated int64 ssrc = 14;
+
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 15;
+  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 16;
+
+  optional uint64 touched = 17;
 }
 
 message OutboundTrack {
@@ -124,6 +130,8 @@ message OutboundTrack {
   
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundAudioTrack audioStats = 14;
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundVideoTrack videoStats = 15;
+
+  optional uint64 touched = 16;
 }
 
 message Sfu {
@@ -140,6 +148,7 @@ message Sfu {
   repeated string sfuTransportIds = 8;
 
   optional uint64 serverTouched = 9;
+
 }
 
 message SfuTransport {
@@ -158,7 +167,7 @@ message SfuTransport {
   repeated string outboundRtpPadIds = 10;
   repeated string sctpChannelIds = 11;
 
-  optional uint64 serverTouched = 12;
+  optional uint64 touched = 12;
 }
 
 
@@ -174,11 +183,10 @@ message SfuInboundRtpPad {
   required bool internal = 7 [default = false];
   required uint64 added = 8;
 
-  optional uint64 sampleTouched = 9;
+  optional uint64 touched = 9;
   optional string mediaUnitId = 10;
   optional string marker = 11;
 
-  optional uint64 serverTouched = 12;
 }
 
 message SfuOutboundRtpPad {
@@ -193,11 +201,10 @@ message SfuOutboundRtpPad {
   required bool internal = 8 [default = false];
   required uint64 added = 9;
 
-  optional uint64 sampleTouched = 10;
+  optional uint64 touched = 10;
   optional string mediaUnitId = 11;
   optional string marker = 12;
 
-  optional uint64 serverTouched = 13;
 }
 
 message SfuSctpChannel {
@@ -209,10 +216,8 @@ message SfuSctpChannel {
   required string sfuSctpChannelId = 5;
   required uint64 opened = 6;
 
-  optional uint64 sampleTouched = 7;
+  optional uint64 touched = 7;
   optional string mediaUnitId = 8;
   optional string marker = 9;
-
-  optional uint64 serverTouched = 10;
 
 }

@@ -8,31 +8,29 @@ import { visitInboundAudioTrack } from './visitors/visitInboundAudioTrack';
 import { visitOutboundAudioTrack } from './visitors/visitOutboundAudioTrack';
 import { visitOutboundVideoTrack } from './visitors/visitOutboundVideoTarck';
 import { visitInboundVideoTrack } from './visitors/visitInboundVideoTrack';
+import { InboundTrack } from '../models/Models';
+import { StorageProvider } from '../storages/StorageProvider';
+import { findRemoteMatches as findRemoteMatchFunc } from '../processes/findRemoteMatches';
 
 export const logger = createLogger('VisitObservedCallsMiddleware');
 
+const emptyMap = new Map();
+
 export function createVisitObservedCallsMiddleware(
+	storages: StorageProvider,
 	reports: ReportsCollector,
-	fetchSamples: boolean
+	fetchSamples: boolean,
+	findRemoteMatches?: boolean,
 ): Middleware<TransactionContext> {
 	const process = async (transaction: TransactionContext) => {
 		const {
 			observedCalls,
 			clients,
 			updatedPeerConnections,
-			deletedPeerConnections,
-
 			updatedInboundAudioTracks,
-			deletedInboundAudioTracks,
-
 			updatedInboundVideoTracks,
-			deletedInboundVideoTracks,
-
 			updatedOutboundAudioTracks,
-			deletedOutboundAudioTracks,
-
 			updatedOutboundVideoTracks,
-			deletedOutboundVideoTracks,
 		} = transaction;
 
 		const visitedPeerConnectionIds = new Set<string>();
@@ -40,6 +38,23 @@ export function createVisitObservedCallsMiddleware(
 		const visitedInboundVideoTrackIds = new Set<string>();
 		const visitedOutboundAudioTrackIds = new Set<string>();
 		const visitedOutboundVideoTrackIds = new Set<string>();
+
+		const {
+			remoteTrackIds,
+			remotePeerConnectionIds,
+			remoteClientIds
+		} = !findRemoteMatches ? {
+			remoteTrackIds: emptyMap,
+			remotePeerConnectionIds: emptyMap,
+			remoteClientIds: emptyMap,
+		} : await findRemoteMatchFunc(
+			storages,
+			clients,
+			new Map<string, InboundTrack>([...updatedInboundAudioTracks, ...updatedInboundVideoTracks])
+		)
+		
+		const now = BigInt(Date.now());
+		const fakeTouched = { touched: BigInt(0) };
 		
 		for (const observedCall of observedCalls.observedCalls()) {
 			const { callId, serviceId, roomId } = observedCall;
@@ -48,7 +63,6 @@ export function createVisitObservedCallsMiddleware(
 				const { clientId } = observedClient;
 				const storedClient = clients.get(clientId);
 
-				// console.warn("dskfjhdkfhsdkf", observedClient, storedClient);
 				if (!storedClient) {
 					// should not happen as client joined must have run before this
 					logger.warn('Client has not been registered');
@@ -61,7 +75,7 @@ export function createVisitObservedCallsMiddleware(
 					reports, 
 					fetchSamples
 				);
-
+				
 				for (const observedPeerConnection of observedClient.observedPeerConnections()) {
 					const { peerConnectionId } = observedPeerConnection;
 
@@ -75,7 +89,8 @@ export function createVisitObservedCallsMiddleware(
 						);
 						continue;
 					}
-
+					
+					storedPeerConnection.touched = now;
 					visitedPeerConnectionIds.add(peerConnectionId);
 
 					for (const observedInboundAudioTrack of observedPeerConnection.inboundAudioTracks()) {
@@ -85,10 +100,14 @@ export function createVisitObservedCallsMiddleware(
 							storedPeerConnection,
 							updatedInboundAudioTracks,
 							reports,
-							fetchSamples
+							fetchSamples,
+							remoteTrackIds.get(trackId),
+							remotePeerConnectionIds.get(trackId),
+							remoteClientIds.get(trackId),
 						);
 
 						visitedInboundAudioTrackIds.add(trackId);
+						(updatedInboundAudioTracks.get(trackId) ?? fakeTouched).touched = now;
 					}
 
 					for (const observedInboundVideoTrack of observedPeerConnection.inboundVideoTracks()) {
@@ -99,10 +118,14 @@ export function createVisitObservedCallsMiddleware(
 							storedPeerConnection,
 							updatedInboundVideoTracks,
 							reports,
-							fetchSamples
+							fetchSamples,
+							remoteTrackIds.get(trackId),
+							remotePeerConnectionIds.get(trackId),
+							remoteClientIds.get(trackId),
 						);
 
 						visitedInboundVideoTrackIds.add(trackId);
+						(updatedInboundVideoTracks.get(trackId) ?? fakeTouched).touched = now;
 					}
 
 					for (const observedOutboundAudioTrack of observedPeerConnection.outboundAudioTracks()) {
@@ -117,6 +140,7 @@ export function createVisitObservedCallsMiddleware(
 						);
 
 						visitedOutboundAudioTrackIds.add(trackId);
+						(updatedOutboundAudioTracks.get(trackId) ?? fakeTouched).touched = now;
 					}
 
 					for (const observedOutboundVideoTrack of observedPeerConnection.outboundVideoTracks()) {
@@ -131,118 +155,9 @@ export function createVisitObservedCallsMiddleware(
 						);
 
 						visitedOutboundVideoTrackIds.add(trackId);
+						(updatedOutboundVideoTracks.get(trackId) ?? fakeTouched).touched = now;
 					}
 				}
-			}
-		}
-
-		for (const [peerConnectionId, peerConnection] of Array.from(updatedPeerConnections.entries())) {
-			if (visitedPeerConnectionIds.has(peerConnectionId)) {
-				continue;
-			}
-			// delete PeerConnection
-			const { serviceId, callId, clientId } = peerConnection;
-
-			if (!serviceId || !callId || !clientId) {
-				continue;
-			}
-
-			const storedClient = clients.get(clientId);
-
-			updatedPeerConnections.delete(peerConnectionId);
-			deletedPeerConnections.add(peerConnectionId);
-
-			// also update the client model
-			if (storedClient) {
-				storedClient.peerConnectionIds = storedClient.peerConnectionIds.filter((pcId) => pcId !== peerConnectionId);
-			}
-		}
-
-		for (const [trackId, inboundAudioTrack] of Array.from(updatedInboundAudioTracks.entries())) {
-			if (visitedInboundAudioTrackIds.has(trackId)) {
-				continue;
-			}
-			// delete PeerConnection
-			const { serviceId, callId, clientId, peerConnectionId } = inboundAudioTrack;
-
-			if (!serviceId || !callId || !clientId || !peerConnectionId) {
-				continue;
-			}
-
-			const storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
-
-			updatedInboundAudioTracks.delete(peerConnectionId);
-			deletedInboundAudioTracks.add(peerConnectionId);
-
-			// also update the peer connection model
-			if (storedPeerConnection) {
-				storedPeerConnection.inboundTrackIds = storedPeerConnection.inboundTrackIds.filter((tId) => tId !== trackId);
-			}
-		}
-
-		for (const [trackId, inboundVideoTrack] of Array.from(updatedInboundVideoTracks.entries())) {
-			if (visitedInboundVideoTrackIds.has(trackId)) {
-				continue;
-			}
-			// delete PeerConnection
-			const { serviceId, callId, clientId, peerConnectionId } = inboundVideoTrack;
-
-			if (!serviceId || !callId || !clientId || !peerConnectionId) {
-				continue;
-			}
-
-			const storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
-
-			updatedInboundVideoTracks.delete(peerConnectionId);
-			deletedInboundVideoTracks.add(peerConnectionId);
-
-			// also update the peer connection model
-			if (storedPeerConnection) {
-				storedPeerConnection.inboundTrackIds = storedPeerConnection.inboundTrackIds.filter((tId) => tId !== trackId);
-			}
-		}
-
-		for (const [trackId, OutboundAudioTrack] of Array.from(updatedOutboundAudioTracks.entries())) {
-			if (visitedOutboundAudioTrackIds.has(trackId)) {
-				continue;
-			}
-			// delete PeerConnection
-			const { serviceId, callId, clientId, peerConnectionId } = OutboundAudioTrack;
-
-			if (!serviceId || !callId || !clientId || !peerConnectionId) {
-				continue;
-			}
-
-			const storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
-
-			updatedOutboundAudioTracks.delete(peerConnectionId);
-			deletedOutboundAudioTracks.add(peerConnectionId);
-
-			// also update the peer connection model
-			if (storedPeerConnection) {
-				storedPeerConnection.outboundTrackIds = storedPeerConnection.outboundTrackIds.filter((tId) => tId !== trackId);
-			}
-		}
-
-		for (const [trackId, OutboundVideoTrack] of Array.from(updatedOutboundVideoTracks.entries())) {
-			if (visitedOutboundVideoTrackIds.has(trackId)) {
-				continue;
-			}
-			// delete PeerConnection
-			const { serviceId, callId, clientId, peerConnectionId } = OutboundVideoTrack;
-
-			if (!serviceId || !callId || !clientId || !peerConnectionId) {
-				continue;
-			}
-
-			const storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
-
-			updatedOutboundVideoTracks.delete(peerConnectionId);
-			deletedOutboundVideoTracks.add(peerConnectionId);
-
-			// also update the peer connection model
-			if (storedPeerConnection) {
-				storedPeerConnection.outboundTrackIds = storedPeerConnection.outboundTrackIds.filter((tId) => tId !== trackId);
 			}
 		}
 	};

@@ -4,6 +4,8 @@ import { ObservedPeerConnection } from './ObservedPeerConnection';
 export interface ObservedInboundAudioTrack {
 	readonly peerConnection: ObservedPeerConnection;
 	readonly trackId: string;
+	readonly sfuStreamId?: string,
+	readonly sfuSinkId?: string,
 
 	samples(): IterableIterator<InboundAudioTrack>;
 }

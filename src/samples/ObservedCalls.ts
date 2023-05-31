@@ -1,3 +1,4 @@
+import { iteratorConverter } from '../common/utils';
 import { ObservedCall, ObservedCallBuilder } from './ObservedCall';
 
 export interface ObservedCalls {
@@ -35,21 +36,23 @@ export class ObservedCallsBuilder {
 	public build(): ObservedCalls {
 		const observedCalls = new Map<string, ObservedCall>();
 
-		const callIds = function* (): IterableIterator<string> {
+		const callIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				yield observedCall.callId;
 			}
 		};
+		const callIds = () => iteratorConverter<string>(callIdsGenerator());
 
-		const clientIds = function* (): IterableIterator<string> {
+		const clientIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					yield observedClient.clientId;
 				}
 			}
 		};
+		const clientIds = () => iteratorConverter<string>(clientIdsGenerator());
 
-		const peerConnectionIds = function* (): IterableIterator<string> {
+		const peerConnectionIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					for (const observedPeerConnection of observedClient.observedPeerConnections()) {
@@ -58,8 +61,9 @@ export class ObservedCallsBuilder {
 				}
 			}
 		};
+		const peerConnectionIds = () => iteratorConverter<string>(peerConnectionIdsGenerator());
 
-		const inboundAudioTrackIds = function* (): IterableIterator<string> {
+		const inboundAudioTrackIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					for (const observedPeerConnection of observedClient.observedPeerConnections()) {
@@ -70,8 +74,9 @@ export class ObservedCallsBuilder {
 				}
 			}
 		};
+		const inboundAudioTrackIds = () => iteratorConverter<string>(inboundAudioTrackIdsGenerator());
 
-		const inboundVideoTrackIds = function* (): IterableIterator<string> {
+		const inboundVideoTrackIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					for (const observedPeerConnection of observedClient.observedPeerConnections()) {
@@ -82,8 +87,9 @@ export class ObservedCallsBuilder {
 				}
 			}
 		};
+		const inboundVideoTrackIds = () => iteratorConverter<string>(inboundVideoTrackIdsGenerator());
 
-		const outboundAudioTrackIds = function* (): IterableIterator<string> {
+		const outboundAudioTrackIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					for (const observedPeerConnection of observedClient.observedPeerConnections()) {
@@ -94,8 +100,9 @@ export class ObservedCallsBuilder {
 				}
 			}
 		};
+		const outboundAudioTrackIds = () => iteratorConverter<string>(outboundAudioTrackIdsGenerator());
 
-		const outboundVideoTrackIds = function* (): IterableIterator<string> {
+		const outboundVideoTrackIdsGenerator = function* () {
 			for (const observedCall of observedCalls.values()) {
 				for (const observedClient of observedCall.observedClients()) {
 					for (const observedPeerConnection of observedClient.observedPeerConnections()) {
@@ -106,6 +113,7 @@ export class ObservedCallsBuilder {
 				}
 			}
 		};
+		const outboundVideoTrackIds = () => iteratorConverter<string>(outboundVideoTrackIdsGenerator());
 
 		const result: ObservedCalls = {
 			callIds,
@@ -122,6 +130,8 @@ export class ObservedCallsBuilder {
 			const observedCall = builder.build();
 			observedCalls.set(observedCall.callId, observedCall);
 		}
+		this._builders.clear();
 		return result;
 	}
+
 }

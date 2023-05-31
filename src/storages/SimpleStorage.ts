@@ -90,4 +90,8 @@ export class SimpleStorage<K, V> implements ObserverStorage<K, V> {
 			yield entry;
 		}
 	}
+
+	public localEntries(): IterableIterator<[K, V]> {
+		return this._map.entries();
+	}
 }

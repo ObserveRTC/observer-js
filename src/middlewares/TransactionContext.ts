@@ -67,41 +67,73 @@ export async function createTransactionContext(
 		sfuSctpChannelStorage,
 	} = storageProvider;
 
-	const [clients, sfus] = await Promise.all([clientStorage.getAll(observedCalls.clientIds()), sfuStorage.getAll([])]);
-
-	const peerConnectionIds = Array.from(clients.values()).flatMap((client) => client.peerConnectionIds);
-
-	const sfuTransportIds = Array.from(sfus.values()).flatMap((sfu) => sfu.sfuTransportIds);
-
-	const [peerConnections, sfuTransports] = await Promise.all([
-		peerConnectionStorage.getAll(peerConnectionIds),
-		sfuTransportStorage.getAll(sfuTransportIds),
+	const [
+		[
+			clients, 
+			peerConnections,
+			inboundAudioTrackEntries,
+			inboundVideoTrackEntries,
+			outboundAudioTrackEntries,
+			outboundVideoTrackEntries,
+		],
+		[
+			sfus,
+			sfuTransports,
+			sfuInboundRtpPads,
+			sfuOutboundRtpPads,
+			sfuSctpChannels
+		]
+	] = await Promise.all([
+		Promise.all([
+			clientStorage.getAll(observedCalls.clientIds()), 
+			peerConnectionStorage.getAll(observedCalls.peerConnectionIds()),
+			inboundTrackStorage.getAll(observedCalls.inboundAudioTrackIds()),
+			inboundTrackStorage.getAll(observedCalls.inboundVideoTrackIds()),
+			outboundTrackStorage.getAll(observedCalls.outboundAudioTrackIds()),
+			outboundTrackStorage.getAll(observedCalls.outboundVideoTrackIds()),
+		]),
+		Promise.all([
+			sfuStorage.getAll(observedSfus.sfuIds()),
+			sfuTransportStorage.getAll(observedSfus.sfuTransportIds()),
+			sfuInboundRtpPadStorage.getAll(observedCalls.peerConnectionIds()),
+			sfuOutboundRtpPadStorage.getAll(observedCalls.peerConnectionIds()),
+			sfuSctpChannelStorage.getAll(observedCalls.peerConnectionIds()),
+		])
 	]);
 
-	const peerConnectionValues = Array.from(peerConnections.values());
-	const inboundTrackIds = peerConnectionValues.flatMap((pc) => pc.inboundTrackIds);
-	const outboundTrackIds = peerConnectionValues.flatMap((pc) => pc.outboundTrackIds);
+	// const peerConnectionIds = Array.from(clients.values()).flatMap((client) => client.peerConnectionIds);
 
-	const sfuTransportValues = Array.from(sfuTransports.values());
-	const sfuInboundRtpPadIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.inboundRtpPadIds);
-	const sfuOutboundRtpPadIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.outboundRtpPadIds);
-	const sfuSctpChannelIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.sctpChannelIds);
+	// const sfuTransportIds = Array.from(sfus.values()).flatMap((sfu) => sfu.sfuTransportIds);
 
-	const [inboundTracks, outboundTracks, sfuInboundRtpPads, sfuOutboundRtpPads, sfuSctpChannels] = await Promise.all([
-		inboundTrackStorage.getAll(inboundTrackIds),
-		outboundTrackStorage.getAll(outboundTrackIds),
-		sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds),
-		sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds),
-		sfuSctpChannelStorage.getAll(sfuSctpChannelIds),
-	]);
+	// const [peerConnections, sfuTransports] = await Promise.all([
+	// 	peerConnectionStorage.getAll(peerConnectionIds),
+	// 	sfuTransportStorage.getAll(sfuTransportIds),
+	// ]);
 
-	const inboundTrackEntries = Array.from(inboundTracks);
-	const outboundTrackEntries = Array.from(outboundTracks);
+	// const peerConnectionValues = Array.from(peerConnections.values());
+	// const inboundTrackIds = peerConnectionValues.flatMap((pc) => pc.inboundTrackIds);
+	// const outboundTrackIds = peerConnectionValues.flatMap((pc) => pc.outboundTrackIds);
 
-	const inboundAudioTrackEntries = inboundTrackEntries.filter((e) => e[1].kind === 'audio');
-	const inboundVideoTrackEntries = inboundTrackEntries.filter((e) => e[1].kind === 'video');
-	const outboundAudioTrackEntries = outboundTrackEntries.filter((e) => e[1].kind === 'audio');
-	const outboundVideoTrackEntries = outboundTrackEntries.filter((e) => e[1].kind === 'video');
+	// const sfuTransportValues = Array.from(sfuTransports.values());
+	// const sfuInboundRtpPadIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.inboundRtpPadIds);
+	// const sfuOutboundRtpPadIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.outboundRtpPadIds);
+	// const sfuSctpChannelIds = sfuTransportValues.flatMap((sfuTransport) => sfuTransport.sctpChannelIds);
+
+	// const [inboundTracks, outboundTracks, sfuInboundRtpPads, sfuOutboundRtpPads, sfuSctpChannels] = await Promise.all([
+	// 	inboundTrackStorage.getAll(inboundTrackIds),
+	// 	outboundTrackStorage.getAll(outboundTrackIds),
+	// 	sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds),
+	// 	sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds),
+	// 	sfuSctpChannelStorage.getAll(sfuSctpChannelIds),
+	// ]);
+
+	// const inboundTrackEntries = Array.from(inboundTracks);
+	// const outboundTrackEntries = Array.from(outboundTracks);
+
+	// const inboundAudioTrackEntries = inboundTrackEntries.filter((e) => e[1].kind === 'audio');
+	// const inboundVideoTrackEntries = inboundTrackEntries.filter((e) => e[1].kind === 'video');
+	// const outboundAudioTrackEntries = outboundTrackEntries.filter((e) => e[1].kind === 'audio');
+	// const outboundVideoTrackEntries = outboundTrackEntries.filter((e) => e[1].kind === 'video');
 
 	const transactionContext: TransactionContext = {
 		id: uuid(),

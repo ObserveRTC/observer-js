@@ -12,7 +12,7 @@ export function visitOutboundAudioTrack(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ) {
-	const { trackId } = observedOutboundAudioTrack;
+	const { trackId, sfuStreamId } = observedOutboundAudioTrack;
 
 	const { peerConnectionId } = observedOutboundAudioTrack.peerConnection;
 
@@ -33,10 +33,12 @@ export function visitOutboundAudioTrack(
 			roomId,
 			callId,
 			clientId,
+			kind: 'audio',
 			peerConnectionId,
 			mediaUnitId,
 			trackId,
-
+			
+			sfuStreamId,
 			userId,
 			marker,
 		});
@@ -57,6 +59,7 @@ export function visitOutboundAudioTrack(
 			roomId,
 			callId,
 			clientId,
+			userId,
 			mediaUnitId,
 			peerConnectionId,
 			...outboundAudioSample,
@@ -88,5 +91,6 @@ export function visitOutboundAudioTrack(
 			statsMap.set(ssrc, audioStats);
 		}
 	}
+	storedOutboundAudioTrack.ssrc = [...statsMap.keys()];
 	storedOutboundAudioTrack.audioStats = Array.from(statsMap.values());
 }

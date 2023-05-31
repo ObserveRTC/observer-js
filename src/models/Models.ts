@@ -273,6 +273,11 @@ export class PeerConnection extends Message<PeerConnection> {
    */
   transports: Samples_ClientSample_PeerConnectionTransport[] = [];
 
+  /**
+   * @generated from field: optional uint64 touched = 17;
+   */
+  touched?: bigint;
+
   constructor(data?: PartialMessage<PeerConnection>) {
     super();
     proto2.util.initPartial(data, this);
@@ -297,6 +302,7 @@ export class PeerConnection extends Message<PeerConnection> {
     { no: 14, name: "iceRemoteCandidates", kind: "message", T: Samples_ClientSample_IceRemoteCandidate, repeated: true },
     { no: 15, name: "iceCandidatePairs", kind: "message", T: Samples_ClientSample_IceCandidatePair, repeated: true },
     { no: 16, name: "transports", kind: "message", T: Samples_ClientSample_PeerConnectionTransport, repeated: true },
+    { no: 17, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PeerConnection {
@@ -386,14 +392,24 @@ export class InboundTrack extends Message<InboundTrack> {
   sfuStreamId?: string;
 
   /**
-   * @generated from field: repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 14;
+   * @generated from field: repeated int64 ssrc = 14;
+   */
+  ssrc: bigint[] = [];
+
+  /**
+   * @generated from field: repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 15;
    */
   audioStats: Samples_ClientSample_InboundAudioTrack[] = [];
 
   /**
-   * @generated from field: repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 15;
+   * @generated from field: repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 16;
    */
   videoStats: Samples_ClientSample_InboundVideoTrack[] = [];
+
+  /**
+   * @generated from field: optional uint64 touched = 17;
+   */
+  touched?: bigint;
 
   constructor(data?: PartialMessage<InboundTrack>) {
     super();
@@ -416,8 +432,10 @@ export class InboundTrack extends Message<InboundTrack> {
     { no: 11, name: "marker", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 12, name: "sfuSinkId", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 13, name: "sfuStreamId", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 14, name: "audioStats", kind: "message", T: Samples_ClientSample_InboundAudioTrack, repeated: true },
-    { no: 15, name: "videoStats", kind: "message", T: Samples_ClientSample_InboundVideoTrack, repeated: true },
+    { no: 14, name: "ssrc", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
+    { no: 15, name: "audioStats", kind: "message", T: Samples_ClientSample_InboundAudioTrack, repeated: true },
+    { no: 16, name: "videoStats", kind: "message", T: Samples_ClientSample_InboundVideoTrack, repeated: true },
+    { no: 17, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InboundTrack {
@@ -516,6 +534,11 @@ export class OutboundTrack extends Message<OutboundTrack> {
    */
   videoStats: Samples_ClientSample_OutboundVideoTrack[] = [];
 
+  /**
+   * @generated from field: optional uint64 touched = 16;
+   */
+  touched?: bigint;
+
   constructor(data?: PartialMessage<OutboundTrack>) {
     super();
     proto2.util.initPartial(data, this);
@@ -539,6 +562,7 @@ export class OutboundTrack extends Message<OutboundTrack> {
     { no: 13, name: "ssrc", kind: "scalar", T: 3 /* ScalarType.INT64 */, repeated: true },
     { no: 14, name: "audioStats", kind: "message", T: Samples_ClientSample_OutboundAudioTrack, repeated: true },
     { no: 15, name: "videoStats", kind: "message", T: Samples_ClientSample_OutboundVideoTrack, repeated: true },
+    { no: 16, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): OutboundTrack {
@@ -703,9 +727,9 @@ export class SfuTransport extends Message<SfuTransport> {
   sctpChannelIds: string[] = [];
 
   /**
-   * @generated from field: optional uint64 serverTouched = 12;
+   * @generated from field: optional uint64 touched = 12;
    */
-  serverTouched?: bigint;
+  touched?: bigint;
 
   constructor(data?: PartialMessage<SfuTransport>) {
     super();
@@ -726,7 +750,7 @@ export class SfuTransport extends Message<SfuTransport> {
     { no: 9, name: "inboundRtpPadIds", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 10, name: "outboundRtpPadIds", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 11, name: "sctpChannelIds", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
-    { no: 12, name: "serverTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 12, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SfuTransport {
@@ -791,9 +815,9 @@ export class SfuInboundRtpPad extends Message<SfuInboundRtpPad> {
   added?: bigint;
 
   /**
-   * @generated from field: optional uint64 sampleTouched = 9;
+   * @generated from field: optional uint64 touched = 9;
    */
-  sampleTouched?: bigint;
+  touched?: bigint;
 
   /**
    * @generated from field: optional string mediaUnitId = 10;
@@ -804,11 +828,6 @@ export class SfuInboundRtpPad extends Message<SfuInboundRtpPad> {
    * @generated from field: optional string marker = 11;
    */
   marker?: string;
-
-  /**
-   * @generated from field: optional uint64 serverTouched = 12;
-   */
-  serverTouched?: bigint;
 
   constructor(data?: PartialMessage<SfuInboundRtpPad>) {
     super();
@@ -826,10 +845,9 @@ export class SfuInboundRtpPad extends Message<SfuInboundRtpPad> {
     { no: 6, name: "ssrc", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 7, name: "internal", kind: "scalar", T: 8 /* ScalarType.BOOL */, default: false },
     { no: 8, name: "added", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
-    { no: 9, name: "sampleTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 9, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
     { no: 10, name: "mediaUnitId", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 11, name: "marker", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 12, name: "serverTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SfuInboundRtpPad {
@@ -899,9 +917,9 @@ export class SfuOutboundRtpPad extends Message<SfuOutboundRtpPad> {
   added?: bigint;
 
   /**
-   * @generated from field: optional uint64 sampleTouched = 10;
+   * @generated from field: optional uint64 touched = 10;
    */
-  sampleTouched?: bigint;
+  touched?: bigint;
 
   /**
    * @generated from field: optional string mediaUnitId = 11;
@@ -912,11 +930,6 @@ export class SfuOutboundRtpPad extends Message<SfuOutboundRtpPad> {
    * @generated from field: optional string marker = 12;
    */
   marker?: string;
-
-  /**
-   * @generated from field: optional uint64 serverTouched = 13;
-   */
-  serverTouched?: bigint;
 
   constructor(data?: PartialMessage<SfuOutboundRtpPad>) {
     super();
@@ -935,10 +948,9 @@ export class SfuOutboundRtpPad extends Message<SfuOutboundRtpPad> {
     { no: 7, name: "ssrc", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
     { no: 8, name: "internal", kind: "scalar", T: 8 /* ScalarType.BOOL */, default: false },
     { no: 9, name: "added", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
-    { no: 10, name: "sampleTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 10, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
     { no: 11, name: "mediaUnitId", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 12, name: "marker", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 13, name: "serverTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SfuOutboundRtpPad {
@@ -993,9 +1005,9 @@ export class SfuSctpChannel extends Message<SfuSctpChannel> {
   opened?: bigint;
 
   /**
-   * @generated from field: optional uint64 sampleTouched = 7;
+   * @generated from field: optional uint64 touched = 7;
    */
-  sampleTouched?: bigint;
+  touched?: bigint;
 
   /**
    * @generated from field: optional string mediaUnitId = 8;
@@ -1006,11 +1018,6 @@ export class SfuSctpChannel extends Message<SfuSctpChannel> {
    * @generated from field: optional string marker = 9;
    */
   marker?: string;
-
-  /**
-   * @generated from field: optional uint64 serverTouched = 10;
-   */
-  serverTouched?: bigint;
 
   constructor(data?: PartialMessage<SfuSctpChannel>) {
     super();
@@ -1026,10 +1033,9 @@ export class SfuSctpChannel extends Message<SfuSctpChannel> {
     { no: 4, name: "sfuSctpStreamId", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 5, name: "sfuSctpChannelId", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 6, name: "opened", kind: "scalar", T: 4 /* ScalarType.UINT64 */ },
-    { no: 7, name: "sampleTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
+    { no: 7, name: "touched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
     { no: 8, name: "mediaUnitId", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 9, name: "marker", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 10, name: "serverTouched", kind: "scalar", T: 4 /* ScalarType.UINT64 */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SfuSctpChannel {

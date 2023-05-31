@@ -1,3 +1,4 @@
+import { iteratorConverter } from '../common/utils';
 import { ObservedCall, ObservedCallBuilder } from './ObservedCall';
 import { ObservedSfu, ObservedSfuBuilder } from './ObservedSfu';
 
@@ -33,21 +34,23 @@ export class ObservedSfusBuilder {
 	public build(): ObservedSfus {
 		const observedSfus = new Map<string, ObservedSfu>();
 
-		const sfuIds = function* (): IterableIterator<string> {
+		const sfuIdsGenerator = function* () {
 			for (const observedSfu of observedSfus.values()) {
 				yield observedSfu.sfuId;
 			}
 		};
+		const sfuIds = () => iteratorConverter<string>(sfuIdsGenerator());
 
-		const sfuTransportIds = function* (): IterableIterator<string> {
+		const sfuTransportIdsGenerator = function* () {
 			for (const observedSfu of observedSfus.values()) {
 				for (const observedTransport of observedSfu.observedSfuTransports()) {
 					yield observedTransport.transportId;
 				}
 			}
 		};
+		const sfuTransportIds = () => iteratorConverter<string>(sfuTransportIdsGenerator());
 
-		const sfuInboundRtpPadIds = function* (): IterableIterator<string> {
+		const sfuInboundRtpPadIdsGenerator = function* () {
 			for (const observedSfu of observedSfus.values()) {
 				for (const observedTransport of observedSfu.observedSfuTransports()) {
 					for (const sfuInboundRtpPad of observedTransport.inboundRtpPads()) {
@@ -56,8 +59,9 @@ export class ObservedSfusBuilder {
 				}
 			}
 		};
+		const sfuInboundRtpPadIds = () => iteratorConverter<string>(sfuInboundRtpPadIdsGenerator());
 
-		const sfuOutboundRtpPadIds = function* (): IterableIterator<string> {
+		const sfuOutboundRtpPadIdsGenerator = function* () {
 			for (const observedSfu of observedSfus.values()) {
 				for (const observedTransport of observedSfu.observedSfuTransports()) {
 					for (const sfuOutboundRtpPad of observedTransport.outboundRtpPads()) {
@@ -66,7 +70,7 @@ export class ObservedSfusBuilder {
 				}
 			}
 		};
-
+		const sfuOutboundRtpPadIds = () => iteratorConverter<string>(sfuOutboundRtpPadIdsGenerator());
 
 		const result: ObservedSfus = {
 			sfuIds,
@@ -80,6 +84,7 @@ export class ObservedSfusBuilder {
 			const observedSfu = builder.build();
 			observedSfus.set(observedSfu.sfuId, observedSfu);
 		}
+		this._builders.clear();
 		return result;
 	}
 }

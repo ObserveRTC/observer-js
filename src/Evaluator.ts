@@ -21,6 +21,8 @@ export type EvaluatorEvents = {
 
 export type EvaluatorConfig = {
 	fetchSamples: boolean;
+	maxIdleTimeInMs?: number,
+	findRemoteMatches?: boolean,
 };
 
 export type EvaluatorProcess = (evaluatorContext: EvaluatorContext) => Promise<void>;
@@ -50,7 +52,9 @@ export class Evaluator {
 		this._transactionProcessor = createTransactionProcessor(
 			_storageProvider,
 			_reportsCollector,
-			this.config.fetchSamples
+			this.config.fetchSamples,
+			BigInt(this.config.maxIdleTimeInMs ?? 10000),
+			this.config.findRemoteMatches,
 		);
 
 		this._customProcessor = createProcessor();
@@ -106,7 +110,7 @@ export class Evaluator {
 	public addObservedSamples(samples: SourcesEvents['observed-samples']): void {
 		// this triggers the evaluation
 		const { observedCalls, observedSfus } = samples;
-
+		
 		const evaluatorContext: EvaluatorContext = {
 			observedCalls,
 			observedSfus,
@@ -142,7 +146,7 @@ export class Evaluator {
 			sfuEvents: [],
 			sfuExtensionStats: [],
 		};
-
+		
 		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);
 		this._clientOperations.clear();
 

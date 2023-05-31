@@ -4,7 +4,8 @@ import { ObservedPeerConnection } from './ObservedPeerConnection';
 export interface ObservedOutboundVideoTrack {
 	readonly peerConnection: ObservedPeerConnection;
 	readonly trackId: string;
-
+	readonly sfuStreamId?: string,
+	
 	samples(): IterableIterator<OutboundVideoTrack>;
 }
 

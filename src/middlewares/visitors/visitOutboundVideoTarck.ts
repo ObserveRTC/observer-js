@@ -12,7 +12,7 @@ export function visitOutboundVideoTrack(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ) {
-	const { trackId } = observedOutboundVideoTrack;
+	const { trackId, sfuStreamId } = observedOutboundVideoTrack;
 
 	const { peerConnectionId } = observedOutboundVideoTrack.peerConnection;
 
@@ -33,10 +33,12 @@ export function visitOutboundVideoTrack(
 			roomId,
 			callId,
 			clientId,
+			kind: 'video',
 			peerConnectionId,
 			mediaUnitId,
 			trackId,
 
+			sfuStreamId,
 			userId,
 			marker,
 		});
@@ -57,6 +59,7 @@ export function visitOutboundVideoTrack(
 			roomId,
 			callId,
 			clientId,
+			userId,
 			mediaUnitId,
 			peerConnectionId,
 			...outboundVideoSample,
@@ -90,5 +93,6 @@ export function visitOutboundVideoTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
+	storedOutboundVideoTrack.ssrc = [...statsMap.keys()];
 	storedOutboundVideoTrack.videoStats = Array.from(statsMap.values());
 }

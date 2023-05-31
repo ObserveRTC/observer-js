@@ -12,9 +12,12 @@ export function visitInboundVideoTrack(
 	storedPeerConnection: Models.PeerConnection,
 	storedInboundTracks: Map<string, Models.InboundTrack>,
 	reports: ReportsCollector,
-	fetchSamples: boolean
+	fetchSamples: boolean,
+	remoteTrackId?: string,
+	remotePeerConnectionId?: string,
+	remoteClientId?: string,
 ) {
-	const { trackId } = observedInboundVideoTrack;
+	const { trackId, sfuStreamId, sfuSinkId } = observedInboundVideoTrack;
 
 	const { peerConnectionId } = observedInboundVideoTrack.peerConnection;
 
@@ -35,9 +38,13 @@ export function visitInboundVideoTrack(
 			roomId,
 			callId,
 			clientId,
+			kind: 'video',
 			peerConnectionId,
 			mediaUnitId,
 			trackId,
+			
+			sfuStreamId, 
+			sfuSinkId,
 
 			userId,
 			marker,
@@ -59,11 +66,15 @@ export function visitInboundVideoTrack(
 			roomId,
 			callId,
 			clientId,
+			userId,
 			mediaUnitId,
 			peerConnectionId,
 			...inboundVideoSample,
 			timestamp,
 			sampleSeq: -1,
+			remoteClientId,
+			remotePeerConnectionId,
+			remoteTrackId,
 		};
 		reports.addInboundVideoTrackReport(report);
 
@@ -96,5 +107,6 @@ export function visitInboundVideoTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
+	storedInboundVideoTrack.ssrc = [...statsMap.keys()];
 	storedInboundVideoTrack.videoStats = Array.from(statsMap.values());
 }
