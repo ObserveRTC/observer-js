@@ -136,8 +136,8 @@ export function visitClient(
 					callId,
 					clientId,
 					userId,
-					timestamp: Date.now(),
 					...callEvent,
+					timestamp: callEvent.timestamp ?? Date.now(),
 				});
 			}
 		}
