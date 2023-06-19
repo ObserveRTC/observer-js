@@ -16,7 +16,7 @@ import { EventEmitter } from 'events';
 const logger = createLogger('Evaluator');
 
 export type EvaluatorEvents = {
-	ready: undefined;
+	ready: Error | undefined;
 };
 
 export type EvaluatorConfig = {
@@ -95,6 +95,11 @@ export class Evaluator {
 
 	public on<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
 		this._emitter.addListener(event, listener);
+		return this;
+	}
+
+	public once<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
+		this._emitter.once(event, listener);
 		return this;
 	}
 
@@ -190,21 +195,27 @@ export class Evaluator {
 		callOperationsContext: CallOperationsContext,
 		evaluatorContext: EvaluatorContext
 	): Promise<void> {
-		await this._callSemaphore.acquire();
-		await this._callProcessor.use(callOperationsContext).finally(() => {
-			this._callSemaphore.release();
+		const process = async () => {
+			await this._callSemaphore.acquire();
+			await this._callProcessor.use(callOperationsContext).finally(() => {
+				this._callSemaphore.release();
+			});
+			const transactionContext = await createTransactionContext(
+				evaluatorContext,
+				this._storageProvider,
+				evaluatorContext.observedCalls,
+				evaluatorContext.observedSfus,
+			);
+	
+			await this._transactionProcessor.use(transactionContext);
+	
+			await this._customProcessor.use(evaluatorContext);
+		};
+		await process().then(() => {
+			this._emit('ready', undefined);
+		}).catch(err => {
+			logger.warn(`Error occurred while evaluating samples`, err);
+			this._emit('ready', err);
 		});
-		const transactionContext = await createTransactionContext(
-			evaluatorContext,
-			this._storageProvider,
-			evaluatorContext.observedCalls,
-			evaluatorContext.observedSfus,
-		);
-
-		await this._transactionProcessor.use(transactionContext);
-
-		await this._customProcessor.use(evaluatorContext);
-
-		this._emit('ready', undefined);
 	}
 }

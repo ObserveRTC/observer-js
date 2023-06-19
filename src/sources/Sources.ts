@@ -28,11 +28,14 @@ export type SourcesEvents = {
 };
 
 export class Sources {
-	private _clientSources = new Map<string, ObservedClientSource>();
-	private _sfuSources = new Map<string, ObservedSfuSource>();
+	
+	private readonly _warnFlags = { autoEmitButEmitSamplesInvoked: false };
+	private readonly _clientSources = new Map<string, ObservedClientSource>();
+	private readonly _sfuSources = new Map<string, ObservedSfuSource>();
+	private readonly _emitter = new EventEmitter();
+	
 	private _observedCallsBuilder = new ObservedCallsBuilder();
 	private _observedSfusBuilder = new ObservedSfusBuilder();
-	private _emitter = new EventEmitter();
 	private _timer?: ReturnType<typeof setTimeout>;
 	private _numberOfSamples = 0;
 
@@ -151,6 +154,19 @@ export class Sources {
 		this._numberOfSamples += increment;
 		if (this.config.maxSamples < 1 || this._numberOfSamples < this.config.maxSamples) {
 			return;
+		}
+		this._emitSamples();
+	}
+
+	public emitSamples() {
+		if (0 < this.config.maxSamples || 0 < this.config.maxTimeInMs) {
+			if (!this._warnFlags.autoEmitButEmitSamplesInvoked) {
+				logger.warn(`Emitting Samples is called explicitly, 
+					but samples are emitted automatically because of configuration 
+					(maxSamples: ${this.config.maxSamples}, maxTImeInMs: ${this.config.maxTimeInMs})`
+				);
+				this._warnFlags.autoEmitButEmitSamplesInvoked = true;
+			}
 		}
 		this._emitSamples();
 	}

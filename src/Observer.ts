@@ -173,6 +173,16 @@ export class Observer {
 		});
 	}
 
+	public async evaluate() {
+		return new Promise<void>((resolve, reject) => {
+			this._evaluator.once('ready', err => {
+				if (err) reject(err);
+				else resolve();
+			});
+			this._sources.emitSamples();
+		});
+	}
+
 	public get reports(): ObserverReportsEmitter {
 		return this._sink;
 	}
