@@ -94,13 +94,13 @@ export function createJoinClientProcess(
 				mediaUnitId,
 				roomId,
 				callId,
-				clientId,
+				clientId: savedClientId,
 				// timeZoneId,
 				marker,
 				joined,
 			} = client;
 
-			if (!serviceId || !mediaUnitId || !roomId || !callId || !clientId) {
+			if (!serviceId || !mediaUnitId || !roomId || !callId || !savedClientId) {
 				continue;
 			}
 

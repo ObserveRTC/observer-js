@@ -201,5 +201,25 @@ export function visitClient(
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
+
+		if (clientSample.iceLocalCandidates && 0 < clientSample.iceLocalCandidates.length) {
+			for (const iceLocalCandidate of clientSample.iceLocalCandidates) {
+				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
+					type: CallMetaType.ICE_LOCAL_CANDIDATE,
+					payload: iceLocalCandidate,
+				}, userId);
+				reports.addCallMetaReport(callMetaReport);
+			}
+		}
+
+		if (clientSample.iceRemoteCandidates && 0 < clientSample.iceRemoteCandidates.length) {
+			for (const iceRemoteCandidate of clientSample.iceRemoteCandidates) {
+				const callMetaReport = createCallMetaReport(serviceId, mediaUnitId, roomId, callId, clientId, {
+					type: CallMetaType.ICE_REMOTE_CANDIDATE,
+					payload: iceRemoteCandidate,
+				}, userId);
+				reports.addCallMetaReport(callMetaReport);
+			}
+		}
 	}
 }
