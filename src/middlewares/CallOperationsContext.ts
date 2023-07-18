@@ -1,4 +1,3 @@
-import { Semaphore } from '../common/Semaphore';
 import { EvaluatorContext } from '../common/types';
 import { Writable } from '../common/utils';
 import { ObservedClientSourceConfig } from '../sources/ObservedClientSource';

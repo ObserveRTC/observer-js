@@ -24,7 +24,6 @@ export function createJoinClientProcess(
 		if (joinedClients.length < 1) {
 			return;
 		}
-
 		const { callStorage, clientStorage } = storageProvider;
 
 		const callIds = joinedClients.map((c) => c.callId);
@@ -49,6 +48,12 @@ export function createJoinClientProcess(
 				continue;
 			}
 			call.clientIds.push(clientId);
+
+			// we can extract the lowest timestamp here
+			// const joinedTimestamp
+			// for (const observedCall of (evaluatorContext?.observedCalls.getObservedCall(callId)?.getObservedClient(clientId)?.samples() ?? [])) {
+
+			// }
 			newClients.set(
 				clientId,
 				new Models.Client({

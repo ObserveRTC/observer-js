@@ -6,9 +6,9 @@ export function iteratorConverter<T>(generator: Generator<T, void, undefined>): 
 	return {
 		[Symbol.iterator](): IterableIterator<T> {
 			return this;
-		  },
-		  next(): IteratorResult<T> {
+		},
+		next(): IteratorResult<T> {
 			return generator.next();
-		  },
+		},
 	}
 }

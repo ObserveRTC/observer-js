@@ -1,4 +1,3 @@
-import { InboundAudioTrack, InboundVideoTrack } from "@observertc/sample-schemas-js";
 import { createLogger } from "../common/logger";
 import { Client, InboundTrack, OutboundTrack, PeerConnection } from "../models/Models";
 import { StorageProvider } from "../storages/StorageProvider";
@@ -19,7 +18,7 @@ function groupToMap<T>(input: ReadonlyMap<string, T>, getGroupKey: (value: T) =>
 	  	group.push(value);
 	}
 	return result;
-};
+}
 
 
 export async function findRemoteMatches(

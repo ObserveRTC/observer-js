@@ -1,4 +1,4 @@
-export type { ObserverConfig } from './Observer';
+export type { ObserverConfig, ObserverEvents } from './Observer';
 
 export type { EvaluatorConfig, EvaluatorProcess } from './Evaluator';
 

@@ -9,8 +9,13 @@ import { ObservedClientSource, ObservedClientSourceConfig } from './sources/Obse
 import { PartialBy } from './common/utils';
 import { createLogger, LogLevel } from './common/logger';
 import { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
+import EventEmitter from 'events';
 
 const logger = createLogger('Observer');
+
+export type ObserverEvents = {
+	'close': undefined,
+}
 
 export type ObserverConfig = {
 	/**
@@ -67,6 +72,7 @@ export class Observer {
 		return new Observer(config, storages, semaphores);
 	}
 
+	private readonly _emitter = new EventEmitter();
 	private _sources: Sources;
 	private _sink: SinkImpl;
 	private _evaluator: Evaluator;
@@ -93,6 +99,21 @@ export class Observer {
 			this._sink.emit();
 		});
 		logger.debug(`Observer is created with config`, this.config);
+	}
+
+	public on<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
+		this._emitter.on(event, listener);
+		return this;
+	}
+
+	public once<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
+		this._emitter.once(event, listener);
+		return this;
+	}
+
+	public off<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
+		this._emitter.off(event, listener);
+		return this;
 	}
 
 	public createCallSource(
@@ -412,10 +433,12 @@ export class Observer {
 
 	public close() {
 		if (this._closed) {
-			logger.warn(`Attempted to close twice`);
+			logger.debug(`Attempted to close twice`);
 			return;
 		}
-		this._sources.close();
 		this._closed = true;
+		this._sources.close();
+		
+		this._emitter.emit('close');
 	}
 }
