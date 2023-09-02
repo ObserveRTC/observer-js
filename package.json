@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "0.9.16-beta",
+  "version": "0.9.17-beta",
   "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -27,8 +27,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@bufbuild/protobuf": "^1.1.1",
-    "@observertc/report-schemas-js": "2.2.1-rc.0",
-    "@observertc/sample-schemas-js": "2.2.1-rc.0",
+    "@observertc/report-schemas-js": "2.2.9",
+    "@observertc/sample-schemas-js": "2.2.9",
     "@types/events": "^3.0.0",
     "@types/uuid": "^8.3.4",
     "package-lock-only": "^0.0.4",
