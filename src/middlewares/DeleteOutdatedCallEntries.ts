@@ -7,7 +7,7 @@ export const logger = createLogger('DeleteOutdatedCallEntries');
 
 export function createDeleteOutdatedCallEntries(
 	storages: StorageProvider,
-	maxIdleTimeInMs: BigInt,
+	maxIdleTimeInMs: bigint,
 ): Middleware<TransactionContext> {
 	const process = async (transaction: TransactionContext) => {
 		const {

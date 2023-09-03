@@ -7,7 +7,7 @@ export const logger = createLogger('DeleteOutdatedSfuEntries');
 
 export function createDeleteOutdatedSfuEntries(
 	storages: StorageProvider,
-	maxIdleTimeInMs: BigInt,
+	maxIdleTimeInMs: bigint,
 ): Middleware<TransactionContext> {
 	const process = async (transaction: TransactionContext) => {
 		const {

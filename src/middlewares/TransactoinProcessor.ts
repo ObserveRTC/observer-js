@@ -12,7 +12,7 @@ export function createTransactionProcessor(
 	storageProvider: StorageProvider,
 	reportsCollector: ReportsCollector,
 	fetchSamples: boolean,
-	maxIdleTimeInMs: BigInt,
+	maxIdleTimeInMs: bigint,
 	findRemoteMatches?: boolean,
 ): Processor<TransactionContext> {
 	return createProcessor(
