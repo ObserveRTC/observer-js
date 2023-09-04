@@ -591,15 +591,15 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@observertc/report-schemas-js@2.2.9":
-  version "2.2.9"
-  resolved "https://registry.yarnpkg.com/@observertc/report-schemas-js/-/report-schemas-js-2.2.9.tgz#20db3e5a85b5185e48ada664f3b62be52d63aa42"
-  integrity sha512-F8uRKfnQKgE+GCNvxR58rnTQSRrMUUgvPI84ujsRR14VQPfjPf24Ba9//V6NjtHl0vxZPsP0P1riWM22ocwzdA==
+"@observertc/report-schemas-js@2.2.10":
+  version "2.2.10"
+  resolved "https://registry.yarnpkg.com/@observertc/report-schemas-js/-/report-schemas-js-2.2.10.tgz#6ba5a7414ae4e47a5aa41321eae43b2def058427"
+  integrity sha512-SdsJS2/dMpK/kSjbZBuflMMibHNh5af/Q0PC29sYkCj321wNDnNSzGlf2C/w3ohSxJZBUJToG4N/ZnHRGzbtKQ==
 
-"@observertc/sample-schemas-js@2.2.9":
-  version "2.2.9"
-  resolved "https://registry.yarnpkg.com/@observertc/sample-schemas-js/-/sample-schemas-js-2.2.9.tgz#df414b21dec391484d68ab0f9f2282866ee7fb22"
-  integrity sha512-T3LSbE95dDdT5lTFoHonDEfcv2PA1xqkueV6rHOVFzwig075KiYsJ2q8fwzEF+p8OFZm6HbvpW3iKok0N9TUsA==
+"@observertc/sample-schemas-js@2.2.10":
+  version "2.2.10"
+  resolved "https://registry.yarnpkg.com/@observertc/sample-schemas-js/-/sample-schemas-js-2.2.10.tgz#b7d6419cacdb79c700accd344cf110dbe93a5c5c"
+  integrity sha512-pz9DDh7fd7i7c6ttLaCvUh1Uile5UP6dA3y3q+SJT0JOF7NDyGCPKGMTagOknR2s21p3U/XlLLcQIH4BoveOGg==
 
 "@sinonjs/commons@^1.7.0":
   version "1.8.6"
