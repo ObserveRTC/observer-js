@@ -52,6 +52,7 @@ export function createClientJoinedEventReport(
 	callId: string,
 	clientId: string,
 	timestamp: number,
+	userId?: string,
 	marker?: string
 ): CallEventReport {
 	return {
@@ -62,6 +63,7 @@ export function createClientJoinedEventReport(
 		callId,
 		clientId,
 		timestamp,
+		userId,
 		marker,
 	};
 }
@@ -73,6 +75,7 @@ export function createClientLeftEventReport(
 	callId: string,
 	clientId: string,
 	timestamp: number,
+	userId?: string,
 	marker?: string
 ): CallEventReport {
 	return {
@@ -83,6 +86,7 @@ export function createClientLeftEventReport(
 		callId,
 		clientId,
 		timestamp,
+		userId,
 		marker,
 	};
 }

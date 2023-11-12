@@ -100,6 +100,7 @@ export function createJoinClientProcess(
 				roomId,
 				callId,
 				clientId: savedClientId,
+				userId,
 				// timeZoneId,
 				marker,
 				joined,
@@ -116,6 +117,7 @@ export function createJoinClientProcess(
 				callId,
 				clientId,
 				Number(joined),
+				userId,
 				marker
 			);
 			reports.addCallEventReport(callEvent);

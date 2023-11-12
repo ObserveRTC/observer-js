@@ -10,12 +10,12 @@ function groupToMap<T>(input: ReadonlyMap<string, T>, getGroupKey: (value: T) =>
 		const groupKey = getGroupKey(value);
 		if (!groupKey) continue;
 
-	  	let group = result.get(groupKey);
+			let group = result.get(groupKey);
 		if (group === undefined) {
 			group = [];
 			result.set(groupKey, group);
 		}
-	  	group.push(value);
+			group.push(value);
 	}
 	return result;
 }

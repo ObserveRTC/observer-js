@@ -58,7 +58,7 @@ export function createDetachClientProcess(
 				if (!deletedClient) {
 					continue;
 				}
-				const { roomId, serviceId, mediaUnitId, marker, callId } = deletedClient;
+				const { roomId, serviceId, mediaUnitId, marker, callId, userId } = deletedClient;
 				if (!roomId || !serviceId || !mediaUnitId || !callId) {
 					continue;
 				}
@@ -71,7 +71,7 @@ export function createDetachClientProcess(
 				}
 
 				reports.addCallEventReport(
-					createClientLeftEventReport(serviceId, mediaUnitId, roomId, callId, clientId, detached, marker)
+					createClientLeftEventReport(serviceId, mediaUnitId, roomId, callId, clientId, detached, userId, marker)
 				);
 				evaluatorContext?.detachedClients.push({
 					...deletedClient,
