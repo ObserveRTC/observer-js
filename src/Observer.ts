@@ -8,11 +8,15 @@ import { ObservedCallSourceConfig, ObservedCallSource } from './sources/Observed
 import { PartialBy } from './common/utils';
 import { createLogger, LogLevel } from './common/logger';
 import { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
-import EventEmitter from 'events';
+import { EventEmitter } from 'events';
 
 const logger = createLogger('Observer');
 
 export type ObserverEvents = {
+	'processing-started': undefined,
+	'client-added': string,
+	'client-removed': string,
+	'processing-ended': undefined,
 	'close': undefined,
 }
 
@@ -87,16 +91,20 @@ export class Observer {
 		this._evaluator = new Evaluator(this.config.evaluator, this._semaphores.callSemaphore, this._storages, this._sink);
 
 		this._sources.on('observed-samples', (event) => {
+			this._emitter.emit('processing-started');
 			this._evaluator.addObservedSamples(event);
 		});
 		this._sources.on('added-client-source', (event) => {
 			this._evaluator.addCreatedClientSource(event);
+			this._emitter.emit('client-added', event.clientId);
 		});
 		this._sources.on('removed-client-source', (event) => {
 			this._evaluator.addClosedClientSource(event);
+			this._emitter.emit('client-added', event.clientId);
 		});
 		this._evaluator.on('ready', () => {
 			this._sink.emit();
+			this._emitter.emit('processing-ended');
 		});
 		logger.debug('Observer is created with config', this.config);
 	}
