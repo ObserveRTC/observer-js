@@ -14,7 +14,7 @@ export function createVisitObservedSfusMiddleware(
 	reports: ReportsCollector,
 	fetchSamples: boolean
 ): Middleware<TransactionContext> {
-	const process = async (transaction: TransactionContext) => {
+	const process = (transaction: TransactionContext) => {
 		const {
 			observedSfus,
 			updatedSfus,
@@ -84,7 +84,7 @@ export function createVisitObservedSfusMiddleware(
 			}
 		}
 
-		for (const [sfuId, sfu] of Array.from(updatedSfus.entries())) {
+		for (const [ sfuId, sfu ] of Array.from(updatedSfus.entries())) {
 
 			if (visitedSfuIds.has(sfuId)) {
 				continue;
@@ -95,7 +95,7 @@ export function createVisitObservedSfusMiddleware(
 				reports.addSfuEventReport({
 					serviceId: sfu.serviceId,
 					mediaUnitId: sfu.mediaUnitId,
-					name: "SFU_LEFT",
+					name: 'SFU_LEFT',
 					sfuId,
 					timestamp: Date.now(),
 					marker: sfu.marker,
@@ -104,7 +104,7 @@ export function createVisitObservedSfusMiddleware(
 			}
 		}
 
-		for (const [sfuTransportId, sfuTransport] of Array.from(updatedSfuTransports.entries())) {
+		for (const [ sfuTransportId, sfuTransport ] of Array.from(updatedSfuTransports.entries())) {
 			if (visitedSfuTransportIds.has(sfuTransportId)) {
 				continue;
 			}
@@ -126,7 +126,7 @@ export function createVisitObservedSfusMiddleware(
 			}
 		}
 
-		for (const [padId, sfuInboundRtpPad] of Array.from(updatedSfuInboundRtpPads.entries())) {
+		for (const [ padId, sfuInboundRtpPad ] of Array.from(updatedSfuInboundRtpPads.entries())) {
 			if (visitedSfuInboundRtpPadIds.has(padId)) {
 				continue;
 			}
@@ -148,7 +148,7 @@ export function createVisitObservedSfusMiddleware(
 			}
 		}
 
-		for (const [padId, sfuOutboundRtpPad] of Array.from(updatedSfuOutboundRtpPads.entries())) {
+		for (const [ padId, sfuOutboundRtpPad ] of Array.from(updatedSfuOutboundRtpPads.entries())) {
 			if (visitedSfuOutboundRtpPadIds.has(padId)) {
 				continue;
 			}
@@ -171,7 +171,7 @@ export function createVisitObservedSfusMiddleware(
 			}
 		}
 
-		for (const [channelId, sfuSctpChannel] of Array.from(updatedSfuSctpChannels.entries())) {
+		for (const [ channelId, sfuSctpChannel ] of Array.from(updatedSfuSctpChannels.entries())) {
 			if (visitedSfuSctpChannels.has(channelId)) {
 				continue;
 			}
@@ -198,5 +198,6 @@ export function createVisitObservedSfusMiddleware(
 		await process(context);
 		if (next) await next(context);
 	};
+	
 	return result;
 }

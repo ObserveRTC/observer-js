@@ -14,10 +14,10 @@ export function visitSfuInboundRtpPad(
 
 	const { transportId: sfuTransportId } = observedSfuInboundRtpPad.sfuTransport;
 
-	const { serviceId, sfuId, mediaUnitId,  marker, minTimestamp: timestamp } = observedSfuInboundRtpPad.sfuTransport.sfu;
-
+	const { serviceId, sfuId, mediaUnitId, marker, minTimestamp: timestamp } = observedSfuInboundRtpPad.sfuTransport.sfu;
 
 	let storedSfuInboundRtpPad = storedSfuInboundRtpPads.get(rtpPadId);
+
 	if (!storedSfuInboundRtpPad) {
 		storedSfuInboundRtpPad = new Models.SfuInboundRtpPad({
 			serviceId,
@@ -42,9 +42,11 @@ export function visitSfuInboundRtpPad(
 			sfuStreamId: sfuInboundRtpPad.streamId,
 			timestamp,
 		};
+
 		reports.addSfuTransportReport(report);
 	}
 
 	if (fetchSamples) {
+		// empty
 	}
 }

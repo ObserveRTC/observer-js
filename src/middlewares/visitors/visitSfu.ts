@@ -10,8 +10,10 @@ export function visitSfu(
 ) {
 	const { mediaUnitId, serviceId, sfuId, timeZoneId, marker } = observedSfu;
 	let storedSfu = storedSfus.get(sfuId);
+
 	if (!storedSfu) {
 		const timestamp = Date.now();
+
 		storedSfu = new Models.Sfu({
 			serviceId,
 			sfuId,
@@ -26,7 +28,7 @@ export function visitSfu(
 		reports.addSfuEventReport({
 			serviceId,
 			mediaUnitId,
-			name: "SFU_JOINED",
+			name: 'SFU_JOINED',
 			sfuId,
 			timestamp,
 			marker,
@@ -59,6 +61,10 @@ export function visitSfu(
 					extensionType: extensionStats.type,
 				});
 			}
+		}
+
+		if (fetchSamples) {
+			// empty
 		}
 	}
 }

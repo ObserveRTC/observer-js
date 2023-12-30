@@ -14,8 +14,8 @@ export class ObservedOutboundVideoTrackBuilder {
 
 	public constructor(
 		private _config: Omit<
-			ObservedOutboundVideoTrack,
-			keyof IterableIterator<ObservedPeerConnection> | 'peerConnection' | 'samples'
+		ObservedOutboundVideoTrack,
+		keyof IterableIterator<ObservedPeerConnection> | 'peerConnection' | 'samples'
 		>
 	) {}
 
@@ -29,6 +29,7 @@ export class ObservedOutboundVideoTrackBuilder {
 			...this._config,
 			samples: () => this._trackSamples.values(),
 		};
+		
 		return result;
 	}
 }

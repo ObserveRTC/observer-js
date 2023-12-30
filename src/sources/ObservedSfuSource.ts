@@ -1,6 +1,7 @@
-import { ClientSample, SfuSample } from '@observertc/sample-schemas-js';
+import { SfuSample } from '@observertc/sample-schemas-js';
 
-export type ObservedSfuSourceConfig = {
+export type ObservedSfuSourceConfig<T extends Record<string, unknown> = Record<string, unknown>> = {
+	readonly appData: T;
 	readonly serviceId: string;
 	readonly mediaUnitId: string;
 	readonly sfuId: string;
@@ -9,15 +10,10 @@ export type ObservedSfuSourceConfig = {
 	timeZoneId?: string;
 };
 
-export interface ObservedSfuSource extends ObservedSfuSourceConfig {
+export interface ObservedSfuSource<T extends Record<string, unknown> = Record<string, unknown>> extends ObservedSfuSourceConfig<T> {
 	readonly closed: boolean;
 
 	accept(...samples: SfuSample[]): void;
 
-	// when you close this, client is disposed. so this triggers the client to dispose
-	// therefore this triggers the call to be disposed
-	// peer connections, and tracks the creation is evented by the client,
-	// the close of those object is evented by the observer or closing this
-	// call the close of this is mandatory, as only this closes the client inside the observer
 	close(): void;
 }

@@ -42,17 +42,17 @@ export class ObservedPeerConnectionBuilder {
 	private _peerConnectionLabel?: string;
 	public constructor(
 		private _config: Omit<
-			ObservedPeerConnection,
-			| keyof IterableIterator<ObservedPeerConnection>
-			| 'client'
-			| 'inboundAudioTracks'
-			| 'inboundVideoTracks'
-			| 'outboundAudioTracks'
-			| 'outboundVideoTracks'
-			| 'transportSamples'
-			| 'iceCandidatePairs'
-			| 'iceRemoteCandidates'
-			| 'iceLocalCandidates'
+		ObservedPeerConnection,
+		| keyof IterableIterator<ObservedPeerConnection>
+		| 'client'
+		| 'inboundAudioTracks'
+		| 'inboundVideoTracks'
+		| 'outboundAudioTracks'
+		| 'outboundVideoTracks'
+		| 'transportSamples'
+		| 'iceCandidatePairs'
+		| 'iceRemoteCandidates'
+		| 'iceLocalCandidates'
 		>
 	) {}
 
@@ -71,6 +71,7 @@ export class ObservedPeerConnectionBuilder {
 				inboundAudioTrackSample.sfuStreamId,
 				inboundAudioTrackSample.sfuSinkId
 			);
+
 			builder.addSample(inboundAudioTrackSample);
 		}
 	}
@@ -87,6 +88,7 @@ export class ObservedPeerConnectionBuilder {
 
 	private _getInboundAudioTrackBuilder(trackId: string, sfuStreamId?: string, sfuSinkId?: string): ObservedInboundAudioTrackBuilder {
 		let result = this._inboundAudioTracks.get(trackId);
+
 		if (!result) {
 			result = new ObservedInboundAudioTrackBuilder({
 				trackId,
@@ -95,6 +97,7 @@ export class ObservedPeerConnectionBuilder {
 			});
 			this._inboundAudioTracks.set(trackId, result);
 		}
+		
 		return result;
 	}
 
@@ -104,12 +107,14 @@ export class ObservedPeerConnectionBuilder {
 				outboundAudioTrackSample.trackId,
 				outboundAudioTrackSample.sfuStreamId,
 			);
+
 			builder.addSample(outboundAudioTrackSample);
 		}
 	}
 
 	private _getOutboundAudioTrackBuilder(trackId: string, sfuStreamId?: string): ObservedOutboundAudioTrackBuilder {
 		let result = this._outboundAudioTracks.get(trackId);
+
 		if (!result) {
 			result = new ObservedOutboundAudioTrackBuilder({
 				trackId,
@@ -117,6 +122,7 @@ export class ObservedPeerConnectionBuilder {
 			});
 			this._outboundAudioTracks.set(trackId, result);
 		}
+		
 		return result;
 	}
 
@@ -127,12 +133,14 @@ export class ObservedPeerConnectionBuilder {
 				inboundVideoTrackSample.sfuStreamId,
 				inboundVideoTrackSample.sfuSinkId,
 			);
+
 			builder.addSample(inboundVideoTrackSample);
 		}
 	}
 
 	private _getInboundVideoTrackBuilder(trackId: string, sfuStreamId?: string, sfuSinkId?: string): ObservedInboundVideoTrackBuilder {
 		let result = this._inboundVideoTracks.get(trackId);
+
 		if (!result) {
 			result = new ObservedInboundVideoTrackBuilder({
 				trackId,
@@ -141,6 +149,7 @@ export class ObservedPeerConnectionBuilder {
 			});
 			this._inboundVideoTracks.set(trackId, result);
 		}
+		
 		return result;
 	}
 
@@ -150,12 +159,14 @@ export class ObservedPeerConnectionBuilder {
 				outboundVideoTrackSample.trackId,
 				outboundVideoTrackSample.sfuStreamId,
 			);
+
 			builder.addSample(outboundVideoTrackSample);
 		}
 	}
 
 	private _getOutboundVideoTrackBuilder(trackId: string, sfuStreamId?: string): ObservedOutboundVideoTrackBuilder {
 		let result = this._outboundVideoTracks.get(trackId);
+
 		if (!result) {
 			result = new ObservedOutboundVideoTrackBuilder({
 				trackId,
@@ -163,6 +174,7 @@ export class ObservedPeerConnectionBuilder {
 			});
 			this._outboundVideoTracks.set(trackId, result);
 		}
+		
 		return result;
 	}
 
@@ -188,21 +200,25 @@ export class ObservedPeerConnectionBuilder {
 
 		for (const builder of this._inboundAudioTracks.values()) {
 			const observedInboundAudioTrack = builder.build(result);
+
 			inboundAudioTracks.set(observedInboundAudioTrack.trackId, observedInboundAudioTrack);
 		}
 
 		for (const builder of this._outboundAudioTracks.values()) {
 			const observedOutboundAudioTrack = builder.build(result);
+
 			outboundAudioTracks.set(observedOutboundAudioTrack.trackId, observedOutboundAudioTrack);
 		}
 
 		for (const builder of this._inboundVideoTracks.values()) {
 			const observedInboundVideoTrack = builder.build(result);
+
 			inboundVideoTracks.set(observedInboundVideoTrack.trackId, observedInboundVideoTrack);
 		}
 
 		for (const builder of this._outboundVideoTracks.values()) {
 			const observedOutboundVideoTrack = builder.build(result);
+
 			outboundVideoTracks.set(observedOutboundVideoTrack.trackId, observedOutboundVideoTrack);
 		}
 

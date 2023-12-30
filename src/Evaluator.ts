@@ -1,6 +1,6 @@
 import { createLogger } from './common/logger';
 import { Semaphore } from './common/Semaphore';
-import { EvaluatorContext, ObserverSinkContext } from './common/types';
+import { EvaluatorContext } from './common/types';
 import { ReportsCollector } from './common/ReportsCollector';
 import { ObservedClientSourceConfig } from './sources/ObservedClientSource';
 import { SourcesEvents } from './sources/Sources';
@@ -39,8 +39,6 @@ export class Evaluator {
 	private _transactionProcessor: Processor<TransactionContext>;
 	private _customProcessor: Processor<EvaluatorContext>;
 
-	
-
 	public constructor(
 		public readonly config: EvaluatorConfig,
 		private readonly _callSemaphore: Semaphore,
@@ -65,12 +63,14 @@ export class Evaluator {
 			await process(context);
 			if (next) await next(context);
 		};
+
 		this._evaluatorProcesses.set(process, middleware);
 		this._customProcessor.addMiddleware(middleware);
 	}
 
 	public removeProcess(process: EvaluatorProcess) {
 		const middleware = this._evaluatorProcesses.get(process);
+
 		if (!middleware) {
 			return;
 		}
@@ -95,16 +95,19 @@ export class Evaluator {
 
 	public on<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
 		this._emitter.addListener(event, listener);
+		
 		return this;
 	}
 
 	public once<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
 		this._emitter.once(event, listener);
+		
 		return this;
 	}
 
 	public off<K extends keyof EvaluatorEvents>(event: K, listener: (data: EvaluatorEvents[K]) => void): this {
 		this._emitter.removeListener(event, listener);
+		
 		return this;
 	}
 
@@ -153,14 +156,15 @@ export class Evaluator {
 		};
 		
 		const callOperations = createCallOperationContext(this._clientOperations, evaluatorContext);
+
 		this._clientOperations.clear();
 
 		this._eval(callOperations, evaluatorContext)
 			.then(() => {
-				logger.debug(`Evaluator is successfully performed eval process`);
+				logger.debug('Evaluator is successfully performed eval process');
 			})
 			.catch((err) => {
-				logger.warn(`Error occurred while evaluating`, err);
+				logger.warn('Error occurred while evaluating', err);
 			});
 	}
 
@@ -183,7 +187,9 @@ export class Evaluator {
 				resolve();
 			});
 		});
+
 		this._evaluations.set(index, nextBlockingPoint);
+		
 		return result;
 	}
 
@@ -211,11 +217,13 @@ export class Evaluator {
 	
 			await this._customProcessor.use(evaluatorContext);
 		};
+
 		await process().then(() => {
 			this._emit('ready', undefined);
-		}).catch(err => {
-			logger.warn(`Error occurred while evaluating samples`, err);
-			this._emit('ready', err);
-		});
+		})
+			.catch((err) => {
+				logger.warn('Error occurred while evaluating samples', err);
+				this._emit('ready', err);
+			});
 	}
 }

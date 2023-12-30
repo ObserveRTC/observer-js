@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import { ObservedClient } from '../../samples/ObservedClient';
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
@@ -35,6 +36,7 @@ export function visitClient(
 				type: CallMetaType.OPERATION_SYSTEM,
 				payload: clientSample.os,
 			}, userId);
+
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -52,6 +54,7 @@ export function visitClient(
 				type: CallMetaType.ENGINE,
 				payload: clientSample.engine,
 			}, userId);
+
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -70,6 +73,7 @@ export function visitClient(
 				type: CallMetaType.PLATFORM,
 				payload: clientSample.platform,
 			}, userId);
+
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -87,6 +91,7 @@ export function visitClient(
 				type: CallMetaType.BROWSER,
 				payload: clientSample.browser,
 			}, userId);
+
 			reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -96,10 +101,10 @@ export function visitClient(
 					type: CallMetaType.MEDIA_CONSTRAINT,
 					payload: mediaConstraint,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
-		
 
 		if (clientSample.localSDPs && 0 < clientSample.localSDPs.length) {
 			for (const localSDP of clientSample.localSDPs) {
@@ -107,6 +112,7 @@ export function visitClient(
 					type: CallMetaType.LOCAL_SDP,
 					payload: localSDP,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -148,6 +154,7 @@ export function visitClient(
 					type: CallMetaType.USER_MEDIA_ERROR,
 					payload: userMediaError,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -158,6 +165,7 @@ export function visitClient(
 					type: CallMetaType.CERTIFICATE,
 					payload: certificate,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -168,6 +176,7 @@ export function visitClient(
 					type: CallMetaType.CODEC,
 					payload: codec,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -178,6 +187,7 @@ export function visitClient(
 					type: CallMetaType.ICE_SERVER,
 					payload: iceServer,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -188,6 +198,7 @@ export function visitClient(
 					type: CallMetaType.MEDIA_DEVICE,
 					payload: mediaDevice,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -198,6 +209,7 @@ export function visitClient(
 					type: CallMetaType.MEDIA_SOURCE,
 					payload: mediaSource,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -208,6 +220,7 @@ export function visitClient(
 					type: CallMetaType.ICE_LOCAL_CANDIDATE,
 					payload: iceLocalCandidate,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}
@@ -218,6 +231,7 @@ export function visitClient(
 					type: CallMetaType.ICE_REMOTE_CANDIDATE,
 					payload: iceRemoteCandidate,
 				}, userId);
+
 				reports.addCallMetaReport(callMetaReport);
 			}
 		}

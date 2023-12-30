@@ -19,7 +19,8 @@ export function createCallProcessor(
 
 			evaluatorContext: context.evaluatorContext,
 		};
-		await Promise.all([joinClientProcess(input), next ? next(context) : Promise.resolve()]);
+
+		await Promise.all([ joinClientProcess(input), next ? next(context) : Promise.resolve() ]);
 	};
 
 	const detachClientMiddleware: Middleware<CallOperationsContext> = async (context, next) => {
@@ -29,7 +30,8 @@ export function createCallProcessor(
 			evaluatorContext: context.evaluatorContext,
 			recursive: true,
 		};
-		await Promise.all([detachClientProcess(input), next ? next(context) : Promise.resolve()]);
+
+		await Promise.all([ detachClientProcess(input), next ? next(context) : Promise.resolve() ]);
 	};
 
 	return createProcessor(joinClientMiddleware, detachClientMiddleware);

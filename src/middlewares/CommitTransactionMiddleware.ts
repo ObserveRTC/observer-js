@@ -160,6 +160,7 @@ export function createCommitTransactionMiddleware(
 
 		const [
 			[
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				oldClientModels,
 				oldPeerConnectionModels,
 				oldInboundAudioTrackModels,
@@ -233,6 +234,7 @@ export function createCommitTransactionMiddleware(
 		};
 		const addedUnits = <K, V>(oldItems: ReadonlyMap<K, V>, updatedItems: ReadonlyMap<K, V>) => {
 			const oldSet = new Set<K>(oldItems.keys());
+			
 			return Array.from(updatedItems.keys()).filter((updatedKey) => !oldSet.has(updatedKey));
 		};
 
@@ -312,14 +314,15 @@ export function createCommitTransactionMiddleware(
 			})
 		);
 
-		evaluatorContext.callEvents = [...reports.getCallEventReports()];
-		evaluatorContext.clientExtensionStats = [...reports.getClientExtensionReports()];
-		evaluatorContext.sfuEvents = [...reports.getSfuEventReports()];
-		evaluatorContext.sfuExtensionStats = [...reports.getSfuExtensionReports()];
+		evaluatorContext.callEvents = [ ...reports.getCallEventReports() ];
+		evaluatorContext.clientExtensionStats = [ ...reports.getClientExtensionReports() ];
+		evaluatorContext.sfuEvents = [ ...reports.getSfuEventReports() ];
+		evaluatorContext.sfuExtensionStats = [ ...reports.getSfuExtensionReports() ];
 	};
 
 	const result = async (context: TransactionContext, next?: Middleware<TransactionContext>) => {
-		await Promise.all([process(context), next ? next(context) : Promise.resolve()]);
+		await Promise.all([ process(context), next ? next(context) : Promise.resolve() ]);
 	};
+	
 	return result;
 }

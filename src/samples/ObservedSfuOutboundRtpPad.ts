@@ -12,10 +12,10 @@ export class ObservedSfuOutboundRtpPadBuilder {
 	private _samples: SfuOutboundRtpPad[] = [];
 	public constructor(
 		private _config: Omit<
-			ObservedSfuOutboundRtpPad,
-			| keyof IterableIterator<SfuOutboundRtpPad> 
-			| 'sfuTransport' 
-			| 'samples'
+		ObservedSfuOutboundRtpPad,
+		| keyof IterableIterator<SfuOutboundRtpPad> 
+		| 'sfuTransport' 
+		| 'samples'
 		>
 	) {}
 
@@ -29,6 +29,7 @@ export class ObservedSfuOutboundRtpPadBuilder {
 			...this._config,
 			samples: () => this._samples.values(),
 		};
+		
 		return result;
 	}
 }

@@ -14,8 +14,8 @@ export class ObservedOutboundAudioTrackBuilder {
 
 	public constructor(
 		private _config: Omit<
-			ObservedOutboundAudioTrack,
-			keyof IterableIterator<ObservedPeerConnection> | 'peerConnection' | 'samples'
+		ObservedOutboundAudioTrack,
+		keyof IterableIterator<ObservedPeerConnection> | 'peerConnection' | 'samples'
 		>
 	) {}
 
@@ -29,6 +29,7 @@ export class ObservedOutboundAudioTrackBuilder {
 			...this._config,
 			samples: () => this._trackSamples.values(),
 		};
+		
 		return result;
 	}
 }

@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { ObservedOutboundAudioTrack } from '../../samples/ObservedOutboundAudioTrack';
@@ -27,6 +28,7 @@ export function visitOutboundAudioTrack(
 	const { serviceId, roomId, callId } = observedOutboundAudioTrack.peerConnection.client.call;
 
 	let storedOutboundAudioTrack = storedOutboundTracks.get(trackId);
+
 	if (!storedOutboundAudioTrack) {
 		storedOutboundAudioTrack = new Models.OutboundTrack({
 			serviceId,
@@ -53,6 +55,7 @@ export function visitOutboundAudioTrack(
 	}
 
 	const statsMap = new Map<bigint, Samples_ClientSample_OutboundAudioTrack>();
+
 	for (const outboundAudioSample of observedOutboundAudioTrack.samples()) {
 		const report: OutboundAudioTrackReport = {
 			serviceId,
@@ -66,6 +69,7 @@ export function visitOutboundAudioTrack(
 			timestamp,
 			sampleSeq: -1,
 		};
+
 		reports.addOutboundAudioTrackReport(report);
 
 		if (fetchSamples) {
@@ -91,6 +95,6 @@ export function visitOutboundAudioTrack(
 			statsMap.set(ssrc, audioStats);
 		}
 	}
-	storedOutboundAudioTrack.ssrc = [...statsMap.keys()];
+	storedOutboundAudioTrack.ssrc = [ ...statsMap.keys() ];
 	storedOutboundAudioTrack.audioStats = Array.from(statsMap.values());
 }

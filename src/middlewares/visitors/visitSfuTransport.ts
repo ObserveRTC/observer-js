@@ -14,8 +14,8 @@ export function visitSfuTransport(
 
 	const { serviceId, sfuId, mediaUnitId, marker, minTimestamp: timestamp } = observedSfuTransport.sfu;
 
-
 	let storedSfuTransport = storedSfuTransports.get(transportId);
+
 	if (!storedSfuTransport) {
 		storedSfuTransport = new Models.SfuTransport({
 			serviceId,
@@ -40,9 +40,11 @@ export function visitSfuTransport(
 			...sfuTransport,
 			timestamp,
 		};
+
 		reports.addSfuTransportReport(report);
 	}
 
 	if (fetchSamples) {
+		// empty
 	}
 }

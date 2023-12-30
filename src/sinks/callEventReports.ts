@@ -1,6 +1,6 @@
 import { CallEventReport } from '@observertc/report-schemas-js';
-import { stringify } from 'uuid';
 
+// eslint-disable-next-line no-shadow
 export enum CallEventType {
 	CALL_STARTED = 'CALL_STARTED',
 	CALL_ENDED = 'CALL_ENDED',

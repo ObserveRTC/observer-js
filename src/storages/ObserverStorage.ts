@@ -2,6 +2,7 @@
  * The `ObserverStorage` interface defines the methods used for managing storage of key-value pairs.
  */
 export interface ObserverStorage<K, V> {
+
 	/**
 	 * The identifier of the storage
 	 */

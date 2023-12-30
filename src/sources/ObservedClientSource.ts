@@ -1,6 +1,7 @@
 import { ClientSample } from '@observertc/sample-schemas-js';
 
-export type ObservedClientSourceConfig = {
+export type ObservedClientSourceConfig<T extends Record<string, unknown> = Record<string, unknown>> = {
+	readonly appData: T;
 	readonly serviceId: string;
 	readonly mediaUnitId: string;
 	readonly roomId: string;
@@ -13,7 +14,7 @@ export type ObservedClientSourceConfig = {
 	timeZoneId?: string;
 };
 
-export interface ObservedClientSource extends ObservedClientSourceConfig {
+export interface ObservedClientSource<T extends Record<string, unknown> = Record<string, unknown>> extends ObservedClientSourceConfig<T> {
 	readonly closed: boolean;
 
 	accept(...samples: ClientSample[]): void;

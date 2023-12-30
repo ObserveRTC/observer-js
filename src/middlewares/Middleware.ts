@@ -5,5 +5,6 @@ export function createMiddlewareFromAsyncProcess<T>(process: (input: T) => Promi
 		await process(input);
 		if (next) await next(input);
 	};
+	
 	return middleware;
 }

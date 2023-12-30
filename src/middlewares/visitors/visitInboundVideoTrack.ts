@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import { InboundVideoTrackReport } from '@observertc/report-schemas-js';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { ObservedInboundVideoTrack } from '../../samples/ObservedInboundVideoTrack';
@@ -32,6 +33,7 @@ export function visitInboundVideoTrack(
 	const { serviceId, roomId, callId } = observedInboundVideoTrack.peerConnection.client.call;
 
 	let storedInboundVideoTrack = storedInboundTracks.get(trackId);
+
 	if (!storedInboundVideoTrack) {
 		storedInboundVideoTrack = new Models.InboundTrack({
 			serviceId,
@@ -60,6 +62,7 @@ export function visitInboundVideoTrack(
 	}
 
 	const statsMap = new Map<bigint, Samples_ClientSample_InboundVideoTrack>();
+
 	for (const inboundVideoSample of observedInboundVideoTrack.samples()) {
 		const report: InboundVideoTrackReport = {
 			serviceId,
@@ -76,6 +79,7 @@ export function visitInboundVideoTrack(
 			remotePeerConnectionId,
 			remoteTrackId,
 		};
+
 		reports.addInboundVideoTrackReport(report);
 
 		if (fetchSamples) {
@@ -107,6 +111,6 @@ export function visitInboundVideoTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
-	storedInboundVideoTrack.ssrc = [...statsMap.keys()];
+	storedInboundVideoTrack.ssrc = [ ...statsMap.keys() ];
 	storedInboundVideoTrack.videoStats = Array.from(statsMap.values());
 }

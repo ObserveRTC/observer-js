@@ -17,11 +17,14 @@ export class ObservedCallBuilder {
 		configSupplier: () => ConstructorParameters<typeof ObservedClientBuilder>[0]
 	) {
 		let result = this._observedClientBuilders.get(clientId);
+
 		if (!result) {
 			const config = configSupplier();
+
 			result = new ObservedClientBuilder(config);
 			this._observedClientBuilders.set(clientId, result);
 		}
+		
 		return result;
 	}
 
@@ -33,10 +36,13 @@ export class ObservedCallBuilder {
 			observedClients: () => observedClients.values(),
 			getObservedClient: (clientId) => observedClients.get(clientId),
 		};
+
 		for (const observedClientBuilder of this._observedClientBuilders.values()) {
 			const observedClient = observedClientBuilder.build(observedCall);
+
 			observedClients.set(observedClient.clientId, observedClient);
 		}
+		
 		return observedCall;
 	}
 }

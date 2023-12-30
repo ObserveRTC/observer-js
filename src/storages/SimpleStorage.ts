@@ -5,87 +5,110 @@ export class SimpleStorage<K, V> implements ObserverStorage<K, V> {
 
 	public constructor(public readonly id: string) {}
 
-	public async size(): Promise<number> {
-		return this._map.size;
+	public size(): Promise<number> {
+		return Promise.resolve(this._map.size);
 	}
 
-	public async clear(): Promise<void> {
+	public clear(): Promise<void> {
 		this._map.clear();
+
+		return Promise.resolve();
 	}
 
-	public async get(key: K): Promise<V | undefined> {
-		return this._map.get(key);
+	public get(key: K): Promise<V | undefined> {
+		return Promise.resolve(this._map.get(key));
 	}
 
-	public async getAll(keys: Iterable<K>): Promise<ReadonlyMap<K, V>> {
+	public getAll(keys: Iterable<K>): Promise<ReadonlyMap<K, V>> {
 		const result = new Map<K, V>();
+
 		for (const key of keys) {
 			const value = this._map.get(key);
+
 			if (value) {
 				result.set(key, value);
 			}
 		}
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
-	public async set(key: K, value: V): Promise<V | undefined> {
+	public set(key: K, value: V): Promise<V | undefined> {
 		const result = this._map.get(key);
+
 		this._map.set(key, value);
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
-	public async setAll(entries: ReadonlyMap<K, V>): Promise<ReadonlyMap<K, V>> {
+	public setAll(entries: ReadonlyMap<K, V>): Promise<ReadonlyMap<K, V>> {
 		const result = new Map<K, V>();
-		for (const [key, value] of entries) {
+
+		for (const [ key, value ] of entries) {
 			const oldValue = this._map.get(key);
+
 			if (oldValue) {
 				result.set(key, oldValue);
 			}
 			this._map.set(key, value);
 		}
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
-	public async insert(key: K, value: V): Promise<V | undefined> {
+	public insert(key: K, value: V): Promise<V | undefined> {
 		const result = this._map.get(key);
+
 		if (result) {
-			return result;
+			return Promise.resolve(result);
 		}
 		this._map.set(key, value);
+
+		return Promise.resolve(undefined);
 	}
 
-	public async insertAll(entries: ReadonlyMap<K, V>): Promise<ReadonlyMap<K, V>> {
+	public insertAll(entries: ReadonlyMap<K, V>): Promise<ReadonlyMap<K, V>> {
 		const result = new Map<K, V>();
-		for (const [key, value] of entries) {
+
+		for (const [ key, value ] of entries) {
 			const oldValue = this._map.get(key);
+
 			if (oldValue) {
 				result.set(key, oldValue);
 			} else {
 				this._map.set(key, value);
 			}
 		}
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
-	public async remove(key: K): Promise<V | undefined> {
+	public remove(key: K): Promise<V | undefined> {
 		const result = this._map.get(key);
+
 		this._map.delete(key);
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
-	public async removeAll(keys: Iterable<K>): Promise<ReadonlyMap<K, V>> {
+	public removeAll(keys: Iterable<K>): Promise<ReadonlyMap<K, V>> {
 		const result = new Map<K, V>();
+
 		for (const key of keys) {
 			const value = this._map.get(key);
+
 			this._map.delete(key);
 			if (value) {
 				result.set(key, value);
 			}
 		}
-		return result;
+		
+		return Promise.resolve(result);
 	}
 
 	public async *[Symbol.asyncIterator](): AsyncIterableIterator<[K, V]> {
+		await Promise.resolve();
+		
 		for (const entry of this._map.entries()) {
 			yield entry;
 		}

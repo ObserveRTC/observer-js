@@ -13,11 +13,11 @@ export type CallOperationsContext = {
 
 export type CallOperation =
 	| (ObservedClientSourceConfig & {
-        type: 'join';
-    }) | (ObservedClientSourceConfig & {
-        type: 'detach';
-        detached: number;
-    });
+		type: 'join';
+	}) | (ObservedClientSourceConfig & {
+		type: 'detach';
+		detached: number;
+	});
 
 export function createCallOperationContext(
 	clientOperations: Map<string, CallOperation>,
@@ -25,12 +25,14 @@ export function createCallOperationContext(
 ): CallOperationsContext {
 	const joinedClients: CallOperationsContext['joinedClients'] = [];
 	const detachedClients: CallOperationsContext['detachedClients'] = [];
+
 	for (const clientOperation of clientOperations.values()) {
 		switch (clientOperation.type) {
 			case 'join': {
 				const joinedClient: CallOperationsContext['joinedClients'][number] = {
 					...clientOperation,
 				};
+
 				joinedClients.push(joinedClient);
 				break;
 			}
@@ -38,11 +40,13 @@ export function createCallOperationContext(
 				const detachedClient: CallOperationsContext['detachedClients'][number] = {
 					...clientOperation,
 				};
+
 				detachedClients.push(detachedClient);
 				break;
 			}
 		}
 	}
+	
 	return {
 		joinedClients,
 		detachedClients,

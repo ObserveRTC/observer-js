@@ -6,30 +6,30 @@ export interface ObservedSfuSctpChannel {
 	readonly channelId: string;
   
 	samples(): IterableIterator<SfuSctpChannel>;
-  }
+}
   
-  export class ObservedSfuSctpChannelBuilder {
+export class ObservedSfuSctpChannelBuilder {
 	private _samples: SfuSctpChannel[] = [];
 	public constructor(
-	  private _config: Omit<
+		private _config: Omit<
 		ObservedSfuSctpChannel,
 		| keyof IterableIterator<SfuSctpChannel>
 		| 'sfuTransport'
 		| 'samples'
-	  >
+		>
 	) {}
   
 	public addSample(sfuSctpChannel: SfuSctpChannel) {
-	  this._samples.push(sfuSctpChannel);
+		this._samples.push(sfuSctpChannel);
 	}
   
 	public build(sfuTransport: ObservedSfuTransport): ObservedSfuSctpChannel {
-	  const result: ObservedSfuSctpChannel = {
-		sfuTransport,
-		...this._config,
-		samples: () => this._samples.values(),
-	  };
-	  return result;
+		const result: ObservedSfuSctpChannel = {
+			sfuTransport,
+			...this._config,
+			samples: () => this._samples.values(),
+		};
+		
+		return result;
 	}
-  }
-  
+}

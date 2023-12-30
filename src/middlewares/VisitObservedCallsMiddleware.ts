@@ -50,8 +50,8 @@ export function createVisitObservedCallsMiddleware(
 		} : await findRemoteMatchFunc(
 			storages,
 			clients,
-			new Map<string, InboundTrack>([...updatedInboundAudioTracks, ...updatedInboundVideoTracks])
-		)
+			new Map<string, InboundTrack>([ ...updatedInboundAudioTracks, ...updatedInboundVideoTracks ])
+		);
 		
 		const now = BigInt(Date.now());
 		const fakeTouched = { touched: BigInt(0) };
@@ -82,6 +82,7 @@ export function createVisitObservedCallsMiddleware(
 					visitPeerConnection(observedPeerConnection, storedClient, updatedPeerConnections, reports, fetchSamples);
 
 					const storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
+
 					if (!storedPeerConnection) {
 						// should not happen, as the visit function should add the peer connection if it does not exists
 						logger.warn(
@@ -95,6 +96,7 @@ export function createVisitObservedCallsMiddleware(
 
 					for (const observedInboundAudioTrack of observedPeerConnection.inboundAudioTracks()) {
 						const { trackId } = observedInboundAudioTrack;
+
 						visitInboundAudioTrack(
 							observedInboundAudioTrack,
 							storedPeerConnection,
@@ -165,5 +167,6 @@ export function createVisitObservedCallsMiddleware(
 		await process(context);
 		if (next) await next(context);
 	};
+	
 	return result;
 }

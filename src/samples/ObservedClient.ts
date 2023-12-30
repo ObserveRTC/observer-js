@@ -27,14 +27,14 @@ export class ObservedClientBuilder {
 	private _clientSamples: ClientSample[] = [];
 	public constructor(
 		private _config: Omit<
-			ObservedClient,
-			| keyof IterableIterator<ObservedPeerConnection>
-			| 'samples'
-			| 'call'
-			| 'getObservedPeerConnection'
-			| 'observedPeerConnections'
-			| 'minTimestamp'
-			| 'maxTimestamp'
+		ObservedClient,
+		| keyof IterableIterator<ObservedPeerConnection>
+		| 'samples'
+		| 'call'
+		| 'getObservedPeerConnection'
+		| 'observedPeerConnections'
+		| 'minTimestamp'
+		| 'maxTimestamp'
 		>
 	) {}
 
@@ -44,6 +44,7 @@ export class ObservedClientBuilder {
 		if (clientSample.pcTransports) {
 			for (const pcTransport of clientSample.pcTransports) {
 				const builder = this._getOrCreatePcBuilder(pcTransport.peerConnectionId);
+
 				builder.addTransportSample(pcTransport);
 				if (pcTransport.label) {
 					builder.peerConnectionLabel = pcTransport.label;
@@ -56,6 +57,7 @@ export class ObservedClientBuilder {
 					continue;
 				}
 				const builder = this._getOrCreatePcBuilder(iceLocalCandidate.peerConnectionId);
+
 				builder.addIceLocalCandidate(iceLocalCandidate);
 			}
 		}
@@ -65,21 +67,25 @@ export class ObservedClientBuilder {
 					continue;
 				}
 				const builder = this._getOrCreatePcBuilder(iceRemoteCandidate.peerConnectionId);
+
 				builder.addIceRemoveCandidate(iceRemoteCandidate);
 			}
 		}
 		if (clientSample.iceCandidatePairs) {
 			for (const iceCandidatePair of clientSample.iceCandidatePairs) {
 				const builder = this._getOrCreatePcBuilder(iceCandidatePair.peerConnectionId);
+
 				builder.addIceCandidatePair(iceCandidatePair);
 			}
 		}
 		if (clientSample.inboundAudioTracks) {
 			for (const trackSample of clientSample.inboundAudioTracks) {
 				const { trackId, peerConnectionId } = trackSample;
+
 				if (!trackId || !peerConnectionId) continue;
 
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
+
 				builder.addInboundAudioTrack(trackSample);
 			}
 		}
@@ -87,9 +93,11 @@ export class ObservedClientBuilder {
 		if (clientSample.inboundVideoTracks) {
 			for (const trackSample of clientSample.inboundVideoTracks) {
 				const { trackId, peerConnectionId } = trackSample;
+
 				if (!trackId || !peerConnectionId) continue;
 
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
+
 				builder.addInboundVideoTrack(trackSample);
 			}
 		}
@@ -97,9 +105,11 @@ export class ObservedClientBuilder {
 		if (clientSample.outboundAudioTracks) {
 			for (const trackSample of clientSample.outboundAudioTracks) {
 				const { trackId, peerConnectionId } = trackSample;
+
 				if (!trackId || !peerConnectionId) continue;
 
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
+
 				builder.addOutboundAudioTrack(trackSample);
 			}
 		}
@@ -107,9 +117,11 @@ export class ObservedClientBuilder {
 		if (clientSample.outboundVideoTracks) {
 			for (const trackSample of clientSample.outboundVideoTracks) {
 				const { trackId, peerConnectionId } = trackSample;
+
 				if (!trackId || !peerConnectionId) continue;
 
 				const builder = this._getOrCreatePcBuilder(peerConnectionId);
+
 				builder.addOutboundVideoTrack(trackSample);
 			}
 		}
@@ -125,12 +137,14 @@ export class ObservedClientBuilder {
 
 	private _getOrCreatePcBuilder(peerConnectionId: string): ObservedPeerConnectionBuilder {
 		let result = this._peerConnections.get(peerConnectionId);
+
 		if (!result) {
 			result = new ObservedPeerConnectionBuilder({
 				peerConnectionId,
 			});
 			this._peerConnections.set(peerConnectionId, result);
 		}
+		
 		return result;
 	}
 
@@ -149,8 +163,10 @@ export class ObservedClientBuilder {
 
 		for (const builder of this._peerConnections.values()) {
 			const observedPeerConnection = builder.build(result);
+
 			observedPeerConnections.set(observedPeerConnection.peerConnectionId, observedPeerConnection);
 		}
+		
 		return result;
 	}
 }

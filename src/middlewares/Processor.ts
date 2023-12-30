@@ -1,7 +1,7 @@
 import { createLogger } from '../common/logger';
 import { Middleware } from './Middleware';
 
-const logger = createLogger(`Middleware`);
+const logger = createLogger('Middleware');
 
 export interface Processor<T> {
 	use(value: T): Promise<void | T>;
@@ -11,12 +11,13 @@ export interface Processor<T> {
 }
 
 export function createProcessor<T>(...processes: Middleware<T>[]): Processor<T> {
-	const stack: Middleware<T>[] = [...processes];
+	const stack: Middleware<T>[] = [ ...processes ];
 	const result: Processor<T> = {
-		addMiddleware: (...processes: Middleware<T>[]) => {
-			if (processes && 0 < processes.length) {
-				stack.push(...processes);
+		addMiddleware: (...middlewares: Middleware<T>[]) => {
+			if (middlewares && 0 < middlewares.length) {
+				stack.push(...middlewares);
 			}
+			
 			return result;
 		},
 
@@ -24,9 +25,11 @@ export function createProcessor<T>(...processes: Middleware<T>[]): Processor<T> 
 			if (middlewares && 0 < middlewares.length) {
 				for (const middleware of middlewares) {
 					const index = stack.indexOf(middleware);
+
 					if (0 < index) stack.splice(index, 1);
 				}
 			}
+			
 			return result;
 		},
 		use: async (value: T): Promise<void> => {
@@ -37,8 +40,10 @@ export function createProcessor<T>(...processes: Middleware<T>[]): Processor<T> 
 
 				const process = stack[index];
 				const next = async (nextInput: T) => await executeMiddleware(nextInput, index + 1);
+				
 				return process(input, next).catch((err) => {
 					logger.error(`Error occurred executing process ${process.name}`, err);
+					
 					return;
 				});
 			};

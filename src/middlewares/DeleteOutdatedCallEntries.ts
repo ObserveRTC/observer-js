@@ -32,19 +32,21 @@ export function createDeleteOutdatedCallEntries(
 		} = transaction;
 
 		const now = BigInt(Date.now());
-		const deletedCallIds = new Set(evaluatorContext.endedCalls.map(c => c.callId).filter(id => !!id))
-		const deletedClientIds = new Set(evaluatorContext.detachedClients.map(c => c.clientId).filter(id => !!id));
-		for (const [peerConnectionId, peerConnection] of storages.peerConnectionStorage.localEntries()) {
+		const deletedCallIds = new Set(evaluatorContext.endedCalls.map((c) => c.callId).filter((id) => Boolean(id)));
+		const deletedClientIds = new Set(evaluatorContext.detachedClients.map((c) => c.clientId).filter((id) => Boolean(id)));
+
+		for (const [ peerConnectionId, peerConnection ] of storages.peerConnectionStorage.localEntries()) {
 			if (updatedPeerConnections.has(peerConnectionId)) {
 				continue;
 			}
 			
 			const { touched, clientId, callId } = peerConnection;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedCallIds.has(callId ?? "not exists") &&
-					!deletedClientIds.has(clientId ?? "not exists")
-				){
+					!deletedCallIds.has(callId ?? 'not exists') &&
+					!deletedClientIds.has(clientId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -53,6 +55,7 @@ export function createDeleteOutdatedCallEntries(
 
 			if (clientId) {
 				let storedClient = clients.get(clientId);
+
 				if (storedClient) {
 					storedClient.peerConnectionIds = storedClient.peerConnectionIds.filter((pcId) => pcId !== peerConnectionId);
 				} else {
@@ -65,18 +68,19 @@ export function createDeleteOutdatedCallEntries(
 			}
 		}
 
-		for (const [trackId, inboundTrack] of storages.inboundTrackStorage.localEntries()) {
+		for (const [ trackId, inboundTrack ] of storages.inboundTrackStorage.localEntries()) {
 			if (updatedInboundAudioTracks.has(trackId) || updatedInboundVideoTracks.has(trackId)) {
 				continue;
 			}
 
 			const { touched, clientId, callId, peerConnectionId } = inboundTrack;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedCallIds.has(callId ?? "not exists") &&
-					!deletedClientIds.has(clientId ?? "not exists") && 
-					!deletedPeerConnections.has(peerConnectionId ?? "not exists")
-				){
+					!deletedCallIds.has(callId ?? 'not exists') &&
+					!deletedClientIds.has(clientId ?? 'not exists') && 
+					!deletedPeerConnections.has(peerConnectionId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -91,6 +95,7 @@ export function createDeleteOutdatedCallEntries(
 
 			if (peerConnectionId) {
 				let storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
+
 				if (!storedPeerConnection) {
 					storedPeerConnection = await storages.peerConnectionStorage.get(peerConnectionId);
 					if (storedPeerConnection) {
@@ -104,19 +109,20 @@ export function createDeleteOutdatedCallEntries(
 		}
 
 		// console.warn("auodiaussdoi", updatedOutboundAudioTracks, updatedOutboundVideoTracks);
-		for (const [trackId, outboundTrack] of storages.outboundTrackStorage.localEntries()) {
+		for (const [ trackId, outboundTrack ] of storages.outboundTrackStorage.localEntries()) {
 			if (updatedOutboundAudioTracks.has(trackId) || updatedOutboundVideoTracks.has(trackId)) {
 				continue;
 			}
 
 			const { touched, clientId, callId, peerConnectionId } = outboundTrack;
 			// console.warn("deprecated outb tracks", outboundTrack, now, touched, maxIdleTimeInMs, touched && now - touched < maxIdleTimeInMs, callId)
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedCallIds.has(callId ?? "not exists") &&
-					!deletedClientIds.has(clientId ?? "not exists") && 
-					!deletedPeerConnections.has(peerConnectionId ?? "not exists")
-				){
+					!deletedCallIds.has(callId ?? 'not exists') &&
+					!deletedClientIds.has(clientId ?? 'not exists') && 
+					!deletedPeerConnections.has(peerConnectionId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -131,6 +137,7 @@ export function createDeleteOutdatedCallEntries(
 			
 			if (peerConnectionId) {
 				let storedPeerConnection = updatedPeerConnections.get(peerConnectionId);
+
 				if (!storedPeerConnection) {
 					storedPeerConnection = await storages.peerConnectionStorage.get(peerConnectionId);
 					if (storedPeerConnection) {
@@ -147,5 +154,6 @@ export function createDeleteOutdatedCallEntries(
 		await process(context);
 		if (next) await next(context);
 	};
+	
 	return result;
 }

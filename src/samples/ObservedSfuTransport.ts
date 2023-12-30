@@ -27,13 +27,13 @@ export class ObservedSfuTransportBuilder {
 	private _transportSamples: SfuTransport[] = [];
 	public constructor(
 		private _config: Omit<
-			ObservedSfuTransport,
-			| keyof IterableIterator<ObservedSfuTransport>
-			| 'sfu'
-			| 'inboundRtpPads'
-			| 'outboundRtpPads'
-			| 'sfuSctpChannels'
-			| 'transportSamples'
+		ObservedSfuTransport,
+		| keyof IterableIterator<ObservedSfuTransport>
+		| 'sfu'
+		| 'inboundRtpPads'
+		| 'outboundRtpPads'
+		| 'sfuSctpChannels'
+		| 'transportSamples'
 		>
 	) {}
 
@@ -44,54 +44,63 @@ export class ObservedSfuTransportBuilder {
 	public addSfuInboundRtpPad(inboundRtpPad: SfuInboundRtpPad) {
 		if (inboundRtpPad.padId) {
 			const builder = this._getSfuInboundRtpPadBuilder(inboundRtpPad.padId);
+
 			builder.addSample(inboundRtpPad);
 		}
 	}
 
 	private _getSfuInboundRtpPadBuilder(padId: string): ObservedSfuInboundRtpPadBuilder {
 		let result = this._inboundRtpPads.get(padId);
+
 		if (!result) {
 			result = new ObservedSfuInboundRtpPadBuilder({
 				padId,
 			});
 			this._inboundRtpPads.set(padId, result);
 		}
+		
 		return result;
 	}
 
 	public addSfuOutboundRtpPad(outboundRtpPad: SfuOutboundRtpPad) {
 		if (outboundRtpPad.padId) {
 			const builder = this._getSfuOutboundRtpPadBuilder(outboundRtpPad.padId);
+
 			builder.addSample(outboundRtpPad);
 		}
 	}
 
 	private _getSfuOutboundRtpPadBuilder(padId: string): ObservedSfuOutboundRtpPadBuilder {
 		let result = this._outboundRtpPads.get(padId);
+
 		if (!result) {
 			result = new ObservedSfuOutboundRtpPadBuilder({
 				padId,
 			});
 			this._outboundRtpPads.set(padId, result);
 		}
+		
 		return result;
 	}
 
 	public addSfuSctpChannel(sfuSctpChannel: SfuSctpChannel) {
 		if (sfuSctpChannel.channelId) {
 			const builder = this._getSfuSctpChannel(sfuSctpChannel.channelId);
+
 			builder.addSample(sfuSctpChannel);
 		}
 	}
 
 	private _getSfuSctpChannel(channelId: string): ObservedSfuSctpChannelBuilder {
 		let result = this._sctpChannels.get(channelId);
+
 		if (!result) {
 			result = new ObservedSfuSctpChannelBuilder({
 				channelId,
 			});
 			this._sctpChannels.set(channelId, result);
 		}
+		
 		return result;
 	}
 
@@ -112,16 +121,19 @@ export class ObservedSfuTransportBuilder {
 
 		for (const builder of this._inboundRtpPads.values()) {
 			const observedInboundRtpPad = builder.build(result);
+
 			sfuInboundRtpPads.set(observedInboundRtpPad.padId, observedInboundRtpPad);
 		}
 
 		for (const builder of this._outboundRtpPads.values()) {
 			const observedOutboundRtpPad = builder.build(result);
+
 			sfuOutboundRtpPads.set(observedOutboundRtpPad.padId, observedOutboundRtpPad);
 		}
 
 		for (const builder of this._sctpChannels.values()) {
 			const observedSfuSctpChannel = builder.build(result);
+
 			sfuSctpChannelsMap.set(observedSfuSctpChannel.channelId, observedSfuSctpChannel);
 		}
 

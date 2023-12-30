@@ -5,7 +5,6 @@ import * as Models from './models/Models';
 import { Evaluator, EvaluatorConfig, EvaluatorProcess } from './Evaluator';
 import { createSimpleSemaphoreProvider, SemaphoreProvider } from './common/Semaphore';
 import { ObservedCallSourceConfig, ObservedCallSource } from './sources/ObservedCallSource';
-import { ObservedClientSource, ObservedClientSourceConfig } from './sources/ObservedClientSource';
 import { PartialBy } from './common/utils';
 import { createLogger, LogLevel } from './common/logger';
 import { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
@@ -18,6 +17,7 @@ export type ObserverEvents = {
 }
 
 export type ObserverConfig = {
+
 	/**
 	 *
 	 * Sets the default serviceId for samples.
@@ -67,8 +67,8 @@ export class Observer {
 		);
 
 		const semaphores = providedConfig.semaphores ?? createSimpleSemaphoreProvider();
-
 		const storages = providedConfig.storages ?? createSimpleStorageProvider();
+		
 		return new Observer(config, storages, semaphores);
 	}
 
@@ -98,96 +98,66 @@ export class Observer {
 		this._evaluator.on('ready', () => {
 			this._sink.emit();
 		});
-		logger.debug(`Observer is created with config`, this.config);
+		logger.debug('Observer is created with config', this.config);
 	}
 
 	public on<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
 		this._emitter.on(event, listener);
+		
 		return this;
 	}
 
 	public once<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
 		this._emitter.once(event, listener);
+		
 		return this;
 	}
 
 	public off<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
 		this._emitter.off(event, listener);
+		
 		return this;
 	}
 
-	public createCallSource(
-		config: PartialBy<ObservedCallSourceConfig, 'serviceId' | 'mediaUnitId'>
-	): ObservedCallSource {
+	public createCallSource<T extends Record<string, unknown> = Record<string, unknown>>(
+		config: PartialBy<ObservedCallSourceConfig<T>, 'serviceId' | 'mediaUnitId' | 'appData'>
+	): ObservedCallSource<T> {
 		if (this._closed) {
-			throw new Error(`Attempted to create a call source on a closed observer`);
+			throw new Error('Attempted to create a call source on a closed observer');
 		}
-		let closed = false;
-		const serviceId = config.serviceId ?? this.config.defaultServiceId;
-		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
-		const clientSources = new Map<string, ObservedClientSource>();
-		const callSource: ObservedCallSource = {
-			...config,
-			serviceId,
-			mediaUnitId,
-			createClientSource: (context) => {
-				const clientSource = this._sources.createClientSource({
-					...config,
-					...context,
-					serviceId,
-					mediaUnitId,
-				});
-				const closeClientSource = clientSource.close;
-				clientSource.close = () => {
-					closeClientSource();
-					clientSources.delete(context.clientId);
-				};
-				clientSources.set(context.clientId, clientSource);
-				return clientSource;
-			},
-			close: () => {
-				if (closed) {
-					return;
-				}
-				for (const clientSource of clientSources.values()) {
-					clientSource.close();
-				}
-				clientSources.clear();
-				closed = true;
-			},
-			closed,
-		};
-		return callSource;
-	}
 
-	public createClientSource(
-		config: PartialBy<ObservedClientSourceConfig, 'serviceId' | 'mediaUnitId' | 'joined'>
-	): ObservedClientSource {
-		if (this._closed) {
-			throw new Error(`Attempted to create a client source on a closed observer`);
-		}
-		const serviceId = config.serviceId ?? this.config.defaultServiceId;
-		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
-		const joined = config.joined ?? Date.now();
-		return this._sources.createClientSource({
-			...config,
-			serviceId,
+		const {
+			serviceId = this.config.defaultServiceId,
+			mediaUnitId = this.config.defaultMediaUnitId,
+			appData = {} as T,
+			...callConfig
+		} = config;
+
+		return this._sources.createCallSource({
+			...callConfig,
+			appData,
 			mediaUnitId,
-			joined,
+			serviceId,
 		});
 	}
 
-	public createSfuSource(
-		config: PartialBy<ObservedSfuSourceConfig, 'serviceId' | 'mediaUnitId' | 'joined'>
+	public createSfuSource<T extends Record<string, unknown> = Record<string, unknown>>(
+		config: PartialBy<ObservedSfuSourceConfig<T>, 'serviceId' | 'mediaUnitId' | 'joined' | 'appData'>
 	): ObservedSfuSource {
 		if (this._closed) {
-			throw new Error(`Attempted to create a sfu source on a closed observer`);
+			throw new Error('Attempted to create a sfu source on a closed observer');
 		}
-		const serviceId = config.serviceId ?? this.config.defaultServiceId;
-		const mediaUnitId = config.mediaUnitId ?? this.config.defaultMediaUnitId;
-		const joined = config.joined ?? Date.now();
-		return this._sources.createSfuSource({
-			...config,
+		const {
+			appData = {} as T,
+			serviceId = this.config.defaultServiceId,
+			mediaUnitId = this.config.defaultMediaUnitId,
+			joined = Date.now(),
+			...sfuConfig
+		} = config;
+		
+		return this._sources.createSfuSource<T>({
+			...sfuConfig,
+			appData,
 			serviceId,
 			mediaUnitId,
 			joined,
@@ -196,7 +166,7 @@ export class Observer {
 
 	public async evaluate() {
 		return new Promise<void>((resolve, reject) => {
-			this._evaluator.once('ready', err => {
+			this._evaluator.once('ready', (err) => {
 				if (err) reject(err);
 				else resolve();
 			});
@@ -210,7 +180,7 @@ export class Observer {
 
 	public addEvaluators(...processes: EvaluatorProcess[]) {
 		if (this._closed) {
-			throw new Error(`Attempted to add an evaluator to a closed observer`);
+			throw new Error('Attempted to add an evaluator to a closed observer');
 		}
 		for (const process of processes) {
 			this._evaluator.addProcess(process);
@@ -219,7 +189,7 @@ export class Observer {
 
 	public removeEvaluators(...processes: EvaluatorProcess[]) {
 		if (this._closed) {
-			throw new Error(`Attempted to remove an evaluator from a closed observer`);
+			throw new Error('Attempted to remove an evaluator from a closed observer');
 		}
 		for (const process of processes) {
 			this._evaluator.removeProcess(process);
@@ -228,7 +198,7 @@ export class Observer {
 
 	public addSinks(...processes: ObserverSinkProcess[]) {
 		if (this._closed) {
-			throw new Error(`Attempted to add an evaluator to a closed observer`);
+			throw new Error('Attempted to add an evaluator to a closed observer');
 		}
 		for (const process of processes) {
 			this._sink.addProcess(process);
@@ -237,7 +207,7 @@ export class Observer {
 
 	public removeSinks(...processes: ObserverSinkProcess[]) {
 		if (this._closed) {
-			throw new Error(`Attempted to remove an evaluator from a closed observer`);
+			throw new Error('Attempted to remove an evaluator from a closed observer');
 		}
 		for (const process of processes) {
 			this._sink.removeProcess(process);
@@ -246,95 +216,112 @@ export class Observer {
 
 	public calls(): AsyncIterableIterator<[string, Models.Call]> {
 		const { callStorage } = this._storages;
+		
 		return callStorage[Symbol.asyncIterator]();
 	}
 
 	public sfus(): AsyncIterableIterator<[string, Models.Sfu]> {
 		const { sfuStorage } = this._storages;
+		
 		return sfuStorage[Symbol.asyncIterator]();
 	}
 
 	public sfuTransports(): AsyncIterableIterator<[string, Models.SfuTransport]> {
 		const { sfuTransportStorage } = this._storages;
+		
 		return sfuTransportStorage[Symbol.asyncIterator]();
 	}
 
 	public sfuInboundRtpPads(): AsyncIterableIterator<[string, Models.SfuInboundRtpPad]> {
 		const { sfuInboundRtpPadStorage } = this._storages;
+		
 		return sfuInboundRtpPadStorage[Symbol.asyncIterator]();
 	}
 
 	public sfuOutboundRtpPads(): AsyncIterableIterator<[string, Models.SfuOutboundRtpPad]> {
 		const { sfuOutboundRtpPadStorage } = this._storages;
+		
 		return sfuOutboundRtpPadStorage[Symbol.asyncIterator]();
 	}
 
 	public clients(): AsyncIterableIterator<[string, Models.Client]> {
 		const { clientStorage } = this._storages;
+		
 		return clientStorage[Symbol.asyncIterator]();
 	}
 
 	public peerConnections(): AsyncIterableIterator<[string, Models.PeerConnection]> {
 		const { peerConnectionStorage } = this._storages;
+		
 		return peerConnectionStorage[Symbol.asyncIterator]();
 	}
 
 	public async getTrack(trackId: string) {
 		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
-		const [inbTrack, outbTrack] = await Promise.all([
+		const [ inbTrack, outbTrack ] = await Promise.all([
 			inboundTrackStorage.get(trackId),
 			outboundTrackStorage.get(trackId),
 		]);
+
 		if (inbTrack) return inbTrack;
 		else if (outbTrack) return outbTrack;
 	}
 
 	public async getAllTracks(trackIds: Iterable<string>) {
 		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
-		const [inbTracks, outbTracks] = await Promise.all([
+		const [ inbTracks, outbTracks ] = await Promise.all([
 			inboundTrackStorage.getAll(trackIds),
 			outboundTrackStorage.getAll(trackIds),
 		]);
-		return new Map([...inbTracks, ...outbTracks]);
+		
+		return new Map([ ...inbTracks, ...outbTracks ]);
 	}
 
 	public inboundTracks(): AsyncIterableIterator<[string, Models.InboundTrack]> {
 		const { inboundTrackStorage } = this._storages;
+		
 		return inboundTrackStorage[Symbol.asyncIterator]();
 	}
 
 	public outboundTracks(): AsyncIterableIterator<[string, Models.OutboundTrack]> {
 		const { outboundTrackStorage } = this._storages;
+		
 		return outboundTrackStorage[Symbol.asyncIterator]();
 	}
 
 	public sfuSctpChannels(): AsyncIterableIterator<[string, Models.SfuSctpChannel]> {
 		const { sfuSctpChannelStorage } = this._storages;
+		
 		return sfuSctpChannelStorage[Symbol.asyncIterator]();
 	}
 
 	public async getCall(callId: string): Promise<Models.Call | undefined> {
 		const { callStorage } = this._storages;
+		
 		return callStorage.get(callId);
 	}
 
 	public async getAllCalls(callIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Call>> {
 		const { callStorage } = this._storages;
+		
 		return callStorage.getAll(callIds);
 	}
 
 	public async getSfu(sfuId: string): Promise<Models.Sfu | undefined> {
 		const { sfuStorage } = this._storages;
+		
 		return sfuStorage.get(sfuId);
 	}
 
 	public async getAllSfus(sfuIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Sfu>> {
 		const { sfuStorage } = this._storages;
+		
 		return sfuStorage.getAll(sfuIds);
 	}
 
 	public async getSfuTransport(sfuTransportId: string): Promise<Models.SfuTransport | undefined> {
 		const { sfuTransportStorage } = this._storages;
+		
 		return sfuTransportStorage.get(sfuTransportId);
 	}
 
@@ -342,11 +329,13 @@ export class Observer {
 		sfuTransportIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.SfuTransport>> {
 		const { sfuTransportStorage } = this._storages;
+		
 		return sfuTransportStorage.getAll(sfuTransportIds);
 	}
 
 	public async getSfuInboundRtpPad(sfuInboundRtpPadId: string): Promise<Models.SfuInboundRtpPad | undefined> {
 		const { sfuInboundRtpPadStorage } = this._storages;
+		
 		return sfuInboundRtpPadStorage.get(sfuInboundRtpPadId);
 	}
 
@@ -354,11 +343,13 @@ export class Observer {
 		sfuInboundRtpPadIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.SfuInboundRtpPad>> {
 		const { sfuInboundRtpPadStorage } = this._storages;
+		
 		return sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds);
 	}
 
 	public async getSfuOutboundRtpPad(sfuOutboundRtpPadId: string): Promise<Models.SfuOutboundRtpPad | undefined> {
 		const { sfuOutboundRtpPadStorage } = this._storages;
+		
 		return sfuOutboundRtpPadStorage.get(sfuOutboundRtpPadId);
 	}
 
@@ -366,21 +357,25 @@ export class Observer {
 		sfuOutboundRtpPadIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.SfuOutboundRtpPad>> {
 		const { sfuOutboundRtpPadStorage } = this._storages;
+		
 		return sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds);
 	}
 
 	public async getClient(clientId: string): Promise<Models.Client | undefined> {
 		const { clientStorage } = this._storages;
+		
 		return clientStorage.get(clientId);
 	}
 
 	public async getAllClient(clientIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Client>> {
 		const { clientStorage } = this._storages;
+		
 		return clientStorage.getAll(clientIds);
 	}
 
 	public async getPeerConnection(peerConnectionId: string): Promise<Models.PeerConnection | undefined> {
 		const { peerConnectionStorage } = this._storages;
+		
 		return peerConnectionStorage.get(peerConnectionId);
 	}
 
@@ -388,11 +383,13 @@ export class Observer {
 		peerConnectionIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.PeerConnection>> {
 		const { peerConnectionStorage } = this._storages;
+		
 		return peerConnectionStorage.getAll(peerConnectionIds);
 	}
 
 	public async getInboundTrack(inboundTrackId: string): Promise<Models.InboundTrack | undefined> {
 		const { inboundTrackStorage } = this._storages;
+		
 		return inboundTrackStorage.get(inboundTrackId);
 	}
 
@@ -400,11 +397,13 @@ export class Observer {
 		inboundTrackIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.InboundTrack>> {
 		const { inboundTrackStorage } = this._storages;
+		
 		return inboundTrackStorage.getAll(inboundTrackIds);
 	}
 
 	public async getOutboundTrack(outboundTrackId: string): Promise<Models.OutboundTrack | undefined> {
 		const { outboundTrackStorage } = this._storages;
+		
 		return outboundTrackStorage.get(outboundTrackId);
 	}
 
@@ -412,11 +411,13 @@ export class Observer {
 		outboundTrackIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.OutboundTrack>> {
 		const { outboundTrackStorage } = this._storages;
+		
 		return outboundTrackStorage.getAll(outboundTrackIds);
 	}
 
 	public async getSfuSctpChannel(sctpChannelId: string): Promise<Models.SfuSctpChannel | undefined> {
 		const { sfuSctpChannelStorage } = this._storages;
+		
 		return sfuSctpChannelStorage.get(sctpChannelId);
 	}
 
@@ -424,6 +425,7 @@ export class Observer {
 		sctpChannelIds: Iterable<string>
 	): Promise<ReadonlyMap<string, Models.SfuSctpChannel>> {
 		const { sfuSctpChannelStorage } = this._storages;
+		
 		return sfuSctpChannelStorage.getAll(sctpChannelIds);
 	}
 
@@ -433,7 +435,8 @@ export class Observer {
 
 	public close() {
 		if (this._closed) {
-			logger.debug(`Attempted to close twice`);
+			logger.debug('Attempted to close twice');
+			
 			return;
 		}
 		this._closed = true;

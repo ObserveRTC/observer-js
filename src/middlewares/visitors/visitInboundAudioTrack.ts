@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { ObservedInboundAudioTrack } from '../../samples/ObservedInboundAudioTrack';
@@ -30,6 +31,7 @@ export function visitInboundAudioTrack(
 	const { serviceId, roomId, callId } = observedInboundAudioTrack.peerConnection.client.call;
 	
 	let storedInboundAudioTrack = storedInboundTracks.get(trackId);
+
 	if (!storedInboundAudioTrack) {
 		storedInboundAudioTrack = new Models.InboundTrack({
 			serviceId,
@@ -74,6 +76,7 @@ export function visitInboundAudioTrack(
 			remotePeerConnectionId,
 			remoteTrackId,
 		};
+
 		reports.addInboundAudioTrackReport(report);
 
 		if (fetchSamples) {
@@ -103,6 +106,6 @@ export function visitInboundAudioTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
-	storedInboundAudioTrack.ssrc = [...statsMap.keys()];
+	storedInboundAudioTrack.ssrc = [ ...statsMap.keys() ];
 	storedInboundAudioTrack.videoStats = Array.from(statsMap.values());
 }

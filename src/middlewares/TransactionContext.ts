@@ -1,8 +1,6 @@
 import { StorageProvider } from '../storages/StorageProvider';
-import { createProcessor, Processor } from './Processor';
 import * as Models from '../models/Models';
 import { ObservedCalls } from '../samples/ObservedCalls';
-import { ReportsCollector } from '../common/ReportsCollector';
 import { v4 as uuid } from 'uuid';
 import { EvaluatorContext } from '../common/types';
 import { Writable } from '../common/utils';
@@ -173,5 +171,6 @@ export async function createTransactionContext(
 
 		evaluatorContext,
 	};
+	
 	return transactionContext;
 }

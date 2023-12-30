@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { ObservedOutboundVideoTrack } from '../../samples/ObservedOutboundVideoTrack';
@@ -27,6 +28,7 @@ export function visitOutboundVideoTrack(
 	const { serviceId, roomId, callId } = observedOutboundVideoTrack.peerConnection.client.call;
 
 	let storedOutboundVideoTrack = storedOutboundTracks.get(trackId);
+
 	if (!storedOutboundVideoTrack) {
 		storedOutboundVideoTrack = new Models.OutboundTrack({
 			serviceId,
@@ -53,6 +55,7 @@ export function visitOutboundVideoTrack(
 	}
 
 	const statsMap = new Map<bigint, Samples_ClientSample_OutboundVideoTrack>();
+
 	for (const outboundVideoSample of observedOutboundVideoTrack.samples()) {
 		const report: OutboundVideoTrackReport = {
 			serviceId,
@@ -66,6 +69,7 @@ export function visitOutboundVideoTrack(
 			timestamp,
 			sampleSeq: -1,
 		};
+
 		reports.addOutboundVideoTrackReport(report);
 
 		if (fetchSamples) {
@@ -93,6 +97,6 @@ export function visitOutboundVideoTrack(
 			statsMap.set(ssrc, videoStats);
 		}
 	}
-	storedOutboundVideoTrack.ssrc = [...statsMap.keys()];
+	storedOutboundVideoTrack.ssrc = [ ...statsMap.keys() ];
 	storedOutboundVideoTrack.videoStats = Array.from(statsMap.values());
 }

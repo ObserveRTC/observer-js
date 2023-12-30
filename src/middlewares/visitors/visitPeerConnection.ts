@@ -1,9 +1,15 @@
+/* eslint-disable camelcase */
 import { ObservedPeerConnection } from '../../samples/ObservedPeerConnection';
 import * as Models from '../../models/Models';
 import { ReportsCollector } from '../../common/ReportsCollector';
 import { logger } from '../VisitObservedCallsMiddleware';
 import { IceCandidatePairReport, PeerConnectionTransportReport } from '@observertc/report-schemas-js';
-import { Samples_ClientSample_IceCandidatePair, Samples_ClientSample_IceLocalCandidate, Samples_ClientSample_IceRemoteCandidate, Samples_ClientSample_PeerConnectionTransport } from '../../models/samples_pb';
+import { 
+	Samples_ClientSample_IceCandidatePair, 
+	Samples_ClientSample_IceLocalCandidate, 
+	Samples_ClientSample_IceRemoteCandidate, 
+	Samples_ClientSample_PeerConnectionTransport 
+} from '../../models/samples_pb';
 
 export function visitPeerConnection(
 	observedPeerConnection: ObservedPeerConnection,
@@ -19,6 +25,7 @@ export function visitPeerConnection(
 	const { serviceId, roomId, callId } = observedPeerConnection.client.call;
 
 	let storedPeerConnection = storedPeerConnections.get(peerConnectionId);
+
 	if (!storedPeerConnection) {
 		storedPeerConnection = new Models.PeerConnection({
 			serviceId,
@@ -37,7 +44,7 @@ export function visitPeerConnection(
 		if (!storedClient.peerConnectionIds.find((pcId) => pcId === peerConnectionId)) {
 			storedClient.peerConnectionIds.push(peerConnectionId);
 		} else {
-			logger.warn(``);
+			logger.warn('');
 		}
 	}
 
@@ -53,6 +60,7 @@ export function visitPeerConnection(
 			timestamp,
 			sampleSeq: -1, // deprecated
 		};
+
 		reports.addPeerConnectionTransportReports(report);
 	}
 
@@ -68,6 +76,7 @@ export function visitPeerConnection(
 			timestamp,
 			sampleSeq: -1, // deprecated
 		};
+
 		reports.addIceCandidatePairReport(report);
 	}
 
@@ -78,6 +87,7 @@ export function visitPeerConnection(
 				priority,
 				...sample
 			} = iceLocalCandidate;
+
 			storedPeerConnection.icelocalCandidates.push(new Samples_ClientSample_IceLocalCandidate({
 				...sample,
 				priority: BigInt(priority ?? -1)
@@ -90,6 +100,7 @@ export function visitPeerConnection(
 				priority,
 				...sample
 			} = iceRemoteCandidate;
+
 			storedPeerConnection.iceRemoteCandidates.push(new Samples_ClientSample_IceRemoteCandidate({
 				...sample,
 				priority: BigInt(priority ?? -1)
@@ -106,6 +117,7 @@ export function visitPeerConnection(
 				lastPacketSentTimestamp,
 				...sample
 			} = iceCandidatePair;
+
 			storedPeerConnection.iceCandidatePairs.push(new Samples_ClientSample_IceCandidatePair({
 				...sample,
 				bytesDiscardedOnSend: BigInt(bytesDiscardedOnSend ?? -1),
@@ -123,6 +135,7 @@ export function visitPeerConnection(
 				bytesSent,
 				...sample
 			} = pcTransport;
+
 			storedPeerConnection.transports.push(new Samples_ClientSample_PeerConnectionTransport({
 				...sample,
 				bytesReceived: BigInt(bytesReceived ?? -1),

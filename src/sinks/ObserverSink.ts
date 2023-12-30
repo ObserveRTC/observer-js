@@ -121,19 +121,21 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 		this._processor = createProcessor();
 	}
 
-
 	public on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.addListener(event, listener);
+		
 		return this;
 	}
 
 	public off<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.removeListener(event, listener);
+		
 		return this;
 	}
 
 	public once<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
 		this._emitter.once(event, listener);
+		
 		return this;
 	}
 
@@ -230,12 +232,14 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 			await process(context);
 			if (next) await next(context);
 		};
+
 		this._customProcesses.set(process, middleware);
 		this._processor.addMiddleware(middleware);
 	}
 
 	public removeProcess(process: ObserverSinkProcess) {
 		const middleware = this._customProcesses.get(process);
+
 		if (!middleware) {
 			return;
 		}
@@ -249,7 +253,7 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 			return;
 		}
 		if (this._processes.has(this._index)) {
-			logger.warn(`The sink process has been called while the previous process has not yet completed. This may indicate that the observer is attempting to process more reports than it can handle.`);
+			logger.warn('The sink process has been called while the previous process has not yet completed. This may indicate that the observer is attempting to process more reports than it can handle.');
 		}
 
 		const actualBlockingPoint = this._processes.get(this._index) ?? Promise.resolve();
@@ -270,7 +274,9 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 				resolve();
 			});
 		});
+
 		this._processes.set(index, nextBlockingPoint);
+		
 		return result;
 	}
 
@@ -284,9 +290,10 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 		};
 		
 		const context = this._createObserverSinkContext();
-		this._process(context).catch(err => {
-			logger.error(`Error occurred while processing reports`, err);
-		})
+
+		this._process(context).catch((err) => {
+			logger.error('Error occurred while processing reports', err);
+		});
 
 		checkAndEmit('call-event', this._callEventReports);
 		this._callEventReports = [];
@@ -349,45 +356,45 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 		return this._emitter.emit(event, reports);
 	}
 
-	private  _createObserverSinkContext(): ObserverSinkContext {
-		const callEventReports = [...this._callEventReports];
-		const callMetaReports = [...this._callMetaReports];
-		const clientDataChannelReports = [...this._clientDataChannelReports];
-		const clientExtensionReports = [...this._clientExtensionReports];
-		const iceCandidatePairReports = [...this._iceCandidatePairReports];
-		const inboundAudioTrackReports = [...this._inboundAudioTrackReports];
-		const inboundVideoTrackReports = [...this._inboundVideoTrackReports];
-		const peerConnectionTransportReports = [...this._peerConnectionTransportReports];
-		const observerEventReports = [...this._observerEventReports];
-		const outboundAudioTrackReports = [...this._outboundAudioTrackReports];
-		const outboundVideoTrackReports = [...this._outboundVideoTrackReports];
-		const sfuEventReports = [...this._sfuEventReports];
-		const sfuExtensionReports = [...this._sfuExtensionReports];
-		const sfuInboundRtpPadReports = [...this._sfuInboundRtpPadReports];
-		const sfuOutboundRtpPadReports = [...this._sfuOutboundRtpPadReports];
-		const sfuSctpStreamReports = [...this._sfuSctpStreamReports];
-		const sfuTransportReports = [...this._sfuTransportReports];
-		const sfuMetaReports = [...this._sfuMetaReports];
-	  
+	private _createObserverSinkContext(): ObserverSinkContext {
+		const callEventReports = [ ...this._callEventReports ];
+		const callMetaReports = [ ...this._callMetaReports ];
+		const clientDataChannelReports = [ ...this._clientDataChannelReports ];
+		const clientExtensionReports = [ ...this._clientExtensionReports ];
+		const iceCandidatePairReports = [ ...this._iceCandidatePairReports ];
+		const inboundAudioTrackReports = [ ...this._inboundAudioTrackReports ];
+		const inboundVideoTrackReports = [ ...this._inboundVideoTrackReports ];
+		const peerConnectionTransportReports = [ ...this._peerConnectionTransportReports ];
+		const observerEventReports = [ ...this._observerEventReports ];
+		const outboundAudioTrackReports = [ ...this._outboundAudioTrackReports ];
+		const outboundVideoTrackReports = [ ...this._outboundVideoTrackReports ];
+		const sfuEventReports = [ ...this._sfuEventReports ];
+		const sfuExtensionReports = [ ...this._sfuExtensionReports ];
+		const sfuInboundRtpPadReports = [ ...this._sfuInboundRtpPadReports ];
+		const sfuOutboundRtpPadReports = [ ...this._sfuOutboundRtpPadReports ];
+		const sfuSctpStreamReports = [ ...this._sfuSctpStreamReports ];
+		const sfuTransportReports = [ ...this._sfuTransportReports ];
+		const sfuMetaReports = [ ...this._sfuMetaReports ];
+
 		return {
-		  callEventReports,
-		  callMetaReports,
-		  clientDataChannelReports,
-		  clientExtensionReports,
-		  iceCandidatePairReports,
-		  inboundAudioTrackReports,
-		  inboundVideoTrackReports,
-		  peerConnectionTransportReports,
-		  observerEventReports,
-		  outboundAudioTrackReports,
-		  outboundVideoTrackReports,
-		  sfuEventReports,
-		  sfuExtensionReports,
-		  sfuInboundRtpPadReports,
-		  sfuOutboundRtpPadReports,
-		  sfuSctpStreamReports,
-		  sfuTransportReports,
-		  sfuMetaReports,
+			callEventReports,
+			callMetaReports,
+			clientDataChannelReports,
+			clientExtensionReports,
+			iceCandidatePairReports,
+			inboundAudioTrackReports,
+			inboundVideoTrackReports,
+			peerConnectionTransportReports,
+			observerEventReports,
+			outboundAudioTrackReports,
+			outboundVideoTrackReports,
+			sfuEventReports,
+			sfuExtensionReports,
+			sfuInboundRtpPadReports,
+			sfuOutboundRtpPadReports,
+			sfuSctpStreamReports,
+			sfuTransportReports,
+			sfuMetaReports,
 		};
-	  }
+	}
 }

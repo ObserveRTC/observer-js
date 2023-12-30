@@ -4,9 +4,9 @@ import { ObservedClientSource, ObservedClientSourceConfig } from './ObservedClie
 import { EventEmitter } from 'events';
 import { createLogger } from '../common/logger';
 import { PartialBy } from '../common/utils';
-import { ObservedCallSource, ObservedCallSourceConfig } from './ObservedCallSource';
 import { ObservedSfuSourceConfig, ObservedSfuSource } from './ObservedSfuSource';
 import { ObservedSfus, ObservedSfusBuilder } from '../samples/ObservedSfus';
+import { ObservedCallSource, ObservedCallSourceConfig } from './ObservedCallSource';
 
 const logger = createLogger('Sources');
 
@@ -43,11 +43,13 @@ export class Sources {
 
 	public on<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
 		this._emitter.addListener(event, listener);
+		
 		return this;
 	}
 
 	public off<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
 		this._emitter.removeListener(event, listener);
+		
 		return this;
 	}
 
@@ -55,16 +57,71 @@ export class Sources {
 		return this._emitter.emit(event, data);
 	}
 
-	public createClientSource(config: PartialBy<ObservedClientSourceConfig, 'joined'>): ObservedClientSource {
-		const existingClientSource = this._clientSources.get(config.clientId);
-		if (existingClientSource) {
-			logger.warn(`Attempted to add a ClientSource for client ${config.clientId} twice`);
-			return existingClientSource;
-		}
+	public createCallSource<T extends Record<string, unknown> = Record<string, unknown>>(
+		config: ObservedCallSourceConfig<T>
+	): ObservedCallSource<T> {
 		let closed = false;
-		// config.joined = config.joined ?? Date.now();
-		const source: ObservedClientSource = {
-			...config,
+		const { 
+			serviceId,
+			mediaUnitId,
+			appData, 
+			...callConfig 
+		} = config;
+		const clientSources = new Map<string, ObservedClientSource>();
+		const callSource: ObservedCallSource<T> = {
+			...callConfig,
+			appData,
+			serviceId,
+			mediaUnitId,
+			createClientSource: <U extends Record<string, unknown> = Record<string, unknown>>(context: ObservedClientSourceConfig<U>) => {
+				const existingClientSource = clientSources.get(context.clientId);
+
+				if (existingClientSource) return existingClientSource;
+				
+				const { appData: clientAppData, ...clientConfig } = context;
+				const clientSource = this._createClientSource<U>({
+					...callConfig,
+					...clientConfig,
+					appData: clientAppData,
+					serviceId,
+					mediaUnitId,
+				});
+				const closeClientSource = clientSource.close;
+
+				clientSource.close = () => {
+					closeClientSource();
+					clientSources.delete(context.clientId);
+				};
+				clientSources.set(context.clientId, clientSource);
+				
+				return clientSource;
+			},
+			close: () => {
+				if (closed) {
+					return;
+				}
+				for (const clientSource of clientSources.values()) {
+					clientSource.close();
+				}
+				clientSources.clear();
+				closed = true;
+			},
+			closed,
+		};
+		
+		return callSource;
+	}
+
+	private _createClientSource<T extends Record<string, unknown> = Record<string, unknown>>(config: PartialBy<ObservedClientSourceConfig<T>, 'joined'>): ObservedClientSource<T> {
+		let closed = false;
+		const {
+			appData,
+			...clientConfig
+		} = config;
+
+		const source: ObservedClientSource<T> = {
+			...clientConfig,
+			appData,
 			joined: config.joined ?? Date.now(),
 
 			accept: (...samples: ClientSample[]) => {
@@ -97,18 +154,20 @@ export class Sources {
 			},
 			closed,
 		};
+
 		if (this._clientSources.size < 1) {
 			this._resetTimer();
 		}
 		this._clientSources.set(config.clientId, source);
 		this._emit('added-client-source', source);
+		
 		return source;
 	}
 
-	public createSfuSource(config: PartialBy<ObservedSfuSourceConfig, 'joined'>): ObservedSfuSource {
+	public createSfuSource<T extends Record<string, unknown> = Record<string, unknown>>(config: PartialBy<ObservedSfuSourceConfig<T>, 'joined'>): ObservedSfuSource {
 		const existingSfuSource = this._sfuSources.get(config.sfuId);
+
 		if (existingSfuSource) {
-			logger.warn(`Attempted to add a SfuSource for sfu ${config.sfuId} twice`);
 			return existingSfuSource;
 		}
 		let closed = false;
@@ -142,11 +201,13 @@ export class Sources {
 			},
 			closed,
 		};
+
 		if (this._sfuSources.size < 1) {
 			this._resetTimer();
 		}
 		this._sfuSources.set(config.sfuId, source);
 		this._emit('added-sfu-source', source);
+		
 		return source;
 	}
 
@@ -174,8 +235,10 @@ export class Sources {
 	private _emitSamples() {
 		this._resetTimer();
 		const observedCalls = this._observedCallsBuilder.build();
+
 		this._observedCallsBuilder = new ObservedCallsBuilder();
 		const observedSfus = this._observedSfusBuilder.build();
+
 		this._observedSfusBuilder = new ObservedSfusBuilder();
 		this._emit('observed-samples', {
 			observedCalls,

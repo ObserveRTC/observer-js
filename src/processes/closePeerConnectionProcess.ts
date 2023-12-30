@@ -20,6 +20,7 @@ export function createClosePeerConnectionProcess(
 		const { peerConnectionStorage } = storageProvider;
 		const peerConnectionIds = closedPeerConnections.map((c) => c.peerConnectionId);
 		const peerConnections = await peerConnectionStorage.getAll(peerConnectionIds);
+
 		await peerConnectionStorage.removeAll(peerConnectionIds);
 
 		if (recursive) {
@@ -37,6 +38,7 @@ export function createClosePeerConnectionProcess(
 						trackId,
 					};
 				});
+
 			await Promise.all([
 				removeInboundTracks({
 					removedTracks: inboundTrackIds,
@@ -47,5 +49,6 @@ export function createClosePeerConnectionProcess(
 			]);
 		}
 	};
+	
 	return process;
 }

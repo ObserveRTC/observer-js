@@ -14,7 +14,9 @@ export function createInboundTrackRemoveProcess(
 		const { removedTracks } = input;
 		const { inboundTrackStorage } = storageProvider;
 		const inboundTrackIds = removedTracks.map((c) => c.trackId);
+
 		await inboundTrackStorage.removeAll(inboundTrackIds);
 	};
+	
 	return process;
 }

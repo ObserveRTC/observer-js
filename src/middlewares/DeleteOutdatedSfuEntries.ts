@@ -29,14 +29,16 @@ export function createDeleteOutdatedSfuEntries(
 		} = transaction;
 
 		const now = BigInt(Date.now());
-		for (const [sfuTransportId, sfuTransport] of storages.sfuTransportStorage.localEntries()) {
+
+		for (const [ sfuTransportId, sfuTransport ] of storages.sfuTransportStorage.localEntries()) {
 			if (updatedSfuTransports.has(sfuTransportId)) {
 				continue;
 			}
 			
 			const { touched, sfuId } = sfuTransport;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
-				if (!deletedSfus.has(sfuId ?? "not exists")){
+				if (!deletedSfus.has(sfuId ?? 'not exists')) {
 					continue;
 				}
 			}
@@ -45,6 +47,7 @@ export function createDeleteOutdatedSfuEntries(
 
 			if (sfuId) {
 				let storedSfu = updatedSfus.get(sfuId);
+
 				if (storedSfu) {
 					storedSfu.sfuTransportIds = storedSfu.sfuTransportIds.filter((transportId) => transportId !== sfuTransportId);
 				} else {
@@ -57,17 +60,18 @@ export function createDeleteOutdatedSfuEntries(
 			}
 		}
 
-		for (const [sfuInboundPadId, sfuInboundPad] of storages.sfuInboundRtpPadStorage.localEntries()) {
+		for (const [ sfuInboundPadId, sfuInboundPad ] of storages.sfuInboundRtpPadStorage.localEntries()) {
 			if (updatedSfuInboundRtpPads.has(sfuInboundPadId)) {
 				continue;
 			}
 
 			const { touched, sfuTransportId, sfuId } = sfuInboundPad;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedSfuTransports.has(sfuTransportId ?? "not exists") && 
-					!deletedSfus.has(sfuId ?? "not exists")
-				){
+					!deletedSfuTransports.has(sfuTransportId ?? 'not exists') && 
+					!deletedSfus.has(sfuId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -76,6 +80,7 @@ export function createDeleteOutdatedSfuEntries(
 
 			if (sfuTransportId) {
 				let storedSfuTransport = updatedSfuTransports.get(sfuTransportId);
+
 				if (!storedSfuTransport) {
 					storedSfuTransport = await storages.sfuTransportStorage.get(sfuTransportId);
 					if (storedSfuTransport) {
@@ -88,18 +93,18 @@ export function createDeleteOutdatedSfuEntries(
 			}
 		}
 
-
-		for (const [sfuOutboundPadId, sfuOutboundPad] of storages.sfuOutboundRtpPadStorage.localEntries()) {
+		for (const [ sfuOutboundPadId, sfuOutboundPad ] of storages.sfuOutboundRtpPadStorage.localEntries()) {
 			if (updatedSfuOutboundRtpPads.has(sfuOutboundPadId)) {
 				continue;
 			}
 
 			const { touched, sfuTransportId, sfuId } = sfuOutboundPad;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedSfuTransports.has(sfuTransportId ?? "not exists") && 
-					!deletedSfus.has(sfuId ?? "not exists")
-				){
+					!deletedSfuTransports.has(sfuTransportId ?? 'not exists') && 
+					!deletedSfus.has(sfuId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -108,6 +113,7 @@ export function createDeleteOutdatedSfuEntries(
 
 			if (sfuTransportId) {
 				let storedSfuTransport = updatedSfuTransports.get(sfuTransportId);
+
 				if (!storedSfuTransport) {
 					storedSfuTransport = await storages.sfuTransportStorage.get(sfuTransportId);
 					if (storedSfuTransport) {
@@ -120,17 +126,18 @@ export function createDeleteOutdatedSfuEntries(
 			}
 		}
 
-		for (const [sctpChannelId, sctpChannel] of storages.sfuSctpChannelStorage.localEntries()) {
+		for (const [ sctpChannelId, sctpChannel ] of storages.sfuSctpChannelStorage.localEntries()) {
 			if (updatedSfuSctpChannels.has(sctpChannelId)) {
 				continue;
 			}
 
 			const { touched, sfuTransportId, sfuId } = sctpChannel;
+
 			if (touched && now - touched < maxIdleTimeInMs) {
 				if (
-					!deletedSfuTransports.has(sfuTransportId ?? "not exists") && 
-					!deletedSfus.has(sfuId ?? "not exists")
-				){
+					!deletedSfuTransports.has(sfuTransportId ?? 'not exists') && 
+					!deletedSfus.has(sfuId ?? 'not exists')
+				) {
 					continue;
 				}
 			}
@@ -139,6 +146,7 @@ export function createDeleteOutdatedSfuEntries(
 
 			if (sfuTransportId) {
 				let storedSfuTransport = updatedSfuTransports.get(sfuTransportId);
+
 				if (!storedSfuTransport) {
 					storedSfuTransport = await storages.sfuTransportStorage.get(sfuTransportId);
 					if (storedSfuTransport) {
@@ -155,5 +163,6 @@ export function createDeleteOutdatedSfuEntries(
 		await process(context);
 		if (next) await next(context);
 	};
+	
 	return result;
 }

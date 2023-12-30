@@ -21,6 +21,7 @@ export function createJoinClientProcess(
 ): (input: JoinClientProcessInput) => Promise<void> {
 	const process = async (context: JoinClientProcessInput) => {
 		const { clients: joinedClients, evaluatorContext } = context;
+
 		if (joinedClients.length < 1) {
 			return;
 		}
@@ -30,10 +31,12 @@ export function createJoinClientProcess(
 		const existingCalls = await callStorage.getAll(callIds);
 		const newCalls = new Map<string, Models.Call>();
 		const newClients = new Map<string, Models.Client>();
+
 		for (const joinedClient of joinedClients) {
 			const { serviceId, mediaUnitId, roomId, callId, clientId, joined: timestamp, timeZoneId, marker } = joinedClient;
 
 			let call = existingCalls.get(callId);
+
 			if (!call) {
 				call = new Models.Call({
 					serviceId,
@@ -71,7 +74,7 @@ export function createJoinClientProcess(
 		const alreadyInsertedCalls =
 			0 < newCalls.size ? await callStorage.insertAll(newCalls) : new Map<string, Models.Call>();
 
-		for (const [callId, newCall] of newCalls) {
+		for (const [ callId, newCall ] of newCalls) {
 			if (alreadyInsertedCalls.has(callId)) {
 				continue;
 			}
@@ -82,6 +85,7 @@ export function createJoinClientProcess(
 			}
 
 			const callEvent = createCallStartedEventReport(serviceId, roomId, callId, Number(started));
+
 			reports.addCallEventReport(callEvent);
 			evaluatorContext?.startedCallIds.push(callId);
 		}
@@ -93,7 +97,7 @@ export function createJoinClientProcess(
 		if (0 < newClients.size) {
 			await clientStorage.setAll(newClients);
 		}
-		for (const [clientId, client] of newClients) {
+		for (const [ clientId, client ] of newClients) {
 			const {
 				serviceId,
 				mediaUnitId,
@@ -120,9 +124,11 @@ export function createJoinClientProcess(
 				userId,
 				marker
 			);
+
 			reports.addCallEventReport(callEvent);
 			evaluatorContext?.joinedClientIds.push(clientId);
 		}
 	};
+	
 	return process;
 }
