@@ -12,6 +12,7 @@ import {
 	Platform,
 } from '@observertc/sample-schemas-js';
 
+// eslint-disable-next-line no-shadow
 export enum CallMetaType {
 	CERTIFICATE = 'CERTIFICATE',
 	CODEC = 'CODEC',
@@ -32,47 +33,47 @@ export enum CallMetaType {
 
 export type CallMetaReportType =
 	| {
-			type: CallMetaType.CERTIFICATE;
-			payload: Certificate;
+		type: CallMetaType.CERTIFICATE;
+		payload: Certificate;
 	} | {
-			type: CallMetaType.CODEC;
-			payload: MediaCodecStats;
+		type: CallMetaType.CODEC;
+		payload: MediaCodecStats;
 	} | {
-			type: CallMetaType.ICE_LOCAL_CANDIDATE;
-			payload: IceLocalCandidate;
+		type: CallMetaType.ICE_LOCAL_CANDIDATE;
+		payload: IceLocalCandidate;
 	} | {
-			type: CallMetaType.ICE_REMOTE_CANDIDATE;
-			payload: IceRemoteCandidate;
+		type: CallMetaType.ICE_REMOTE_CANDIDATE;
+		payload: IceRemoteCandidate;
 	} | {
-			type: CallMetaType.ICE_SERVER;
-			payload: string;
+		type: CallMetaType.ICE_SERVER;
+		payload: string;
 	} | {
-			type: CallMetaType.MEDIA_CONSTRAINT;
-			payload: string;
+		type: CallMetaType.MEDIA_CONSTRAINT;
+		payload: string;
 	} | {
-			type: CallMetaType.MEDIA_DEVICE;
-			payload: MediaDevice;
+		type: CallMetaType.MEDIA_DEVICE;
+		payload: MediaDevice;
 	} | {
-			type: CallMetaType.MEDIA_SOURCE;
-			payload: MediaSourceStat;
+		type: CallMetaType.MEDIA_SOURCE;
+		payload: MediaSourceStat;
 	} | {
-			type: CallMetaType.USER_MEDIA_ERROR;
-			payload: string;
+		type: CallMetaType.USER_MEDIA_ERROR;
+		payload: string;
 	} | {
-			type: CallMetaType.OPERATION_SYSTEM;
-			payload: OperationSystem;
+		type: CallMetaType.OPERATION_SYSTEM;
+		payload: OperationSystem;
 	} | {
-			type: CallMetaType.PLATFORM;
-			payload: Platform;
+		type: CallMetaType.PLATFORM;
+		payload: Platform;
 	} | {
-			type: CallMetaType.ENGINE;
-			payload: Engine;
+		type: CallMetaType.ENGINE;
+		payload: Engine;
 	} | {
-			type: CallMetaType.LOCAL_SDP;
-			payload: string;
+		type: CallMetaType.LOCAL_SDP;
+		payload: string;
 	} | {
-			type: CallMetaType.BROWSER;
-			payload: Browser;
+		type: CallMetaType.BROWSER;
+		payload: Browser;
 	};
 
 export function createCallMetaReport(
@@ -96,5 +97,6 @@ export function createCallMetaReport(
 		payload: JSON.stringify(reportType.payload),
 		timestamp: timestamp ?? Date.now(),
 	};
+	
 	return report;
 }

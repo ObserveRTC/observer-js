@@ -30,7 +30,8 @@ export type SourcesEvents = {
 export class Sources {
 	
 	private readonly _warnFlags = { autoEmitButEmitSamplesInvoked: false };
-	private readonly _clientSources = new Map<string, ObservedClientSource>();
+	private readonly _callSources = new Map<string, ObservedCallSource>();
+	// private readonly _clientSources = new Map<string, ObservedClientSource>();
 	private readonly _sfuSources = new Map<string, ObservedSfuSource>();
 	private readonly _emitter = new EventEmitter();
 	
@@ -40,6 +41,14 @@ export class Sources {
 	private _numberOfSamples = 0;
 
 	public constructor(public readonly config: SourcesConfig) {}
+
+	public getCallSource(callId: string) {
+		return this._callSources.get(callId);
+	}
+
+	public getSfuSource(sfuId: string) {
+		return this._sfuSources.get(sfuId);
+	}
 
 	public on<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
 		this._emitter.addListener(event, listener);
@@ -73,6 +82,8 @@ export class Sources {
 			appData,
 			serviceId,
 			mediaUnitId,
+			clients: clientSources,
+
 			createClientSource: <U extends Record<string, unknown> = Record<string, unknown>>(context: ObservedClientSourceConfig<U>) => {
 				const existingClientSource = clientSources.get(context.clientId);
 
@@ -104,10 +115,16 @@ export class Sources {
 					clientSource.close();
 				}
 				clientSources.clear();
+				this._callSources.delete(config.callId);
 				closed = true;
 			},
 			closed,
 		};
+		
+		if (this._callSources.size < 1) {
+			this._resetTimer();
+		}
+		this._callSources.set(config.callId, callSource);
 		
 		return callSource;
 	}
@@ -149,16 +166,11 @@ export class Sources {
 					return;
 				}
 				closed = true;
-				this._clientSources.delete(config.clientId);
 				this._emit('removed-client-source', source);
 			},
 			closed,
 		};
 
-		if (this._clientSources.size < 1) {
-			this._resetTimer();
-		}
-		this._clientSources.set(config.clientId, source);
 		this._emit('added-client-source', source);
 		
 		return source;
@@ -262,11 +274,10 @@ export class Sources {
 	}
 
 	public close() {
-		for (const clientSource of this._clientSources.values()) {
-			if (!clientSource.closed) {
-				clientSource.close();
-			}
-		}
+		[ ...this._callSources.values() ].forEach((callSource) => callSource.close());
+		[ ...this._sfuSources.values() ].forEach((sfuSource) => sfuSource.close());
+		this._callSources.clear();
+		this._sfuSources.clear();		
 		this._emitSamples();
 	}
 }

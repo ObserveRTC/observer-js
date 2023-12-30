@@ -13,6 +13,17 @@ export * as Models from './models/Models';
 export * as SampleSchema from '@observertc/sample-schemas-js';
 export * as ReportSchema from '@observertc/report-schemas-js';
 
+export type { CallEntry } from './entries/CallEntry';
+export type { ClientEntry } from './entries/ClientEntry';
+export type { PeerConnectionEntry } from './entries/PeerConnectionEntry';
+export type { InboundTrackEntry } from './entries/InboundTrackEntry';
+export type { OutboundTrackEntry } from './entries/OutboundTrackEntry';
+export type { SfuEntry } from './entries/SfuEntry';
+export type { SfuTransportEntry } from './entries/SfuTransportEntry';
+export type { SfuInboundRtpPadEntry } from './entries/SfuInboundRtpPadEntry';
+export type { SfuOutboundRtpPadEntry } from './entries/SfuOutboundRtpPadEntry';
+export type { SfuSctpChannelEntry } from './entries/SfuSctpChannelEntry';
+
 export type {
 	Samples,
 	ClientSample,

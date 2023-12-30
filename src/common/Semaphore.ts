@@ -3,6 +3,7 @@
  * Semaphores are used to ensure that only one process can access the shared resource at a time.
  */
 export interface Semaphore {
+
 	/**
 	 * Acquires the semaphore, blocking until the semaphore is available.
 	 * When the semaphore is acquired, it prevents other processes from acquiring it.
@@ -29,6 +30,7 @@ export function createDummySemaphore(): Semaphore {
  * SemaphoreProviders are used to manage access to shared resources across multiple processes.
  */
 export interface SemaphoreProvider {
+
 	/**
 	 * A Semaphore instance that manages access to the 'call' shared resource.
 	 * This semaphore ensures that only one process can access the 'call' resource at a time.

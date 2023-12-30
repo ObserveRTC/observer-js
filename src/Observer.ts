@@ -1,14 +1,23 @@
 import { ObserverReportsEmitter, ObserverSinkProcess, SinkConfig, SinkImpl } from './sinks/ObserverSink';
 import { Sources, SourcesConfig } from './sources/Sources';
 import { createSimpleStorageProvider, StorageProvider } from './storages/StorageProvider';
-import * as Models from './models/Models';
 import { Evaluator, EvaluatorConfig, EvaluatorProcess } from './Evaluator';
 import { createSimpleSemaphoreProvider, SemaphoreProvider } from './common/Semaphore';
 import { ObservedCallSourceConfig, ObservedCallSource } from './sources/ObservedCallSource';
-import { PartialBy } from './common/utils';
+import { PartialBy, asyncIteratorConverter } from './common/utils';
 import { createLogger, LogLevel } from './common/logger';
 import { ObservedSfuSource, ObservedSfuSourceConfig } from './sources/ObservedSfuSource';
 import { EventEmitter } from 'events';
+import { CallEntry, createCallEntry } from './entries/CallEntry';
+import { ClientEntry, createClientEntry } from './entries/ClientEntry';
+import { PeerConnectionEntry, createPeerConnectionEntry } from './entries/PeerConnectionEntry';
+import { InboundTrackEntry, createInboundTrackEntry } from './entries/InboundTrackEntry';
+import { OutboundTrackEntry, createOutboundTrackEntry } from './entries/OutboundTrackEntry';
+import { SfuEntry, createSfuEntry } from './entries/SfuEntry';
+import { SfuTransportEntry, createSfuTransportEntry } from './entries/SfuTransportEntry';
+import { SfuInboundRtpPadEntry, createSfuInboundRtpPadEntry } from './entries/SfuInboundRtpPadEntry';
+import { SfuOutboundRtpPadEntry, createSfuOutboundRtpPadEntry } from './entries/SfuOutboundRtpPadEntry';
+import { SfuSctpChannelEntry, createSfuSctpChannelEntry } from './entries/SfuSctpChannelEntry';
 
 const logger = createLogger('Observer');
 
@@ -88,7 +97,12 @@ export class Observer {
 	) {
 		this._sources = new Sources(config.sources);
 		this._sink = new SinkImpl(config.sink);
-		this._evaluator = new Evaluator(this.config.evaluator, this._semaphores.callSemaphore, this._storages, this._sink);
+		this._evaluator = new Evaluator(
+			this.config.evaluator, 
+			this._semaphores.callSemaphore, 
+			this._storages, 
+			this._sink
+		);
 
 		this._sources.on('observed-samples', (event) => {
 			this._emitter.emit('processing-started');
@@ -107,6 +121,10 @@ export class Observer {
 			this._emitter.emit('processing-ended');
 		});
 		logger.debug('Observer is created with config', this.config);
+	}
+
+	public get sources(): Sources {
+		return this._sources;
 	}
 
 	public on<K extends keyof ObserverEvents>(event: K, listener: (arg: ObserverEvents[K]) => void): this {
@@ -222,219 +240,260 @@ export class Observer {
 		}
 	}
 
-	public calls(): AsyncIterableIterator<[string, Models.Call]> {
-		const { callStorage } = this._storages;
+	public calls(): AsyncIterableIterator<CallEntry> {
+		const storageProvider = this._storages;
 		
-		return callStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , callModel ] of storageProvider.callStorage[Symbol.asyncIterator]()) {
+				if (!callModel) continue;
+				yield createCallEntry(storageProvider, callModel);
+			}
+		})());
 	}
 
-	public sfus(): AsyncIterableIterator<[string, Models.Sfu]> {
-		const { sfuStorage } = this._storages;
+	public sfus(): AsyncIterableIterator<SfuEntry> {
+		const storageProvider = this._storages;
 		
-		return sfuStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , sfuModel ] of storageProvider.sfuStorage[Symbol.asyncIterator]()) {
+				if (!sfuModel) continue;
+				yield createSfuEntry(storageProvider, sfuModel);
+			}
+		})());
 	}
 
-	public sfuTransports(): AsyncIterableIterator<[string, Models.SfuTransport]> {
-		const { sfuTransportStorage } = this._storages;
+	public sfuTransports(): AsyncIterableIterator<SfuTransportEntry> {
+		const storageProvider = this._storages;
 		
-		return sfuTransportStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , sfuTransportModel ] of storageProvider.sfuTransportStorage[Symbol.asyncIterator]()) {
+				if (!sfuTransportModel) continue;
+				yield createSfuTransportEntry(storageProvider, sfuTransportModel);
+			}
+		})());
 	}
 
-	public sfuInboundRtpPads(): AsyncIterableIterator<[string, Models.SfuInboundRtpPad]> {
-		const { sfuInboundRtpPadStorage } = this._storages;
-		
-		return sfuInboundRtpPadStorage[Symbol.asyncIterator]();
+	public sfuInboundRtpPads(): AsyncIterableIterator<SfuInboundRtpPadEntry> {
+		const storageProvider = this._storages;
+
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , sfuInboundRtpPadModel ] of storageProvider.sfuInboundRtpPadStorage[Symbol.asyncIterator]()) {
+				if (!sfuInboundRtpPadModel) continue;
+				yield createSfuInboundRtpPadEntry(storageProvider, sfuInboundRtpPadModel);
+			}
+		})());
 	}
 
-	public sfuOutboundRtpPads(): AsyncIterableIterator<[string, Models.SfuOutboundRtpPad]> {
-		const { sfuOutboundRtpPadStorage } = this._storages;
-		
-		return sfuOutboundRtpPadStorage[Symbol.asyncIterator]();
+	public sfuOutboundRtpPads(): AsyncIterableIterator<SfuOutboundRtpPadEntry> {
+		const storageProvider = this._storages;
+
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , sfuOutboundRtpPadModel ] of storageProvider.sfuOutboundRtpPadStorage[Symbol.asyncIterator]()) {
+				if (!sfuOutboundRtpPadModel) continue;
+				yield createSfuOutboundRtpPadEntry(storageProvider, sfuOutboundRtpPadModel);
+			}
+		})());
 	}
 
-	public clients(): AsyncIterableIterator<[string, Models.Client]> {
-		const { clientStorage } = this._storages;
+	public clients(): AsyncIterableIterator<ClientEntry> {
+		const storageProvider = this._storages;
 		
-		return clientStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , callModel ] of storageProvider.clientStorage[Symbol.asyncIterator]()) {
+				if (!callModel) continue;
+				yield createClientEntry(storageProvider, callModel);
+			}
+		})());
 	}
 
-	public peerConnections(): AsyncIterableIterator<[string, Models.PeerConnection]> {
-		const { peerConnectionStorage } = this._storages;
-		
-		return peerConnectionStorage[Symbol.asyncIterator]();
+	public peerConnections(): AsyncIterableIterator<PeerConnectionEntry> {
+		const storageProvider = this._storages;
+
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , peerConnectionModel ] of storageProvider.peerConnectionStorage[Symbol.asyncIterator]()) {
+				if (!peerConnectionModel) continue;
+				yield createPeerConnectionEntry(storageProvider, peerConnectionModel);
+			}
+		})());
 	}
 
 	public async getTrack(trackId: string) {
 		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
-		const [ inbTrack, outbTrack ] = await Promise.all([
+		const [ inbTrackModel, outbTrackModel ] = await Promise.all([
 			inboundTrackStorage.get(trackId),
 			outboundTrackStorage.get(trackId),
 		]);
 
-		if (inbTrack) return inbTrack;
-		else if (outbTrack) return outbTrack;
+		if (inbTrackModel) return createInboundTrackEntry(this._storages, inbTrackModel);
+		else if (outbTrackModel) return createOutboundTrackEntry(this._storages, outbTrackModel);
 	}
 
 	public async getAllTracks(trackIds: Iterable<string>) {
+		const storageProvider = this._storages;
 		const { inboundTrackStorage, outboundTrackStorage } = this._storages;
-		const [ inbTracks, outbTracks ] = await Promise.all([
+		
+		const [ inbTrackModels, outbTrackModels ] = await Promise.all([
 			inboundTrackStorage.getAll(trackIds),
 			outboundTrackStorage.getAll(trackIds),
 		]);
-		
-		return new Map([ ...inbTracks, ...outbTracks ]);
+
+		const result = new Map<string, InboundTrackEntry | OutboundTrackEntry>();
+
+		for (const [ trackId, model ] of inbTrackModels) {
+			result.set(trackId, createInboundTrackEntry(storageProvider, model));
+		}
+		for (const [ trackId, model ] of outbTrackModels) {
+			result.set(trackId, createOutboundTrackEntry(storageProvider, model));
+		}
+
+		return result;
 	}
 
-	public inboundTracks(): AsyncIterableIterator<[string, Models.InboundTrack]> {
-		const { inboundTrackStorage } = this._storages;
+	public inboundTracks(): AsyncIterableIterator<InboundTrackEntry> {
+		const storageProvider = this._storages;
 		
-		return inboundTrackStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , inboundTrackModel ] of storageProvider.inboundTrackStorage[Symbol.asyncIterator]()) {
+				if (!inboundTrackModel) continue;
+				yield createInboundTrackEntry(storageProvider, inboundTrackModel);
+			}
+		})());
 	}
 
-	public outboundTracks(): AsyncIterableIterator<[string, Models.OutboundTrack]> {
-		const { outboundTrackStorage } = this._storages;
+	public outboundTracks(): AsyncIterableIterator<OutboundTrackEntry> {
+		const storageProvider = this._storages;
 		
-		return outboundTrackStorage[Symbol.asyncIterator]();
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , outboundTrackModel ] of storageProvider.outboundTrackStorage[Symbol.asyncIterator]()) {
+				if (!outboundTrackModel) continue;
+				yield createOutboundTrackEntry(storageProvider, outboundTrackModel);
+			}
+		})());
 	}
 
-	public sfuSctpChannels(): AsyncIterableIterator<[string, Models.SfuSctpChannel]> {
-		const { sfuSctpChannelStorage } = this._storages;
-		
-		return sfuSctpChannelStorage[Symbol.asyncIterator]();
+	public sfuSctpChannels(): AsyncIterableIterator<SfuSctpChannelEntry> {
+		const storageProvider = this._storages;
+
+		return asyncIteratorConverter((async function *() {
+			for await (const [ , sfuSctpChannelModel ] of storageProvider.sfuSctpChannelStorage[Symbol.asyncIterator]()) {
+				if (!sfuSctpChannelModel) continue;
+				yield createSfuSctpChannelEntry(storageProvider, sfuSctpChannelModel);
+			}
+		})());
 	}
 
-	public async getCall(callId: string): Promise<Models.Call | undefined> {
-		const { callStorage } = this._storages;
-		
-		return callStorage.get(callId);
+	public async getCall(callId: string): Promise<CallEntry> {
+		return createCallEntry(this._storages, await this._storages.callStorage.get(callId));
 	}
 
-	public async getAllCalls(callIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Call>> {
-		const { callStorage } = this._storages;
-		
-		return callStorage.getAll(callIds);
+	public async getAllCalls(callIds: Iterable<string>): Promise<ReadonlyMap<string, CallEntry>> {
+		const models = await this._storages.callStorage.getAll(callIds);
+
+		return new Map(Array.from(models).map(([ callId, model ]) => [ callId, createCallEntry(this._storages, model) ]));
 	}
 
-	public async getSfu(sfuId: string): Promise<Models.Sfu | undefined> {
-		const { sfuStorage } = this._storages;
-		
-		return sfuStorage.get(sfuId);
+	public async getSfu(sfuId: string): Promise<SfuEntry> {
+		return createSfuEntry(this._storages, await this._storages.sfuStorage.get(sfuId));
 	}
 
-	public async getAllSfus(sfuIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Sfu>> {
-		const { sfuStorage } = this._storages;
-		
-		return sfuStorage.getAll(sfuIds);
+	public async getAllSfus(sfuIds: Iterable<string>): Promise<ReadonlyMap<string, SfuEntry>> {
+		const models = await this._storages.sfuStorage.getAll(sfuIds);
+
+		return new Map(Array.from(models).map(([ sfuId, model ]) => [ sfuId, createSfuEntry(this._storages, model) ]));
 	}
 
-	public async getSfuTransport(sfuTransportId: string): Promise<Models.SfuTransport | undefined> {
-		const { sfuTransportStorage } = this._storages;
-		
-		return sfuTransportStorage.get(sfuTransportId);
+	public async getSfuTransport(sfuTransportId: string): Promise<SfuTransportEntry | undefined> {
+		return createSfuTransportEntry(this._storages, await this._storages.sfuTransportStorage.get(sfuTransportId));
 	}
 
 	public async getAllSfuTransports(
 		sfuTransportIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.SfuTransport>> {
-		const { sfuTransportStorage } = this._storages;
-		
-		return sfuTransportStorage.getAll(sfuTransportIds);
+	): Promise<ReadonlyMap<string, SfuTransportEntry>> {
+		const models = await this._storages.sfuTransportStorage.getAll(sfuTransportIds);
+
+		return new Map(Array.from(models).map(([ sfuTransportId, model ]) => [ sfuTransportId, createSfuTransportEntry(this._storages, model) ]));
 	}
 
-	public async getSfuInboundRtpPad(sfuInboundRtpPadId: string): Promise<Models.SfuInboundRtpPad | undefined> {
-		const { sfuInboundRtpPadStorage } = this._storages;
-		
-		return sfuInboundRtpPadStorage.get(sfuInboundRtpPadId);
+	public async getSfuInboundRtpPad(sfuInboundRtpPadId: string): Promise<SfuInboundRtpPadEntry | undefined> {
+		return createSfuInboundRtpPadEntry(this._storages, await this._storages.sfuInboundRtpPadStorage.get(sfuInboundRtpPadId));
 	}
 
 	public async getAllSfuInboundRtpPads(
 		sfuInboundRtpPadIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.SfuInboundRtpPad>> {
-		const { sfuInboundRtpPadStorage } = this._storages;
-		
-		return sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds);
+	): Promise<ReadonlyMap<string, SfuInboundRtpPadEntry>> {
+		const models = await this._storages.sfuInboundRtpPadStorage.getAll(sfuInboundRtpPadIds);
+
+		return new Map(Array.from(models).map(([ sfuInboundRtpPadId, model ]) => [ sfuInboundRtpPadId, createSfuInboundRtpPadEntry(this._storages, model) ]));
 	}
 
-	public async getSfuOutboundRtpPad(sfuOutboundRtpPadId: string): Promise<Models.SfuOutboundRtpPad | undefined> {
-		const { sfuOutboundRtpPadStorage } = this._storages;
-		
-		return sfuOutboundRtpPadStorage.get(sfuOutboundRtpPadId);
+	public async getSfuOutboundRtpPad(sfuOutboundRtpPadId: string): Promise<SfuOutboundRtpPadEntry | undefined> {
+		return createSfuOutboundRtpPadEntry(this._storages, await this._storages.sfuOutboundRtpPadStorage.get(sfuOutboundRtpPadId));
 	}
 
 	public async getAllSfuOutboundRtpPads(
 		sfuOutboundRtpPadIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.SfuOutboundRtpPad>> {
-		const { sfuOutboundRtpPadStorage } = this._storages;
-		
-		return sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds);
+	): Promise<ReadonlyMap<string, SfuOutboundRtpPadEntry>> {
+		const models = await this._storages.sfuOutboundRtpPadStorage.getAll(sfuOutboundRtpPadIds);
+
+		return new Map(Array.from(models).map(([ sfuOutboundRtpPadId, model ]) => [ sfuOutboundRtpPadId, createSfuOutboundRtpPadEntry(this._storages, model) ]));
 	}
 
-	public async getClient(clientId: string): Promise<Models.Client | undefined> {
-		const { clientStorage } = this._storages;
-		
-		return clientStorage.get(clientId);
+	public async getClient(clientId: string): Promise<ClientEntry> {
+		return createClientEntry(this._storages, await this._storages.clientStorage.get(clientId));
 	}
 
-	public async getAllClient(clientIds: Iterable<string>): Promise<ReadonlyMap<string, Models.Client>> {
-		const { clientStorage } = this._storages;
-		
-		return clientStorage.getAll(clientIds);
+	public async getAllClient(clientIds: Iterable<string>): Promise<ReadonlyMap<string, ClientEntry>> {
+		const models = await this._storages.clientStorage.getAll(clientIds);
+
+		return new Map(Array.from(models).map(([ clientId, model ]) => [ clientId, createClientEntry(this._storages, model) ]));
 	}
 
-	public async getPeerConnection(peerConnectionId: string): Promise<Models.PeerConnection | undefined> {
-		const { peerConnectionStorage } = this._storages;
-		
-		return peerConnectionStorage.get(peerConnectionId);
+	public async getPeerConnection(peerConnectionId: string): Promise<PeerConnectionEntry> {
+		return createPeerConnectionEntry(this._storages, await this._storages.peerConnectionStorage.get(peerConnectionId));
 	}
 
 	public async getAllPeerConnections(
 		peerConnectionIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.PeerConnection>> {
-		const { peerConnectionStorage } = this._storages;
-		
-		return peerConnectionStorage.getAll(peerConnectionIds);
+	): Promise<ReadonlyMap<string, PeerConnectionEntry>> {
+		const models = await this._storages.peerConnectionStorage.getAll(peerConnectionIds);
+
+		return new Map(Array.from(models).map(([ peerConnectionId, model ]) => [ peerConnectionId, createPeerConnectionEntry(this._storages, model) ]));
 	}
 
-	public async getInboundTrack(inboundTrackId: string): Promise<Models.InboundTrack | undefined> {
-		const { inboundTrackStorage } = this._storages;
-		
-		return inboundTrackStorage.get(inboundTrackId);
+	public async getInboundTrack(inboundTrackId: string): Promise<InboundTrackEntry> {
+		return createInboundTrackEntry(this._storages, await this._storages.inboundTrackStorage.get(inboundTrackId));
 	}
 
 	public async getAllInboundTracks(
 		inboundTrackIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.InboundTrack>> {
-		const { inboundTrackStorage } = this._storages;
-		
-		return inboundTrackStorage.getAll(inboundTrackIds);
+	): Promise<ReadonlyMap<string, InboundTrackEntry>> {
+		const models = await this._storages.inboundTrackStorage.getAll(inboundTrackIds);
+
+		return new Map(Array.from(models).map(([ inboundTrackId, model ]) => [ inboundTrackId, createInboundTrackEntry(this._storages, model) ]));
 	}
 
-	public async getOutboundTrack(outboundTrackId: string): Promise<Models.OutboundTrack | undefined> {
-		const { outboundTrackStorage } = this._storages;
-		
-		return outboundTrackStorage.get(outboundTrackId);
+	public async getOutboundTrack(outboundTrackId: string): Promise<OutboundTrackEntry> {
+		return createOutboundTrackEntry(this._storages, await this._storages.outboundTrackStorage.get(outboundTrackId));
 	}
 
 	public async getAllOutboundTracks(
 		outboundTrackIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.OutboundTrack>> {
-		const { outboundTrackStorage } = this._storages;
-		
-		return outboundTrackStorage.getAll(outboundTrackIds);
+	): Promise<ReadonlyMap<string, OutboundTrackEntry>> {
+		const models = await this._storages.outboundTrackStorage.getAll(outboundTrackIds);
+
+		return new Map(Array.from(models).map(([ outboundTrackId, model ]) => [ outboundTrackId, createOutboundTrackEntry(this._storages, model) ]));
 	}
 
-	public async getSfuSctpChannel(sctpChannelId: string): Promise<Models.SfuSctpChannel | undefined> {
-		const { sfuSctpChannelStorage } = this._storages;
-		
-		return sfuSctpChannelStorage.get(sctpChannelId);
+	public async getSfuSctpChannel(sctpChannelId: string): Promise<SfuSctpChannelEntry | undefined> {
+		return createSfuSctpChannelEntry(this._storages, await this._storages.sfuSctpChannelStorage.get(sctpChannelId));
 	}
 
 	public async getAllSfuSctpChannel(
 		sctpChannelIds: Iterable<string>
-	): Promise<ReadonlyMap<string, Models.SfuSctpChannel>> {
-		const { sfuSctpChannelStorage } = this._storages;
-		
-		return sfuSctpChannelStorage.getAll(sctpChannelIds);
+	): Promise<ReadonlyMap<string, SfuSctpChannelEntry>> {
+		const models = await this._storages.sfuSctpChannelStorage.getAll(sctpChannelIds);
+
+		return new Map(Array.from(models).map(([ sctpChannelId, model ]) => [ sctpChannelId, createSfuSctpChannelEntry(this._storages, model) ]));
 	}
 
 	public get closed() {
@@ -443,9 +502,7 @@ export class Observer {
 
 	public close() {
 		if (this._closed) {
-			logger.debug('Attempted to close twice');
-			
-			return;
+			return logger.debug('Attempted to close twice');
 		}
 		this._closed = true;
 		this._sources.close();

@@ -10,5 +10,16 @@ export function iteratorConverter<T>(generator: Generator<T, void, undefined>): 
 		next(): IteratorResult<T> {
 			return generator.next();
 		},
-	}
+	};
+}
+
+export function asyncIteratorConverter<T>(generator: AsyncGenerator<T, void, undefined>): AsyncIterableIterator<T> {
+	return {
+		[Symbol.asyncIterator](): AsyncIterableIterator<T> {
+			return this;
+		},
+		next(): Promise<IteratorResult<T>> {
+			return generator.next();
+		},
+	};
 }
