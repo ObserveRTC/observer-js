@@ -11,11 +11,13 @@ export type ObservedCallSourceConfig<T extends Record<string, unknown>> = {
 
 export interface ObservedCallSource<T extends Record<string, unknown> = Record<string, unknown>> extends ObservedCallSourceConfig<T> {
 	readonly closed: boolean;
-	readonly clients: ReadonlyMap<string, ObservedClientSource>;
+	readonly clients: IterableIterator<ObservedClientSource>;
+
+	getClientSource<U extends Record<string, unknown>>(clientId: string): ObservedClientSource<U> | undefined;
 
 	createClientSource<U extends Record<string, unknown> = Record<string, unknown>>(
 		context: PartialBy<ObservedClientSourceConfig<U>, 'joined' | 'mediaUnitId' | 'serviceId' | 'callId' | 'roomId'>
-	): ObservedClientSource;
+	): ObservedClientSource<U>;
 
 	// automatically close every
 	close(): void;

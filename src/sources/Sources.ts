@@ -42,12 +42,16 @@ export class Sources {
 
 	public constructor(public readonly config: SourcesConfig) {}
 
-	public getCallSource(callId: string) {
-		return this._callSources.get(callId);
+	public getCallSource<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCallSource<T> | undefined {
+		if (!this._callSources.has(callId)) return;
+		
+		return this._callSources.get(callId) as ObservedCallSource<T>;
 	}
 
-	public getSfuSource(sfuId: string) {
-		return this._sfuSources.get(sfuId);
+	public getSfuSource<T extends Record<string, unknown> = Record<string, unknown>>(sfuId: string) {
+		if (!this._sfuSources.has(sfuId)) return;
+
+		return this._sfuSources.get(sfuId) as ObservedSfuSource<T>;
 	}
 
 	public on<K extends keyof SourcesEvents>(event: K, listener: (data: SourcesEvents[K]) => void): this {
@@ -82,12 +86,19 @@ export class Sources {
 			appData,
 			serviceId,
 			mediaUnitId,
-			clients: clientSources,
+			get clients() {
+				return clientSources.values();
+			},
+
+			getClientSource: <U extends Record<string, unknown> = Record<string, unknown>>(clientId: string) => {
+				if (!clientSources.has(clientId)) return;
+				else return clientSources.get(clientId) as ObservedClientSource<U>;
+			},
 
 			createClientSource: <U extends Record<string, unknown> = Record<string, unknown>>(context: ObservedClientSourceConfig<U>) => {
 				const existingClientSource = clientSources.get(context.clientId);
 
-				if (existingClientSource) return existingClientSource;
+				if (existingClientSource) return existingClientSource as ObservedClientSource<U>;
 				
 				const { appData: clientAppData, ...clientConfig } = context;
 				const clientSource = this._createClientSource<U>({
@@ -105,7 +116,7 @@ export class Sources {
 				};
 				clientSources.set(context.clientId, clientSource);
 				
-				return clientSource;
+				return clientSource as ObservedClientSource<U>;
 			},
 			close: () => {
 				if (closed) {
