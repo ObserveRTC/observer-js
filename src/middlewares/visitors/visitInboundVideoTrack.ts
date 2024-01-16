@@ -96,6 +96,7 @@ export function visitInboundVideoTrack(
 			} = inboundVideoSample;
 
 			const ssrc = BigInt(sample_ssrc);
+			// const lastVideoStats = storedInboundVideoTrack.videoStats.find((stats) => stats.ssrc === ssrc);
 			const videoStats = new Samples_ClientSample_InboundVideoTrack({
 				ssrc,
 				bytesReceived: BigInt(sample_bytesReceived ?? -1),

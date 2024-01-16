@@ -69,6 +69,49 @@ export class Call extends Message<Call> {
 }
 
 /**
+ * @generated from message org.observertc.observer.models.ClientCoordinate
+ */
+export class ClientCoordinate extends Message<ClientCoordinate> {
+  /**
+   * @generated from field: required float latitude = 1;
+   */
+  latitude?: number;
+
+  /**
+   * @generated from field: required float longitude = 2;
+   */
+  longitude?: number;
+
+  constructor(data?: PartialMessage<ClientCoordinate>) {
+    super();
+    proto2.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto2 = proto2;
+  static readonly typeName = "org.observertc.observer.models.ClientCoordinate";
+  static readonly fields: FieldList = proto2.util.newFieldList(() => [
+    { no: 1, name: "latitude", kind: "scalar", T: 2 /* ScalarType.FLOAT */ },
+    { no: 2, name: "longitude", kind: "scalar", T: 2 /* ScalarType.FLOAT */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ClientCoordinate {
+    return new ClientCoordinate().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ClientCoordinate {
+    return new ClientCoordinate().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ClientCoordinate {
+    return new ClientCoordinate().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ClientCoordinate | PlainMessage<ClientCoordinate> | undefined, b: ClientCoordinate | PlainMessage<ClientCoordinate> | undefined): boolean {
+    return proto2.util.equals(ClientCoordinate, a, b);
+  }
+}
+
+/**
  * @generated from message org.observertc.observer.models.Client
  */
 export class Client extends Message<Client> {
@@ -147,6 +190,19 @@ export class Client extends Message<Client> {
    */
   engine?: Samples_ClientSample_Engine;
 
+  /**
+   *  message Stats {
+   *    optional double maxRttInS = 1;
+   *    optional double minRttInS = 2;
+   *    optional string location = 3;
+   *  }
+   *
+   *  optional Stats stats = 13;
+   *
+   * @generated from field: optional org.observertc.observer.models.ClientCoordinate coordinates = 16;
+   */
+  coordinates?: ClientCoordinate;
+
   constructor(data?: PartialMessage<Client>) {
     super();
     proto2.util.initPartial(data, this);
@@ -170,6 +226,7 @@ export class Client extends Message<Client> {
     { no: 13, name: "operationSystem", kind: "message", T: Samples_ClientSample_OperationSystem, opt: true },
     { no: 14, name: "platform", kind: "message", T: Samples_ClientSample_Platform, opt: true },
     { no: 15, name: "engine", kind: "message", T: Samples_ClientSample_Engine, opt: true },
+    { no: 16, name: "coordinates", kind: "message", T: ClientCoordinate, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Client {
@@ -319,6 +376,104 @@ export class PeerConnection extends Message<PeerConnection> {
 
   static equals(a: PeerConnection | PlainMessage<PeerConnection> | undefined, b: PeerConnection | PlainMessage<PeerConnection> | undefined): boolean {
     return proto2.util.equals(PeerConnection, a, b);
+  }
+}
+
+/**
+ * @generated from message org.observertc.observer.models.InboundTrackVideoStats
+ */
+export class InboundTrackVideoStats extends Message<InboundTrackVideoStats> {
+  /**
+   * @generated from field: required int32 ssrc = 1;
+   */
+  ssrc?: number;
+
+  /**
+   * @generated from field: optional float fps = 2;
+   */
+  fps?: number;
+
+  /**
+   * @generated from field: optional org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack sample = 4;
+   */
+  sample?: Samples_ClientSample_InboundVideoTrack;
+
+  constructor(data?: PartialMessage<InboundTrackVideoStats>) {
+    super();
+    proto2.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto2 = proto2;
+  static readonly typeName = "org.observertc.observer.models.InboundTrackVideoStats";
+  static readonly fields: FieldList = proto2.util.newFieldList(() => [
+    { no: 1, name: "ssrc", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 2, name: "fps", kind: "scalar", T: 2 /* ScalarType.FLOAT */, opt: true },
+    { no: 4, name: "sample", kind: "message", T: Samples_ClientSample_InboundVideoTrack, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InboundTrackVideoStats {
+    return new InboundTrackVideoStats().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): InboundTrackVideoStats {
+    return new InboundTrackVideoStats().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): InboundTrackVideoStats {
+    return new InboundTrackVideoStats().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: InboundTrackVideoStats | PlainMessage<InboundTrackVideoStats> | undefined, b: InboundTrackVideoStats | PlainMessage<InboundTrackVideoStats> | undefined): boolean {
+    return proto2.util.equals(InboundTrackVideoStats, a, b);
+  }
+}
+
+/**
+ * @generated from message org.observertc.observer.models.InboundTrackStats
+ */
+export class InboundTrackStats extends Message<InboundTrackStats> {
+  /**
+   * @generated from field: optional float bitrate = 1;
+   */
+  bitrate?: number;
+
+  /**
+   * @generated from field: optional float fractionalLoss = 2;
+   */
+  fractionalLoss?: number;
+
+  /**
+   * @generated from field: optional float avgRttInS = 3;
+   */
+  avgRttInS?: number;
+
+  constructor(data?: PartialMessage<InboundTrackStats>) {
+    super();
+    proto2.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto2 = proto2;
+  static readonly typeName = "org.observertc.observer.models.InboundTrackStats";
+  static readonly fields: FieldList = proto2.util.newFieldList(() => [
+    { no: 1, name: "bitrate", kind: "scalar", T: 2 /* ScalarType.FLOAT */, opt: true },
+    { no: 2, name: "fractionalLoss", kind: "scalar", T: 2 /* ScalarType.FLOAT */, opt: true },
+    { no: 3, name: "avgRttInS", kind: "scalar", T: 2 /* ScalarType.FLOAT */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InboundTrackStats {
+    return new InboundTrackStats().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): InboundTrackStats {
+    return new InboundTrackStats().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): InboundTrackStats {
+    return new InboundTrackStats().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: InboundTrackStats | PlainMessage<InboundTrackStats> | undefined, b: InboundTrackStats | PlainMessage<InboundTrackStats> | undefined): boolean {
+    return proto2.util.equals(InboundTrackStats, a, b);
   }
 }
 

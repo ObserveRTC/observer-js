@@ -92,7 +92,7 @@ export function visitInboundAudioTrack(
 			} = inboundAudioSample;
 
 			const ssrc = BigInt(sample_ssrc);
-			const videoStats = new Samples_ClientSample_InboundAudioTrack({
+			const audioStats = new Samples_ClientSample_InboundAudioTrack({
 				ssrc,
 				bytesReceived: BigInt(sample_bytesReceived ?? -1),
 				bytesSent: BigInt(sample_bytesSent ?? -1),
@@ -103,9 +103,11 @@ export function visitInboundAudioTrack(
 				...sample,
 			});
 
-			statsMap.set(ssrc, videoStats);
+			statsMap.set(ssrc, audioStats);
 		}
 	}
 	storedInboundAudioTrack.ssrc = [ ...statsMap.keys() ];
 	storedInboundAudioTrack.videoStats = Array.from(statsMap.values());
+
+	
 }

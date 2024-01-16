@@ -21,6 +21,11 @@ message Call {
 //  repeated ClientLog clientLogs = 6;
 }
 
+message ClientCoordinate {
+  required float latitude = 1;
+  required float longitude = 2;
+}
+
 message Client {
   required string serviceId = 1;
   required string roomId = 2;
@@ -46,6 +51,7 @@ message Client {
 
   optional org.observertc.schemas.protobuf.Samples.ClientSample.Engine engine = 15;
 
+  optional ClientCoordinate coordinates = 16;
 //  message Stats {
 //    optional double maxRttInS = 1;
 //    optional double minRttInS = 2;
@@ -54,6 +60,20 @@ message Client {
 //
 //  optional Stats stats = 13;
 }
+
+// message PeerConnectionStats {
+//   optional double avgRttInS = 1;
+//   optional double avgJitter = 2;
+//   optional double fractionalLoss = 3;
+//   optional double sendingBitrate = 4;
+//   optional double receivingBitrate = 5;
+//   optional double sendingAudioBitrate = 6;
+//   optional double sendingVideoBitrate = 7;
+//   optional double receivingAudioBitrate = 8;
+//   optional double receivingVideoBitrate = 9;
+//   optional bool usingTURN = 10;
+
+// }
 
 message PeerConnection {
   required string serviceId = 1;
@@ -82,6 +102,22 @@ message PeerConnection {
   repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
 
   optional uint64 touched = 17;
+
+  // optional PeerConnectionStats stats = 18;
+}
+
+message InboundTrackVideoStats {
+  required int32 ssrc = 1;
+  optional float fps = 2;
+  optional org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack sample = 4;
+}
+
+message InboundTrackStats {
+  optional float bitrate = 1;
+  optional float fractionalLoss = 2;
+  optional float avgRttInS = 3;
+
+  
 }
 
 message InboundTrack {

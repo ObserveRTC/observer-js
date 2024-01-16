@@ -23,6 +23,7 @@ export type { SfuTransportEntry } from './entries/SfuTransportEntry';
 export type { SfuInboundRtpPadEntry } from './entries/SfuInboundRtpPadEntry';
 export type { SfuOutboundRtpPadEntry } from './entries/SfuOutboundRtpPadEntry';
 export type { SfuSctpChannelEntry } from './entries/SfuSctpChannelEntry';
+export type { GetClientCoordinate, ClientCoordinate } from './evaluators/SetClientsCoordinateEvaluator';
 
 export type {
 	Samples,

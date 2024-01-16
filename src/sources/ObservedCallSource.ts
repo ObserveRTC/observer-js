@@ -7,6 +7,8 @@ export type ObservedCallSourceConfig<T extends Record<string, unknown>> = {
 	readonly mediaUnitId: string;
 	readonly roomId: string;
 	readonly callId: string;
+
+	createCallStartedReport?: boolean,
 };
 
 export interface ObservedCallSource<T extends Record<string, unknown> = Record<string, unknown>> extends ObservedCallSourceConfig<T> {

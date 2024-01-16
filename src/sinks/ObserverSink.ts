@@ -282,6 +282,7 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 
 	public emit(): number {
 		let result = 0;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const checkAndEmit = (eventName: keyof SinkEventsMap, reports: any[]) => {
 			if (reports.length > 0) {
 				this._emit(eventName, { reports });

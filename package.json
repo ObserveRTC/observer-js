@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "0.9.23-beta",
+  "version": "0.9.24-beta",
   "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -31,6 +31,7 @@
     "@observertc/sample-schemas-js": "2.2.10",
     "@types/events": "^3.0.0",
     "@types/uuid": "^8.3.4",
+    "ipaddr.js": "^2.1.0",
     "package-lock-only": "^0.0.4",
     "uuid": "^8.3.2"
   },

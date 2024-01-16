@@ -86,6 +86,9 @@ export function createJoinClientProcess(
 
 			const callEvent = createCallStartedEventReport(serviceId, roomId, callId, Number(started));
 
+			// if ((evaluatorContext?.observedCalls as ObservedCalls).getObservedCall(callId)) {
+			// 	reports.addCallEventReport(callEvent);
+			// }
 			reports.addCallEventReport(callEvent);
 			evaluatorContext?.startedCallIds.push(callId);
 		}

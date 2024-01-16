@@ -66,6 +66,22 @@ export function createClientEntry(storageProvider: StorageProvider, model?: Mode
 		get marker() {
 			return model.marker;
 		},
+		get coordinates(): { latitude: number; longitude: number } | undefined {
+			if (!model.coordinates) return;
+
+			const {
+				longitude,
+				latitude
+			} = model.coordinates;
+
+			if (!latitude) return;
+			if (!longitude) return;
+
+			return {
+				latitude,
+				longitude
+			};
+		},
 		getCall,
 		get peerConnections(): AsyncIterableIterator<PeerConnectionEntry> {
 			return asyncIteratorConverter<PeerConnectionEntry>(asyncPeerConnectionGenerator());

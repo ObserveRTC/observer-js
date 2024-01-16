@@ -4,27 +4,27 @@
 	"description": "Simple NodeJS to generate Models for observer-js",
 	"main": "index.js",
 	"scripts": {
-	  "test": "echo \"Error: no test specified\" && exit 1"
+		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"repository": {
-	  "type": "git",
-	  "url": "git+https://github.com/hamok-dev/baselib.git"
+		"type": "git",
+		"url": "git+https://github.com/hamok-dev/baselib.git"
 	},
 	"keywords": [
-	  "ObserveRTC",
-	  "observer"
+		"ObserveRTC",
+		"observer"
 	],
 	"author": "Balazs Kreith",
 	"license": "Apache-2.0",
 	"type": "module",
 	"bugs": {
-	  "url": "https://github.com/ObserveRTC/observer-js/issues"
+		"url": "https://github.com/ObserveRTC/observer-js/issues"
 	},
 	"homepage": "https://github.com/ObserveRTC/observer-js#readme",
 	"devDependencies": {
-	  "@bufbuild/protoc-gen-es": "^1.0.0"
+		"@bufbuild/protoc-gen-es": "^1.0.0"
 	},
 	"dependencies": {
-	  "@bufbuild/protobuf": "^1.0.0"
+		"@bufbuild/protobuf": "^1.0.0"
 	}
-  }
+}

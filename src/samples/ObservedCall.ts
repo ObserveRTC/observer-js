@@ -4,6 +4,7 @@ export interface ObservedCall {
 	readonly serviceId: string;
 	readonly roomId: string;
 	readonly callId: string;
+	readonly createCallStartedReport?: boolean;
 	observedClients(): IterableIterator<ObservedClient>;
 	getObservedClient(clientId: string): ObservedClient | undefined;
 }
@@ -36,7 +37,7 @@ export class ObservedCallBuilder {
 			observedClients: () => observedClients.values(),
 			getObservedClient: (clientId) => observedClients.get(clientId),
 		};
-
+		
 		for (const observedClientBuilder of this._observedClientBuilders.values()) {
 			const observedClient = observedClientBuilder.build(observedCall);
 

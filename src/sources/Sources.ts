@@ -101,7 +101,7 @@ export class Sources {
 				if (existingClientSource) return existingClientSource as ObservedClientSource<U>;
 				
 				const { appData: clientAppData, ...clientConfig } = context;
-				const clientSource = this._createClientSource<U>({
+				const clientSource = this._createClientSource<U>(callSource, {
 					...callConfig,
 					...clientConfig,
 					appData: clientAppData,
@@ -140,7 +140,7 @@ export class Sources {
 		return callSource;
 	}
 
-	private _createClientSource<T extends Record<string, unknown> = Record<string, unknown>>(config: PartialBy<ObservedClientSourceConfig<T>, 'joined'>): ObservedClientSource<T> {
+	private _createClientSource<T extends Record<string, unknown> = Record<string, unknown>>(callSource: ObservedCallSource, config: PartialBy<ObservedClientSourceConfig<T>, 'joined'>): ObservedClientSource<T> {
 		let closed = false;
 		const {
 			appData,
@@ -156,9 +156,9 @@ export class Sources {
 				if (closed) {
 					throw new Error('Cannot accept ClientSample, because the ClientSource is closed');
 				}
-				const observedCallBuilder = this._observedCallsBuilder.getOrCreateObservedCallBuilder(config.callId, () => {
+				const observedCallBuilder = this._observedCallsBuilder.getOrCreateObservedCallBuilder(callSource.callId, () => {
 					return {
-						...source,
+						...callSource,
 					};
 				});
 				const observedClientBuilder = observedCallBuilder.getOrCreateObservedClientBuilder(config.clientId, () => {

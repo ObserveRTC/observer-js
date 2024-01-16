@@ -18,6 +18,7 @@ import { SfuTransportEntry, createSfuTransportEntry } from './entries/SfuTranspo
 import { SfuInboundRtpPadEntry, createSfuInboundRtpPadEntry } from './entries/SfuInboundRtpPadEntry';
 import { SfuOutboundRtpPadEntry, createSfuOutboundRtpPadEntry } from './entries/SfuOutboundRtpPadEntry';
 import { SfuSctpChannelEntry, createSfuSctpChannelEntry } from './entries/SfuSctpChannelEntry';
+import { GetClientCoordinate, createSetClientsCoordinateEvaluator } from './evaluators/SetClientsCoordinateEvaluator';
 
 const logger = createLogger('Observer');
 
@@ -220,6 +221,15 @@ export class Observer {
 		for (const process of processes) {
 			this._evaluator.removeProcess(process);
 		}
+	}
+
+	public addCoordinateEvaluator(getClientCoordinate: GetClientCoordinate) {
+		if (this._closed) {
+			throw new Error('Attempted to add an evaluator to a closed observer');
+		}
+		const process = createSetClientsCoordinateEvaluator(getClientCoordinate);
+
+		this._evaluator.addProcess(async (context) => process(context));
 	}
 
 	public addSinks(...processes: ObserverSinkProcess[]) {
