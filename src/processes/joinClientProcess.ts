@@ -33,7 +33,7 @@ export function createJoinClientProcess(
 		const newClients = new Map<string, Models.Client>();
 
 		for (const joinedClient of joinedClients) {
-			const { serviceId, mediaUnitId, roomId, callId, clientId, joined: timestamp, timeZoneId, marker } = joinedClient;
+			const { serviceId, mediaUnitId, roomId, callId, clientId, userId, joined: timestamp, timeZoneId, marker } = joinedClient;
 
 			let call = existingCalls.get(callId);
 
@@ -68,6 +68,7 @@ export function createJoinClientProcess(
 					joined: BigInt(timestamp),
 					timeZoneId,
 					marker,
+					userId,
 				})
 			);
 		}
