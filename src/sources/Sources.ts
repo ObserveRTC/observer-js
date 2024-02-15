@@ -25,6 +25,8 @@ export type SourcesEvents = {
 	'added-client-source': ObservedClientSourceConfig;
 	'removed-sfu-source': ObservedSfuSourceConfig;
 	'added-sfu-source': ObservedSfuSourceConfig;
+	'added-call-source': ObservedCallSource;
+	'removed-call-source': ObservedCallSource;
 };
 
 export class Sources {
@@ -122,12 +124,15 @@ export class Sources {
 				if (closed) {
 					return;
 				}
+				closed = true;
+
 				for (const clientSource of clientSources.values()) {
 					clientSource.close();
 				}
 				clientSources.clear();
 				this._callSources.delete(config.callId);
-				closed = true;
+
+				this._emit('removed-call-source', callSource);
 			},
 			closed,
 		};
@@ -136,6 +141,8 @@ export class Sources {
 			this._resetTimer();
 		}
 		this._callSources.set(config.callId, callSource);
+		
+		this._emit('added-call-source', callSource);
 		
 		return callSource;
 	}
