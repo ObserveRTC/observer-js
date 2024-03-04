@@ -18,23 +18,11 @@ import {
 	SfuSctpStreamReport,
 	SFUTransportReport,
 } from '@observertc/report-schemas-js';
-import { ObservedCalls } from '../samples/ObservedCalls';
-import { ReportsCollector } from './ReportsCollector';
 import * as Models from '../models/Models';
 import { StorageProvider } from '../storages/StorageProvider';
 import { Message } from '@bufbuild/protobuf';
-import { Middleware } from '../middlewares/Middleware';
-import { ObservedSfus } from '../samples/ObservedSfus';
 
-export type ObserverReport =
-	| CallEventReport
-	| CallMetaReport
-	| ClientExtensionReport
-	| PeerConnectionTransportReport
-	| InboundAudioTrackReport
-	| InboundVideoTrackReport
-	| OutboundAudioTrackReport
-	| OutboundVideoTrackReport;
+export type MediaKind = 'audio' | 'video';
 
 export interface EvaluatorContext {
 	readonly startedCallIds: string[];
@@ -97,18 +85,12 @@ export interface EvaluatorContext {
 		closed: number;
 	})[];
 
-	readonly observedCalls: ObservedCalls;
-	readonly observedSfus: ObservedSfus;
 	readonly storages: StorageProvider;
-	readonly reports: ReportsCollector;
+	readonly reports: ObserverSinkContext;
 
-	readonly clientExtensionStats: ClientExtensionReport[],
-	readonly callEvents: CallEventReport[],
-	readonly sfuEvents: SfuEventReport[],
-	readonly sfuExtensionStats: SfuExtensionReport[],
 }
 
-export type EvaluatorMiddleware = Middleware<EvaluatorContext>;
+// export type EvaluatorMiddleware = Middleware<EvaluatorContext>;
 
 export interface ObserverSinkContext {
 	readonly callEventReports: CallEventReport[];
@@ -130,5 +112,3 @@ export interface ObserverSinkContext {
 	readonly sfuTransportReports: SFUTransportReport[];
 	readonly sfuMetaReports: SfuMetaReport[];
 }
-
-export type ObserverSinkMiddleware = Middleware<ObserverSinkContext>;
