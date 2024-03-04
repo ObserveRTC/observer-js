@@ -75,6 +75,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _processingSample = 0;
 	private _iceLocalCandidate?: IceLocalCandidate;
 	private _iceRemoteCandidate?: IceLocalCandidate;
+	
+	public readonly mediaDevices: string[] = [];
+	public readonly codecs: string[] = [];
+	public readonly userMediaErrors: string[] = [];
 
 	private constructor(
 		private readonly _model: Models.Client,
@@ -128,6 +132,26 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get marker() {
 		return this._model.marker;
+	}
+
+	public get browser() {
+		return this._model.browser;
+	}
+
+	public get engine() {
+		return this._model.engine;
+	}
+
+	public get operationSystem() {
+		return this._model.operationSystem;
+	}
+
+	public get platform() {
+		return this._model.platform;
+	}
+
+	public get acceptedSample() {
+		return this._acceptedSample;
 	}
 
 	public get closed() {
@@ -324,6 +348,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 
 				this.reports.addCallMetaReport(callMetaReport);
+				this.userMediaErrors.push(userMediaError);
 			}
 
 			for (const certificate of sample.certificates ?? []) {
@@ -352,6 +377,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 
 				this.reports.addCallMetaReport(callMetaReport);
+				codec.mimeType && this.codecs.push(codec.mimeType);
 			}
 	
 			for (const iceServer of sample.iceServers ?? []) {
@@ -380,8 +406,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 
 				this.reports.addCallMetaReport(callMetaReport);
+				mediaDevice.label && this.mediaDevices.push(mediaDevice.label);
 			}
-	
+			
 			for (const mediaSource of sample.mediaSources ?? []) {
 				const callMetaReport = createCallMetaReport(
 					this.serviceId, 

@@ -127,6 +127,10 @@ export class Observer extends EventEmitter {
 		return call;
 	}
 
+	public get observedCalls(): ReadonlyMap<string, ObservedCall> {
+		return this._observedCalls;
+	}
+
 	public get closed() {
 		return this._closed;
 	}

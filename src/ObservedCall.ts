@@ -4,7 +4,6 @@ import * as Models from './models/Models';
 import { ObservedClient, ObservedClientConfig } from './ObservedClient';
 import { ReportsCollector } from './ReportsCollector';
 import { createSingleExecutor } from './common/SingleExecutor';
-import { PartialBy } from './common/utils';
 
 export type ObservedCallConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	serviceId: string;
@@ -109,13 +108,16 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this._closed = true;
 		this._ended = timestamp ?? Date.now();
 
+		Array.from(this._clients.values()).forEach((client) => client.close());
+
 		this._execute(() => this._storageProvider.callStorage.remove(this.callId))
+			.catch(() => void 0)
 			.finally(() => this.emit('close'));
 	}
 
-	public async joinClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
+	public async createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
 		clientId: string, 
-		config: PartialBy<ObservedClientConfig<ClientAppData>, 'mediaUnitId'>,
+		config: { mediaUnitId?: string, appData: ClientAppData }
 	): Promise<ObservedClient> {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 		let creating = this._creatingClients.get(clientId);
@@ -123,7 +125,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (creating) return creating;
 		
 		creating = this._createObservedClient<ClientAppData>(clientId, {
-			...config,
+			callId: this.callId,
+			appData: config.appData,
+			clientId,
+			overflowingProcessingThreshold: 2,
 			mediaUnitId: config.mediaUnitId ?? this._defaultMediaUnitId,
 		}).finally(() => this._creatingClients.delete(clientId));
 
