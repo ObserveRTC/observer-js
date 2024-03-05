@@ -152,6 +152,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		track?.once('close', () => {
 			this._remoteOutboundTrack = undefined;
 		});
+		this._remoteOutboundTrack = track;
 		this.emit('remoteoutboundtrack', track);
 	}
 

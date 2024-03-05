@@ -549,7 +549,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundAudioTrack.get(track.sfuStreamId ?? '');
 	
-					if (remoteOutboundTrack && !remoteOutboundTrack.remoteInboundTracks.has(inboundAudioTrack.trackId)) {
+					if (remoteOutboundTrack && inboundAudioTrack.sfuStreamId && !remoteOutboundTrack.remoteInboundTracks.has(inboundAudioTrack.sfuStreamId)) {
 						remoteOutboundTrack.connectInboundTrack(inboundAudioTrack);
 					}
 				} catch (err) {
@@ -583,9 +583,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 					await inboundVideoTrack.update(track, sample.timestamp);
 					
-					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(track.sfuStreamId ?? '');
+					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(inboundVideoTrack.sfuStreamId ?? '');
 	
-					if (remoteOutboundTrack && !remoteOutboundTrack.remoteInboundTracks.has(inboundVideoTrack.trackId)) {
+					if (remoteOutboundTrack && inboundVideoTrack.sfuStreamId && !remoteOutboundTrack.remoteInboundTracks.has(inboundVideoTrack.sfuStreamId)) {
 						remoteOutboundTrack.connectInboundTrack(inboundVideoTrack);
 					}
 				} catch (err) {
