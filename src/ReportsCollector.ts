@@ -19,11 +19,7 @@ import {
 	SFUTransportReport,
 } from '@observertc/report-schemas-js';
 import { EventEmitter } from 'events';
-import { ReportsCollector } from '../common/ReportsCollector';
-import { ObserverSinkContext } from '../common/types';
-import { Middleware } from '../middlewares/Middleware';
-import { createProcessor, Processor } from '../middlewares/Processor';
-import { logger } from '../middlewares/VisitObservedCallsMiddleware';
+import { ObserverSinkContext } from './common/types';
 
 export type SinkEventsMap = {
 	'call-event': {
@@ -80,23 +76,14 @@ export type SinkEventsMap = {
 	'sfu-meta': {
 		reports: SfuMetaReport[];
 	};
+	'reports': ObserverSinkContext;
+	'newreport': number;
 };
 
-export type SinkConfig = Record<string, unknown>;
 export type ObserverSinkProcess = (observerSinkContext: ObserverSinkContext) => Promise<void>;
 
-export interface ObserverReportsEmitter {
-	on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
-	off<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
-	once<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this;
-}
-
-export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
-	private _index = 0;
-	private _processes = new Map<number, Promise<void>>();
-	private _customProcesses = new Map<ObserverSinkProcess, Middleware<ObserverSinkContext>>();
-	private readonly _processor: Processor<ObserverSinkContext>;
-	
+export class ReportsCollector {
+	private _collectedReports = 0;
 	private _emitter = new EventEmitter();
 	private _callEventReports: CallEventReport[] = [];
 	private _callMetaReports: CallMetaReport[] = [];
@@ -117,8 +104,8 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 	private _sfuTransportReports: SFUTransportReport[] = [];
 	private _sfuMetaReports: SfuMetaReport[] = [];
 
-	public constructor(public readonly config: SinkConfig) {
-		this._processor = createProcessor();
+	public constructor() {
+		// empty
 	}
 
 	public on<K extends keyof SinkEventsMap>(event: K, listener: (reports: SinkEventsMap[K]) => void): this {
@@ -141,160 +128,105 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 
 	public addCallEventReport(report: CallEventReport) {
 		this._callEventReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addCallMetaReport(report: CallMetaReport) {
 		this._callMetaReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addClientDataChannelReport(report: ClientDataChannelReport) {
 		this._clientDataChannelReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addClientExtensionReport(report: ClientExtensionReport) {
 		this._clientExtensionReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addIceCandidatePairReport(report: IceCandidatePairReport) {
 		this._iceCandidatePairReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addInboundAudioTrackReport(report: InboundAudioTrackReport) {
 		this._inboundAudioTrackReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addInboundVideoTrackReport(report: InboundVideoTrackReport) {
 		this._inboundVideoTrackReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addPeerConnectionTransportReports(report: PeerConnectionTransportReport) {
 		this._peerConnectionTransportReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addObserverEventReport(report: ObserverEventReport) {
 		this._observerEventReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addOutboundAudioTrackReport(report: OutboundAudioTrackReport) {
 		this._outboundAudioTrackReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addOutboundVideoTrackReport(report: OutboundVideoTrackReport) {
 		this._outboundVideoTrackReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuEventReport(report: SfuEventReport) {
 		this._sfuEventReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuExtensionReport(report: SfuExtensionReport) {
 		this._sfuExtensionReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuInboundRtpPadReport(report: SfuInboundRtpPadReport) {
 		this._sfuInboundRtpPadReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuOutboundRtpPadReport(report: SfuOutboundRtpPadReport) {
 		this._sfuOutboundRtpPadReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuSctpStreamReport(report: SfuSctpStreamReport) {
 		this._sfuSctpStreamReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuTransportReport(report: SFUTransportReport) {
 		this._sfuTransportReports.push(report);
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public addSfuMetaReport(report: SfuMetaReport) {
 		this._sfuMetaReports.push(report);
-	}
-
-	public getCallEventReports(): CallEventReport[] {
-		return this._callEventReports;
-	}
-
-	public getClientExtensionReports(): ClientExtensionReport[] {
-		return this._clientExtensionReports;
-	}
-
-	public getSfuEventReports(): SfuEventReport[] {
-		return this._sfuEventReports;
-	}
-
-	public getSfuExtensionReports(): SfuExtensionReport[] {
-		return this._sfuExtensionReports;
-	}
-
-	public addProcess(process: ObserverSinkProcess) {
-		const middleware: Middleware<ObserverSinkContext> = async (context, next) => {
-			await process(context);
-			if (next) await next(context);
-		};
-
-		this._customProcesses.set(process, middleware);
-		this._processor.addMiddleware(middleware);
-	}
-
-	public removeProcess(process: ObserverSinkProcess) {
-		const middleware = this._customProcesses.get(process);
-
-		if (!middleware) {
-			return;
-		}
-		this._customProcesses.delete(process);
-		this._processor.removeMiddleware(middleware);
-	}
-
-	private async _process(context: ObserverSinkContext): Promise<void> {
-		if (this._processor.getSize() < 1) {
-			// no process to execute
-			return;
-		}
-		if (this._processes.has(this._index)) {
-			logger.warn('The sink process has been called while the previous process has not yet completed. This may indicate that the observer is attempting to process more reports than it can handle.');
-		}
-
-		const actualBlockingPoint = this._processes.get(this._index) ?? Promise.resolve();
-		const index = ++this._index;
-		const result = new Promise<void>((resolve, reject) => {
-			actualBlockingPoint.then(() => {
-				this._processor.use(context)
-					.then(() => resolve())
-					.catch((err) => reject(err));
-			});
-		});
-		const nextBlockingPoint = new Promise<void>((resolve) => {
-			result.then(() => {
-				this._processes.delete(index);
-				resolve();
-			}).catch(() => {
-				this._processes.delete(index);
-				resolve();
-			});
-		});
-
-		this._processes.set(index, nextBlockingPoint);
-		
-		return result;
+		this._emit('newreport', ++this._collectedReports);
 	}
 
 	public emit(): number {
 		let result = 0;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const checkAndEmit = (eventName: keyof SinkEventsMap, reports: any[]) => {
-			if (reports.length > 0) {
+			if (0 < reports.length) {
 				this._emit(eventName, { reports });
 				result += reports.length;
 			}
 		};
 		
 		const context = this._createObserverSinkContext();
-
-		this._process(context).catch((err) => {
-			logger.error('Error occurred while processing reports', err);
-		});
 
 		checkAndEmit('call-event', this._callEventReports);
 		this._callEventReports = [];
@@ -350,6 +282,9 @@ export class SinkImpl implements ReportsCollector, ObserverReportsEmitter {
 		checkAndEmit('sfu-meta', this._sfuMetaReports);
 		this._sfuMetaReports = [];
 
+		this._emit('reports', context);
+		this._collectedReports = 0;
+		
 		return result;
 	}
 
