@@ -72,19 +72,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		result._overflowingProcessingThreshold = config.overflowingProcessingThreshold ?? 0;
 
 		if (config.addJoinAndDetachClientEvent) {
-			result.once('close', () => {
-				call.reports.addCallEventReport(createClientJoinedEventReport(
-					call.serviceId,
-					result.mediaUnitId,
-					call.roomId,
-					call.callId,
-					result.clientId,
-					result.joined,
-					result.userId,
-					result.marker,
-				));
-			});
-			call.reports.addCallEventReport(createClientLeftEventReport(
+			call.reports.addCallEventReport(createClientJoinedEventReport(
 				call.serviceId,
 				result.mediaUnitId,
 				call.roomId,
@@ -95,6 +83,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				result.marker,
 			));
 		}
+
+		result.once('close', () => result._addClientLeftReport());
 
 		return result;
 	}
@@ -110,7 +100,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _selectedLocalIceCandidate?: IceLocalCandidate;
 	private _selectedRemoteIceCandidate?: IceLocalCandidate;
 	private _timeZoneOffsetInHours?: number;
-	
+	private _leaveReported = false;
+
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
 	public readonly userMediaErrors: string[] = [];
@@ -389,6 +380,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			for (const { timestamp = Date.now(), ...callEvent } of sample.customCallEvents ?? []) {
+				if (callEvent.name === 'CLIENT_LEFT') this._leaveReported = true;
+				
 				this.reports.addCallEventReport({
 					serviceId: this.serviceId,
 					mediaUnitId: this.mediaUnitId,
@@ -750,5 +743,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this._closed) throw new Error(`Client ${this.clientId} is closed`);
 		
 		return this._storageProvider.clientStorage.set(this.clientId, this._model);
+	}
+
+	private _addClientLeftReport() {
+		if (this._leaveReported) return;
+		this._leaveReported = true;
+
+		this.reports.addCallEventReport(createClientLeftEventReport(
+			this.serviceId,
+			this.mediaUnitId,
+			this.roomId,
+			this.callId,
+			this.clientId,
+			this.joined,
+			this.userId,
+			this.marker,
+		));
 	}
 }

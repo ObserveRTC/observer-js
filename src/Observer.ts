@@ -85,6 +85,8 @@ export class Observer extends EventEmitter {
 			}
 		};
 
+		this._emitReports();
+
 		this.once('close', () => this.reports.off('newreport', onNewReport));
 		this.reports.on('newreport', onNewReport);
 	}
