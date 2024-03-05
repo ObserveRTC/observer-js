@@ -123,11 +123,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public async createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
 		clientId: string, 
 		config: { mediaUnitId?: string, appData: ClientAppData, joined?: number }
-	): Promise<ObservedClient> {
+	): Promise<ObservedClient<ClientAppData>> {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 		let creating = this._creatingClients.get(clientId);
 
-		if (creating) return creating;
+		if (creating) return creating as Promise<ObservedClient<ClientAppData>>;
 		
 		creating = this._createObservedClient<ClientAppData>(clientId, {
 			callId: this.callId,
@@ -140,7 +140,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this._creatingClients.set(clientId, creating);
 		
-		return creating;
+		return creating as Promise<ObservedClient<ClientAppData>>;
 	}
 
 	public async save() {
