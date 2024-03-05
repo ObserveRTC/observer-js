@@ -1,15 +1,15 @@
 import { EventEmitter } from 'events';
-import { StorageProvider } from './storages/StorageProvider';
 import * as Models from './models/Models';
 import { ObservedClient, ObservedClientConfig } from './ObservedClient';
-import { ReportsCollector } from './ReportsCollector';
 import { createSingleExecutor } from './common/SingleExecutor';
+import { ObservedOutboundTrack } from './ObservedOutboundTrack';
+import { Observer } from './Observer';
+import { createClientJoinedEventReport, createClientLeftEventReport } from './common/callEventReports';
 
 export type ObservedCallConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	serviceId: string;
 	roomId: string;
 	callId: string;
-	defaultMediaUnitId: string;
 	started: number,
 	appData: AppData,
 };
@@ -30,8 +30,9 @@ export declare interface ObservedCall {
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public static async create<T extends Record<string, unknown> = Record<string, unknown>>(
 		config: ObservedCallConfig<T>, 
-		storageProvider: StorageProvider,
-		reportsCollector: ReportsCollector,
+		observer: Observer,
+		// storageProvider: StorageProvider,
+		// reportsCollector: ReportsCollector,
 	) {
 		const model = new Models.Call({
 			roomId: config.roomId,
@@ -41,14 +42,14 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			started: BigInt(config.started ?? Date.now()),
 		});
 		const result = new ObservedCall(
-			model, 
-			storageProvider, 
-			reportsCollector, 
+			model,
+			observer,
+			// storageProvider, 
+			// reportsCollector, 
 			config.appData,
-			config.defaultMediaUnitId,
 		);
 
-		const alreadyInserted = await storageProvider.callStorage.insert(config.callId, model);
+		const alreadyInserted = await observer.storage.callStorage.insert(config.callId, model);
 
 		if (alreadyInserted) throw new Error(`Call with id ${config.callId} already exists`);
 
@@ -59,15 +60,15 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	private readonly _creatingClients = new Map<string, Promise<ObservedClient>>();
 	private readonly _clients = new Map<string, ObservedClient>();
 	
+	public readonly sfuStreamIdToOutboundAudioTrack = new Map<string | number, ObservedOutboundTrack<'audio'>>();
+	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundTrack<'video'>>();
 	private _closed = false;
 	private _ended?: number;
 
 	private constructor(
 		private readonly _model: Models.Call,
-		private readonly _storageProvider: StorageProvider,
-		public readonly reports: ReportsCollector,
+		public readonly observer: Observer,
 		public readonly appData: AppData,
-		private readonly _defaultMediaUnitId: string,
 	) {
 		super();
 	}
@@ -75,6 +76,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public get serviceId(): string {
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		return this._model.serviceId!;
+	}
+
+	public get reports() {
+		return this.observer.reports;
 	}
 
 	public get roomId() {
@@ -110,14 +115,14 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		Array.from(this._clients.values()).forEach((client) => client.close());
 
-		this._execute(() => this._storageProvider.callStorage.remove(this.callId))
+		this._execute(() => this.observer.storage.callStorage.remove(this.callId))
 			.catch(() => void 0)
 			.finally(() => this.emit('close'));
 	}
 
 	public async createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
 		clientId: string, 
-		config: { mediaUnitId?: string, appData: ClientAppData }
+		config: { mediaUnitId?: string, appData: ClientAppData, joined?: number }
 	): Promise<ObservedClient> {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 		let creating = this._creatingClients.get(clientId);
@@ -129,7 +134,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			appData: config.appData,
 			clientId,
 			overflowingProcessingThreshold: 2,
-			mediaUnitId: config.mediaUnitId ?? this._defaultMediaUnitId,
+			mediaUnitId: config.mediaUnitId ?? this.observer.config.defaultMediaUnitId,
+			joined: config.joined,
 		}).finally(() => this._creatingClients.delete(clientId));
 
 		this._creatingClients.set(clientId, creating);
@@ -142,12 +148,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		
 		return this._execute(async () => {
 			if (this._closed) throw new Error(`Call ${this.callId} is closed`);
-			await this._storageProvider.callStorage.set(this.callId, this._model);
+			await this.observer.storage.callStorage.set(this.callId, this._model);
 		});		
 	}
 
 	private async _createObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(clientId: string, config: ObservedClientConfig<ClientAppData>): Promise<ObservedClient> {
-		const client = await ObservedClient.create<ClientAppData>(config, this, this._storageProvider);
+		const client = await ObservedClient.create<ClientAppData>(config, this, this.observer.storage);
 		const onUpdate = () => this.emit('update');
 
 		await this.save();
@@ -158,11 +164,37 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this._clients.delete(clientId);
 			this._model.clientIds = this._model.clientIds.filter((id) => id !== clientId);
 			this.save().catch(() => void 0);
+
+			if (this.observer.config.addJoinAndDetachClientEvent) {
+				this.reports.addCallEventReport(createClientLeftEventReport(
+					this.serviceId,
+					client.mediaUnitId,
+					this.roomId,
+					this.callId,
+					client.clientId,
+					client.joined,
+					client.userId,
+					client.marker,
+				));
+			}
 		});
 		
 		client.on('update', onUpdate);
 		this._clients.set(clientId, client);
 		this._model.clientIds.push(clientId);
+
+		if (this.observer.config.addJoinAndDetachClientEvent) {
+			this.reports.addCallEventReport(createClientJoinedEventReport(
+				this.serviceId,
+				client.mediaUnitId,
+				this.roomId,
+				this.callId,
+				client.clientId,
+				client.joined,
+				client.userId,
+				client.marker,
+			));
+		}
 		
 		return client;
 	}

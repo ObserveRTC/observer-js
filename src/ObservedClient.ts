@@ -9,8 +9,8 @@ import { createLogger } from './common/logger';
 import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
 // eslint-disable-next-line camelcase
 import { Samples_ClientSample_Browser, Samples_ClientSample_Engine, Samples_ClientSample_OperationSystem, Samples_ClientSample_Platform } from './models/samples_pb';
-import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { IceCandidatePairReport } from '@observertc/report-schemas-js';
+import { isValidUuid } from './common/utils';
 
 const logger = createLogger('ObservedClient');
 
@@ -20,6 +20,7 @@ export type ObservedClientConfig<AppData extends Record<string, unknown> = Recor
 	mediaUnitId: string;
 	appData: AppData;
 	overflowingProcessingThreshold?: number;
+	joined?: number,
 };
 
 export type ObservedClientEvents = {
@@ -53,6 +54,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			clientId,
 			mediaUnitId,
 			peerConnectionIds: [],
+			joined: BigInt(config.joined ?? Date.now()),
 		});
 
 		const result = new ObservedClient<T>(model, call, storageProvider, config.appData);
@@ -71,6 +73,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 	private _overflowingProcessingThreshold = 0;
 	private _closed = false;
+	private _updated = Date.now();
 	private _acceptedSample = 0;
 	private _processingSample = 0;
 	private _iceLocalCandidate?: IceLocalCandidate;
@@ -87,6 +90,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		public readonly appData: AppData
 	) {
 		super();
+	}
+
+	public get joined(): number {
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		return Number(this._model.joined!);
 	}
 
 	public get clientId(): string {
@@ -154,8 +162,16 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this._acceptedSample;
 	}
 
+	public get updated() {
+		return this._updated;
+	}
+
 	public get closed() {
 		return this._closed;
+	}
+
+	public get peerConnections(): ReadonlyMap<string, ObservedPeerConnection> {
+		return this._peerConnections;
 	}
 	
 	public close() {
@@ -171,7 +187,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public async accept(sample: ClientSample): Promise<void> {
 		if (this._closed) throw new Error(`Client ${this.clientId} is closed`);
-		if (sample.clientId !== this.clientId) {
+		if (sample.clientId && sample.clientId !== 'NULL' && sample.clientId !== this.clientId) {
 			throw new Error(`Sample client id (${sample.clientId}) does not match the client id of the observed client (${this.clientId})`);
 		}
 		++this._acceptedSample;
@@ -182,11 +198,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 
 		return this._execute(async () => {
+			let executeSave = false;
+
 			if (this.userId !== sample.userId) {
 				this._model.userId = sample.userId;
+				executeSave = true;
 			}
 			if (this._model.marker !== sample.marker) {
 				this._model.marker = sample.marker;
+				executeSave = true;
 			}
 
 			if (sample.os && (
@@ -210,6 +230,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 	
 				this.reports.addCallMetaReport(callMetaReport);
+				executeSave = true;
 			}
 
 			if (sample.engine && (
@@ -232,6 +253,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 	
 				this.reports.addCallMetaReport(callMetaReport);
+				executeSave = true;
 			}
 
 			if (sample.platform && (
@@ -255,6 +277,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 	
 				this.reports.addCallMetaReport(callMetaReport);
+				executeSave = true;
 			}
 
 			if (sample.browser && (
@@ -277,6 +300,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}, this.userId);
 	
 				this.reports.addCallMetaReport(callMetaReport);
+				executeSave = true;
 			}
 
 			for (const mediaConstraint of sample.mediaConstraints ?? []) {
@@ -493,13 +517,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			for (const transport of sample.pcTransports ?? []) {
-				const peerConnection = this._peerConnections.get(transport.transportId) ?? await this._createPeerConnection(transport.peerConnectionId);
+				try {
+					const peerConnection = this._peerConnections.get(transport.transportId) ?? await this._createPeerConnection(transport.peerConnectionId);
 
-				peerConnection.update(transport, sample.timestamp); 
+					peerConnection.update(transport, sample.timestamp); 
+				} catch (err) {
+					logger.error(`Error creating peer connection: ${(err as Error)?.message}`);
+				}
+				
 			}
-
-			const remoteInboundAudioTracks = new Map<string | number, ObservedInboundTrack<'audio'>>();
-			const remoteInboundVideoTracks = new Map<string | number, ObservedInboundTrack<'video'>>();
 
 			for (const track of sample.inboundAudioTracks ?? []) {
 				if (!track.peerConnectionId || !track.trackId) {
@@ -508,20 +534,27 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					continue;
 				}
 
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
+				try {
+					const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
 
-				if (!peerConnection) continue;
-
-				const inboundAudioTrack = peerConnection.inboundAudioTracks.get(track.trackId) ?? await peerConnection.createInboundAudioTrack({
-					trackId: track.trackId,
-				});
-
-				inboundAudioTrack.update(track, sample.timestamp);
-
-				remoteInboundAudioTracks.set(
-					track.sfuStreamId ?? track.ssrc,
-					inboundAudioTrack
-				);
+					if (!peerConnection) continue;
+	
+					const inboundAudioTrack = peerConnection.inboundAudioTracks.get(track.trackId) ?? await peerConnection.createInboundAudioTrack({
+						trackId: track.trackId,
+						sfuStreamId: track.sfuStreamId,
+						sfuSinkId: track.sfuSinkId,
+					});
+	
+					await inboundAudioTrack.update(track, sample.timestamp);
+	
+					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundAudioTrack.get(track.sfuStreamId ?? '');
+	
+					if (remoteOutboundTrack && !remoteOutboundTrack.remoteInboundTracks.has(inboundAudioTrack.trackId)) {
+						remoteOutboundTrack.connectInboundTrack(inboundAudioTrack);
+					}
+				} catch (err) {
+					logger.error(`Error creating inbound audio track: ${(err as Error)?.message}`);
+				}
 			}
 
 			for (const track of sample.inboundVideoTracks ?? []) {
@@ -530,21 +563,34 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 					continue;
 				}
+				if (isValidUuid(track.trackId) === false) {
+					// mediasoup-probator trackId is not a valid UUID, no need to warn about it
+					if (track.trackId === 'probator') continue;
+					logger.warn(`InboundVideoTrack with invalid trackId: ${track.trackId}`);
+					continue;
+				}
 
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
+				try {
+					const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
 
-				if (!peerConnection) continue;
-
-				const inboundVideoTrack = peerConnection.inboundVideoTracks.get(track.trackId) ?? await peerConnection.createInboundVideoTrack({
-					trackId: track.trackId,
-				});
-
-				inboundVideoTrack.update(track, sample.timestamp);
-
-				remoteInboundVideoTracks.set(
-					track.sfuStreamId ?? track.ssrc,
-					inboundVideoTrack
-				);
+					if (!peerConnection) continue;
+	
+					const inboundVideoTrack = peerConnection.inboundVideoTracks.get(track.trackId) ?? await peerConnection.createInboundVideoTrack({
+						trackId: track.trackId,
+						sfuStreamId: track.sfuStreamId,
+						sfuSinkId: track.sfuSinkId,
+					});
+	
+					await inboundVideoTrack.update(track, sample.timestamp);
+					
+					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(track.sfuStreamId ?? '');
+	
+					if (remoteOutboundTrack && !remoteOutboundTrack.remoteInboundTracks.has(inboundVideoTrack.trackId)) {
+						remoteOutboundTrack.connectInboundTrack(inboundVideoTrack);
+					}
+				} catch (err) {
+					logger.error(`Error creating inbound video track: ${(err as Error)?.message}`);
+				}
 			}
 
 			for (const track of sample.outboundAudioTracks ?? []) {
@@ -554,21 +600,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					continue;
 				}
 
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
+				try {
+					const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
 
-				if (!peerConnection) continue;
+					if (!peerConnection) continue;
+	
+					const outboundAudioTrack = peerConnection.outboundAudioTracks.get(track.trackId) ?? await peerConnection.createOutboundAudioTrack({
+						trackId: track.trackId,
+						sfuStreamId: track.sfuStreamId,
+					});
 
-				const outboundAudioTrack = peerConnection.outboundAudioTracks.get(track.trackId) ?? await peerConnection.createOutboundAudioTrack({
-					trackId: track.trackId,
-				});
-
-				outboundAudioTrack.update(track, sample.timestamp);
-
-				const remoteInboundTrack = remoteInboundAudioTracks.get(track.sfuStreamId ?? track.ssrc);
-
-				if (remoteInboundTrack && !outboundAudioTrack.remoteInboundTracks.has(remoteInboundTrack.trackId)) {
-					outboundAudioTrack.connectInboundTrack(remoteInboundTrack);
+					await outboundAudioTrack.update(track, sample.timestamp);
+				} catch (err) {
+					logger.error(`Error creating outbound audio track: ${(err as Error)?.message}`);
 				}
+				
 			}
 
 			for (const track of sample.outboundVideoTracks ?? []) {
@@ -578,28 +624,31 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					continue;
 				}
 
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
+				try {
+					const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? await this._createPeerConnection(track.peerConnectionId);
 
-				if (!peerConnection) continue;
+					if (!peerConnection) continue;
+	
+					const outboundVideoTrack = peerConnection.outboundVideoTracks.get(track.trackId) ?? await peerConnection.createOutboundVideoTrack({
+						trackId: track.trackId,
+						sfuStreamId: track.sfuStreamId,
+					});
+	
+					await outboundVideoTrack.update(track, sample.timestamp);
 
-				const outboundVideoTrack = peerConnection.outboundVideoTracks.get(track.trackId) ?? await peerConnection.createOutboundVideoTrack({
-					trackId: track.trackId,
-				});
-
-				outboundVideoTrack.update(track, sample.timestamp);
-
-				const remoteInboundTrack = remoteInboundVideoTracks.get(track.sfuStreamId ?? track.ssrc);
-
-				if (remoteInboundTrack && !outboundVideoTrack.remoteInboundTracks.has(remoteInboundTrack.trackId)) {
-					outboundVideoTrack.connectInboundTrack(remoteInboundTrack);
+				} catch (err) {
+					logger.error(`Error creating outbound video track: ${(err as Error)?.message}`);
 				}
 			}
-
-			this.emit('update');
+			
 			if (changeIceCandidatePair) {
 				this.emit('candidate-pair-change');
 			}
+			
+			if (executeSave) await this._save();
 
+			this._updated = sample.timestamp;
+			this.emit('update');
 		}).finally(() => {
 			--this._processingSample;
 		});

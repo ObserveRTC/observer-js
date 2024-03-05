@@ -122,7 +122,7 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public update(sample: PeerConnectionTransport, timestamp: number) {
 		if (this._closed) return;
-		if (sample.transportId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
+		if (sample.peerConnectionId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
 
 		this._sample = sample;
 
@@ -199,10 +199,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		result.on('close', () => {
 			this._outboundAudioTracks.delete(result.trackId);
 			this._model.outboundTrackIds = this._model.outboundTrackIds.filter((id) => id !== result.trackId);
+			
+			result.sfuStreamId && this.client.call.sfuStreamIdToOutboundAudioTrack.delete(result.sfuStreamId);
 			!this._closed &&this._save().catch(() => void 0);
 		});
 		this._outboundAudioTracks.set(result.trackId, result);
 		this._model.outboundTrackIds = [ ...(new Set<string>([ ...this._model.outboundTrackIds, result.trackId ])) ];
+		
+		result.sfuStreamId && this.client.call.sfuStreamIdToOutboundAudioTrack.set(result.sfuStreamId, result);
 		await this._save();
 
 		this.emit('newoutboundaudiotrack', result);
@@ -220,10 +224,12 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		result.on('close', () => {
 			this._outboundVideoTracks.delete(result.trackId);
+			result.sfuStreamId && this.client.call.sfuStreamIdToOutboundVideoTrack.set(result.sfuStreamId, result);
 			this._model.outboundTrackIds = this._model.outboundTrackIds.filter((id) => id !== result.trackId);
 			!this._closed && this._save().catch(() => void 0);
 		});
 		this._outboundVideoTracks.set(result.trackId, result);
+		result.sfuStreamId && this.client.call.sfuStreamIdToOutboundVideoTrack.set(result.sfuStreamId, result);
 		this._model.outboundTrackIds = [ ...(new Set<string>([ ...this._model.outboundTrackIds, result.trackId ])) ];
 		await this._save();
 

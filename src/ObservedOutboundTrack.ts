@@ -11,6 +11,7 @@ import { createSingleExecutor } from './common/SingleExecutor';
 export type ObservedOutboundTrackConfig<K extends MediaKind> = {
 	trackId: string;
 	kind: K;
+	sfuStreamId?: string;
 }
 
 export type ObservedOutboundTrackEvents = {
@@ -18,11 +19,17 @@ export type ObservedOutboundTrackEvents = {
 	close: [],
 };
 
-export type ObservedOutboundTrackStats<K extends MediaKind> = K extends 'audio' ? OutboundAudioTrack : OutboundVideoTrack;
+export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = K extends 'audio' ? OutboundAudioTrack : OutboundVideoTrack;
 
-export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = {
-	[Property in keyof ObservedOutboundTrackStats<K>]: ObservedOutboundTrackStats<K>[Property];
-}
+export type ObservedOutboundTrackStats<K extends MediaKind> = ObservedOutboundTrackStatsUpdate<K> & {
+	ssrc: number;
+	bitrate: number;
+	rttInMs?: number;
+};
+
+// export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = {
+// 	[Property in keyof ObservedOutboundTrackStats<K>]: ObservedOutboundTrackStats<K>[Property];
+// }
 
 export declare interface ObservedOutboundTrack<Kind extends MediaKind> {
 	on<U extends keyof ObservedOutboundTrackEvents>(event: U, listener: (...args: ObservedOutboundTrackEvents[U]) => void): this;
@@ -47,6 +54,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			peerConnectionId: peerConnection.peerConnectionId,
 			trackId: config.trackId,
 			kind: config.kind,
+			sfuStreamId: config.sfuStreamId,
 		});
 
 		const alreadyInserted = await storageProvider.outboundTrackStorage.insert(config.trackId, model);
@@ -55,6 +63,9 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 		return new ObservedOutboundTrack<K>(model, peerConnection, storageProvider);
 	}
+
+	public bitrate?: number;
+	public rttInMs?: number;
 
 	private readonly _stats = new Map<number, ObservedOutboundTrackStats<Kind>>();
 	private readonly _execute = createSingleExecutor();
@@ -79,6 +90,10 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 	public get trackId() {
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		return this._model.trackId!;
+	}
+
+	public get sfuStreamId() {
+		return this._model.sfuStreamId;
 	}
 
 	public get closed() {
@@ -107,12 +122,13 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			.finally(() => this.emit('close'));
 	}
 
-	public get stats(): (Kind extends 'audio' ? OutboundAudioTrack : OutboundVideoTrack) | undefined {
-		return undefined;
+	public get stats(): ReadonlyMap<number, ObservedOutboundTrackStats<Kind>> {
+		return this._stats;
 	}
 
-	public update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number) {
+	public async update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number): Promise<void> {
 		if (this._closed) return;
+		let executeSave = false;
 
 		const report: OutboundAudioTrackReport | OutboundVideoTrackReport = {
 			serviceId: this.peerConnection.client.serviceId,
@@ -130,7 +146,41 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		if (this.kind === 'audio') this.reports.addOutboundAudioTrackReport(report);
 		else if (this.kind === 'video') this.reports.addOutboundVideoTrackReport(report);
 
-		this._stats.set(sample.ssrc, sample);
+		const elapsedTimeInMs = Math.max(1, timestamp - this._updated);
+		const lastStat = this._stats.get(sample.ssrc);
+		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
+		const bitrate = ((sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0)) * 8 / (elapsedTimeInMs / 1000);
+		// const lostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
+		// const sentPackets = (sample.packetsSent ?? 0) - (lastStat?.packetsSent ?? 0);
+		const stats: ObservedOutboundTrackStats<Kind> = {
+			...sample,
+			rttInMs,
+			bitrate,
+			ssrc: sample.ssrc,
+		};
+
+		this._stats.set(sample.ssrc, stats);
+
+		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
+		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
+
+		// setting up sfu connection as it is not always available at the first sample
+		if (sample.sfuStreamId && !this._model.sfuStreamId) {
+			this._model.sfuStreamId = sample.sfuStreamId;
+		
+			this.once('close', () => {
+				if (!this._model.sfuStreamId) return;
+				if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.delete(this._model.sfuStreamId);
+				else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.delete(this._model.sfuStreamId);
+			});
+
+			if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'audio'>);
+			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
+
+			executeSave = true;
+		}
+
+		if (executeSave) await this._save();
 
 		this._updated = timestamp;
 		this.emit('update');
@@ -145,5 +195,11 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		});
 
 		this._remoteInboundTracks.set(track.trackId, track);
+	}
+
+	private async _save() {
+		if (this._closed) throw new Error(`OutboundTrack ${this.trackId} is closed`);
+		
+		return this._storageProvider.outboundTrackStorage.set(this.trackId, this._model);
 	}
 }
