@@ -4,7 +4,6 @@ import { ObservedClient, ObservedClientConfig } from './ObservedClient';
 import { createSingleExecutor } from './common/SingleExecutor';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { Observer } from './Observer';
-import { createClientJoinedEventReport, createClientLeftEventReport } from './common/callEventReports';
 
 export type ObservedCallConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	serviceId: string;
@@ -165,36 +164,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this._model.clientIds = this._model.clientIds.filter((id) => id !== clientId);
 			this.save().catch(() => void 0);
 
-			if (this.observer.config.addJoinAndDetachClientEvent) {
-				this.reports.addCallEventReport(createClientLeftEventReport(
-					this.serviceId,
-					client.mediaUnitId,
-					this.roomId,
-					this.callId,
-					client.clientId,
-					client.joined,
-					client.userId,
-					client.marker,
-				));
-			}
 		});
 		
 		client.on('update', onUpdate);
 		this._clients.set(clientId, client);
 		this._model.clientIds.push(clientId);
-
-		if (this.observer.config.addJoinAndDetachClientEvent) {
-			this.reports.addCallEventReport(createClientJoinedEventReport(
-				this.serviceId,
-				client.mediaUnitId,
-				this.roomId,
-				this.callId,
-				client.clientId,
-				client.joined,
-				client.userId,
-				client.marker,
-			));
-		}
 		
 		return client;
 	}
