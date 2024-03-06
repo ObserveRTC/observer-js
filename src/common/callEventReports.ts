@@ -1,16 +1,6 @@
 import { CallEventReport } from '@observertc/report-schemas-js';
+import { CallEventType } from './CallEventType';
 
-// eslint-disable-next-line no-shadow
-export enum CallEventType {
-	CALL_STARTED = 'CALL_STARTED',
-	CALL_ENDED = 'CALL_ENDED',
-	CLIENT_JOINED = 'CLIENT_JOINED',
-	CLIENT_LEFT = 'CLIENT_LEFT',
-	PEER_CONNECTION_OPENED = 'PEER_CONNECTION_OPENED',
-	PEER_CONNECTION_CLOSED = 'PEER_CONNECTION_CLOSED',
-	MEDIA_TRACK_ADDED = 'MEDIA_TRACK_ADDED',
-	MEDIA_TRACK_REMOVED = 'MEDIA_TRACK_REMOVED',
-}
 export function createCallStartedEventReport(
 	serviceId: string,
 	roomId: string,

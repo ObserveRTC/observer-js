@@ -5,3 +5,4 @@ lib/
 keys/
 draft.md
 yarn.lock
+.vscode

@@ -21,11 +21,6 @@ message Call {
 //  repeated ClientLog clientLogs = 6;
 }
 
-message ClientCoordinate {
-  required float latitude = 1;
-  required float longitude = 2;
-}
-
 message Client {
   required string serviceId = 1;
   required string roomId = 2;
@@ -51,14 +46,6 @@ message Client {
 
   optional org.observertc.schemas.protobuf.Samples.ClientSample.Engine engine = 15;
 
-  optional ClientCoordinate coordinates = 16;
-//  message Stats {
-//    optional double maxRttInS = 1;
-//    optional double minRttInS = 2;
-//    optional string location = 3;
-//  }
-//
-//  optional Stats stats = 13;
 }
 
 // message PeerConnectionStats {
@@ -93,13 +80,13 @@ message PeerConnection {
   repeated string inboundTrackIds = 11;
   repeated string outboundTrackIds = 12;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceLocalCandidate icelocalCandidates = 13;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceLocalCandidate icelocalCandidates = 13;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceRemoteCandidate iceRemoteCandidates = 14;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceRemoteCandidate iceRemoteCandidates = 14;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceCandidatePair iceCandidatePairs = 15;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.IceCandidatePair iceCandidatePairs = 15;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.PeerConnectionTransport transports = 16;
 
   optional uint64 touched = 17;
 
@@ -109,7 +96,7 @@ message PeerConnection {
 message InboundTrackVideoStats {
   required int32 ssrc = 1;
   optional float fps = 2;
-  optional org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack sample = 4;
+  // optional org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack sample = 4;
 }
 
 message InboundTrackStats {
@@ -140,8 +127,8 @@ message InboundTrack {
 
   repeated int64 ssrc = 14;
 
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 15;
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 16;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundAudioTrack audioStats = 15;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.InboundVideoTrack videoStats = 16;
 
   optional uint64 touched = 17;
 }
@@ -164,8 +151,8 @@ message OutboundTrack {
 
   repeated int64 ssrc = 13;
   
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundAudioTrack audioStats = 14;
-  repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundVideoTrack videoStats = 15;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundAudioTrack audioStats = 14;
+  // repeated org.observertc.schemas.protobuf.Samples.ClientSample.OutboundVideoTrack videoStats = 15;
 
   optional uint64 touched = 16;
 }

@@ -1,4 +1,4 @@
-import { ClientSample, IceLocalCandidate } from '@observertc/sample-schemas-js';
+import { ClientSample } from '@observertc/sample-schemas-js';
 import { ObservedCall } from './ObservedCall';
 import * as Models from './models/Models';
 import { StorageProvider } from './storages/StorageProvider';
@@ -9,9 +9,9 @@ import { createLogger } from './common/logger';
 import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
 // eslint-disable-next-line camelcase
 import { Samples_ClientSample_Browser, Samples_ClientSample_Engine, Samples_ClientSample_OperationSystem, Samples_ClientSample_Platform } from './models/samples_pb';
-import { IceCandidatePairReport } from '@observertc/report-schemas-js';
 import { isValidUuid } from './common/utils';
 import { createClientJoinedEventReport, createClientLeftEventReport } from './common/callEventReports';
+import { CallEventType } from './common/CallEventType';
 
 const logger = createLogger('ObservedClient');
 
@@ -33,7 +33,6 @@ export type ObservedClientEvents = {
 	update: [],
 	close: [],
 	'processing-sample-overflow': [],
-	'candidate-pair-change': [],
 	newpeerconnection: [ObservedPeerConnection],
 };
 
@@ -97,10 +96,38 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _updated = Date.now();
 	private _acceptedSample = 0;
 	private _processingSample = 0;
-	private _selectedLocalIceCandidate?: IceLocalCandidate;
-	private _selectedRemoteIceCandidate?: IceLocalCandidate;
 	private _timeZoneOffsetInHours?: number;
 	private _leaveReported = false;
+
+	public totalInboundPacketsLost = 0;
+	public totalInboundPacketsReceived = 0;
+	public totalOutboundPacketsLost = 0;
+	public totalOutboundPacketsReceived = 0;
+	public totalOutboundPacketsSent = 0;
+	public totalDataChannelBytesSent = 0;
+	public totalDataChannelBytesReceived = 0;
+	public totalSentAudioBytes = 0;
+	public totalSentVideoBytes = 0;
+	public totalReceivedAudioBytes = 0;
+	public totalReceivedVideoBytes = 0;
+
+	public deltaInboundPacketsLost?: number;
+	public deltaInboundPacketsReceived?: number;
+	public deltaOutboundPacketsLost?: number;
+	public deltaOutboundPacketsReceived?: number;
+	public deltaOutboundPacketsSent?: number;
+	public deltaDataChannelBytesSent?: number;
+	public deltaDataChannelBytesReceived?: number;
+	public deltaReceivedAudioBytes?: number;
+	public deltaReceivedVideoBytes?: number;
+	public deltaSentAudioBytes?: number;
+	public deltaSentVideoBytes?: number;
+
+	public avgRttInS?: number;
+	public sendingAudioBitrate?: number;
+	public sendingVideoBitrate?: number;
+	public receivingAudioBitrate?: number;
+	public receivingVideoBitrate?: number;
 
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
@@ -151,14 +178,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get userId() {
 		return this._model.userId;
-	}
-
-	public get selectedLocalIceCandidate() {
-		return this._selectedLocalIceCandidate;
-	}
-
-	public get selectedRemoteIceCandidate() {
-		return this._selectedRemoteIceCandidate;
 	}
 
 	public get timeZoneOffsetInHours() {
@@ -380,8 +399,23 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			for (const { timestamp = Date.now(), ...callEvent } of sample.customCallEvents ?? []) {
-				if (callEvent.name === 'CLIENT_LEFT') this._leaveReported = true;
+				const peerConnection = this._peerConnections.get(callEvent.peerConnectionId ?? '');
 				
+				switch (callEvent.name) {
+					case CallEventType.CLIENT_LEFT:
+						this._leaveReported = true;
+						break;
+					case CallEventType.ICE_CONNECTION_STATE_CHANGED: 
+						peerConnection && callEvent.value && peerConnection.emit('iceconnectionstatechange', callEvent.value);
+						break;
+					case CallEventType.ICE_GATHERING_STATE_CHANGED:
+						peerConnection && callEvent.value && peerConnection.emit('icegatheringstatechange', callEvent.value);
+						break;
+					case CallEventType.PEER_CONNECTION_STATE_CHANGED:
+						peerConnection && callEvent.value && peerConnection.emit('connectionstatechange', callEvent.value);
+						break;
+				}
+
 				this.reports.addCallEventReport({
 					serviceId: this.serviceId,
 					mediaUnitId: this.mediaUnitId,
@@ -476,76 +510,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					this.clientId, {
 						type: CallMetaType.MEDIA_SOURCE,
 						payload: mediaSource,
-					}, this.userId);
-
-				this.reports.addCallMetaReport(callMetaReport);
-			}
-			let selectedLocalCandidateId: string | undefined;
-			let selectedRemoteCandidateId: string | undefined;
-
-			for (const candidatePair of sample.iceCandidatePairs ?? []) {
-				if (candidatePair.nominated) {
-					if (!selectedLocalCandidateId) selectedLocalCandidateId = candidatePair.localCandidateId;
-					if (!selectedRemoteCandidateId) selectedRemoteCandidateId = candidatePair.remoteCandidateId;
-				}
-
-				const report: IceCandidatePairReport = {
-					serviceId: this.serviceId,
-					mediaUnitId: this.mediaUnitId,
-					roomId: this.roomId,
-					callId: this.callId,
-					clientId: this.clientId,
-					userId: this.userId,
-					timestamp: sample.timestamp,
-					...candidatePair,
-					sampleSeq: -1, // deprecated
-				};
-		
-				this.reports.addIceCandidatePairReport(report);
-				
-			}
-	
-			let changeIceCandidatePair = false;
-
-			for (const iceLocalCandidate of sample.iceLocalCandidates ?? []) {
-				if (
-					iceLocalCandidate.id && selectedLocalCandidateId &&
-					iceLocalCandidate.id === selectedLocalCandidateId && 
-					this._selectedLocalIceCandidate?.id !== iceLocalCandidate.id
-				) {
-					this._selectedLocalIceCandidate = iceLocalCandidate;
-					changeIceCandidatePair = true;
-				}
-				const callMetaReport = createCallMetaReport(
-					this.serviceId, 
-					this.mediaUnitId, 
-					this.roomId, 
-					this.callId, 
-					this.clientId, {
-						type: CallMetaType.ICE_LOCAL_CANDIDATE,
-						payload: iceLocalCandidate,
-					}, this.userId);
-
-				this.reports.addCallMetaReport(callMetaReport);
-			}
-	
-			for (const iceRemoteCandidate of sample.iceRemoteCandidates ?? []) {
-				if (
-					iceRemoteCandidate.id && selectedRemoteCandidateId &&
-					iceRemoteCandidate.id === selectedRemoteCandidateId && 
-					this._selectedRemoteIceCandidate?.id !== iceRemoteCandidate.id
-				) {
-					this._selectedRemoteIceCandidate = iceRemoteCandidate;
-					changeIceCandidatePair = true;
-				}
-				const callMetaReport = createCallMetaReport(
-					this.serviceId, 
-					this.mediaUnitId, 
-					this.roomId, 
-					this.callId, 
-					this.clientId, {
-						type: CallMetaType.ICE_REMOTE_CANDIDATE,
-						payload: iceRemoteCandidate,
 					}, this.userId);
 
 				this.reports.addCallMetaReport(callMetaReport);
@@ -676,6 +640,48 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 			}
 
+			for (const iceLocalCandidate of sample.iceLocalCandidates ?? []) {
+				if (!iceLocalCandidate.peerConnectionId) {
+					logger.warn(`Local ice candidate without peerConnectionId: ${JSON.stringify(iceLocalCandidate)}`);
+					continue;
+				}
+				const peerConnection = this._peerConnections.get(iceLocalCandidate.peerConnectionId);
+
+				if (!peerConnection) {
+					logger.debug(`Peer connection ${iceLocalCandidate.peerConnectionId} not found for ice local candidate ${iceLocalCandidate.id}`);
+					continue;
+				}
+
+				peerConnection.ICE.addLocalCandidate(iceLocalCandidate);
+			}
+	
+			for (const iceRemoteCandidate of sample.iceRemoteCandidates ?? []) {
+				if (!iceRemoteCandidate.peerConnectionId) {
+					logger.warn(`Remote ice candidate without peerConnectionId: ${JSON.stringify(iceRemoteCandidate)}`);
+					continue;
+				}
+				const peerConnection = this._peerConnections.get(iceRemoteCandidate.peerConnectionId);
+
+				if (!peerConnection) {
+					logger.debug(`Peer connection ${iceRemoteCandidate.peerConnectionId} not found for ice remote candidate ${iceRemoteCandidate.id}`);
+					continue;
+				}
+
+				peerConnection.ICE.addRemoteCandidate(iceRemoteCandidate);
+			}
+
+			for (const candidatePair of sample.iceCandidatePairs ?? []) {
+				const peerConnection = this._peerConnections.get(candidatePair.peerConnectionId);
+
+				if (!peerConnection) {
+					logger.debug(`Peer connection ${candidatePair.peerConnectionId} not found for ice candidate pair ${candidatePair.localCandidateId}, ${candidatePair.remoteCandidateId}`);
+
+					continue;
+				}
+
+				peerConnection.ICE.update(candidatePair, sample.timestamp);
+			}
+
 			// close entries that are idle for too long
 			if (this.call.observer.config.maxEntryIdleTimeInMs && this._updated < sample.timestamp) {
 
@@ -705,10 +711,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 						}
 					}
 				}
-			}
-			
-			if (changeIceCandidatePair) {
-				this.emit('candidate-pair-change');
 			}
 			
 			if (executeSave) await this._save();

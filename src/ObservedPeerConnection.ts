@@ -1,12 +1,13 @@
 import { EventEmitter } from 'events';
 import * as Models from './models/Models';
 import { StorageProvider } from './storages/StorageProvider';
-import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
+import { IceLocalCandidate, IceRemoteCandidate, PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
 import { ObservedInboundTrack, ObservedInboundTrackConfig } from './ObservedInboundTrack';
 import { ObservedOutboundTrack, ObservedOutboundTrackConfig } from './ObservedOutboundTrack';
 import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 import { createSingleExecutor } from './common/SingleExecutor';
+import { ObservedICE } from './ObservedICE';
 
 export type ObservedPeerConnectionEvents = {
 	update: [],
@@ -15,6 +16,10 @@ export type ObservedPeerConnectionEvents = {
 	newinboudvideotrack: [ObservedInboundTrack<'video'>],
 	newoutboundaudiotrack: [ObservedOutboundTrack<'audio'>],
 	newoutboundvideotrack: [ObservedOutboundTrack<'video'>],
+
+	iceconnectionstatechange: [string],
+	icegatheringstatechange: [string],
+	connectionstatechange: [string],
 };
 
 export type ObservedPeerConnectionConfig = {
@@ -51,10 +56,43 @@ export class ObservedPeerConnection extends EventEmitter {
 		return new ObservedPeerConnection(model, client, storageProvider);
 	}
 
+	public totalInboundPacketsLost = 0;
+	public totalInboundPacketsReceived = 0;
+	public totalOutboundPacketsLost = 0;
+	public totalOutboundPacketsReceived = 0;
+	public totalOutboundPacketsSent = 0;
+	public totalDataChannelBytesSent = 0;
+	public totalDataChannelBytesReceived = 0;
+	public totalSentAudioBytes = 0;
+	public totalSentVideoBytes = 0;
+	public totalReceivedAudioBytes = 0;
+	public totalReceivedVideoBytes = 0;
+
+	public deltaInboundPacketsLost = 0;
+	public deltaInboundPacketsReceived = 0;
+	public deltaOutboundPacketsLost = 0;
+	public deltaOutboundPacketsReceived	= 0;
+	public deltaOutboundPacketsSent = 0;
+	public deltaDataChannelBytesSent = 0;
+	public deltaDataChannelBytesReceived = 0;
+	public deltaReceivedAudioBytes = 0;
+	public deltaReceivedVideoBytes = 0;
+	public deltaSentAudioBytes = 0;
+	public deltaSentVideoBytes = 0;
+	public sendingAudioBitrate = 0;
+	public sendingVideoBitrate = 0;
+	public receivingAudioBitrate = 0;
+	public receivingVideoBitrate = 0;
+    
+	public avgRttInS?: number;
+
 	private _closed = false;
 	private _updated = Date.now();
 	private _sample?: ObservedPeerConnectionStats;
+	private _selectedLocalIceCandidate?: IceLocalCandidate;
+	private _selectedRemoteIceCandidate?: IceRemoteCandidate;
 
+	public readonly ICE = ObservedICE.create(this);
 	private readonly _inboundAudioTracks = new Map<string, ObservedInboundTrack<'audio'>>();
 	private readonly _inboundVideoTracks = new Map<string, ObservedInboundTrack<'video'>>();
 	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundTrack<'audio'>>();
@@ -84,6 +122,14 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public get updated(): number {
 		return this._updated;
+	}
+
+	public get selectedLocalIceCandidate() {
+		return this._selectedLocalIceCandidate;
+	}
+
+	public get selectedRemoteIceCandidate() {
+		return this._selectedRemoteIceCandidate;
 	}
 
 	public get inboundAudioTracks(): ReadonlyMap<string, ObservedInboundTrack<'audio'>> {
@@ -120,6 +166,32 @@ export class ObservedPeerConnection extends EventEmitter {
 			.finally(() => this.emit('close')); 
 	}
 
+	public updateMetrics() {
+		this.deltaInboundPacketsLost = 0;
+		this.deltaInboundPacketsReceived = 0;
+		this.deltaOutboundPacketsLost = 0;
+		this.deltaOutboundPacketsReceived = 0;
+		this.deltaOutboundPacketsSent = 0;
+		this.sendingAudioBitrate = 0;
+		this.sendingVideoBitrate = 0;
+		this.receivingAudioBitrate = 0;
+		this.receivingVideoBitrate = 0;
+		this.deltaDataChannelBytesSent = 0;
+		this.deltaDataChannelBytesReceived = 0;
+		this.deltaReceivedAudioBytes = 0;
+		this.deltaReceivedVideoBytes = 0;
+		this.deltaSentAudioBytes = 0;
+		this.deltaSentVideoBytes = 0;
+
+		this._inboundAudioTracks.forEach((track) => {
+			this.deltaReceivedAudioBytes += track.receivedPackets;
+		});
+
+		this._inboundVideoTracks.forEach((track) => {
+			this.deltaReceivedVideoBytes += track.receivedPackets;
+		});
+	}
+
 	public update(sample: PeerConnectionTransport, timestamp: number) {
 		if (this._closed) return;
 		if (sample.peerConnectionId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
@@ -144,6 +216,11 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.emit('update');
 	}
 
+	public updateSelectedCandidate(localCandidate: IceLocalCandidate, remoteCandidate: IceRemoteCandidate) {
+		this._selectedLocalIceCandidate = localCandidate;
+		this._selectedRemoteIceCandidate = remoteCandidate;
+	}
+
 	public async createInboundAudioTrack(config: Omit<ObservedInboundTrackConfig<'audio'>, 'kind'>): Promise<ObservedInboundTrack<'audio'>> {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 
@@ -151,7 +228,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			kind: 'audio',
 			trackId: config.trackId,
 		}, this, this._storageProvider);
-
+		
 		result.on('close', () => {
 			this._inboundAudioTracks.delete(result.trackId);
 			this._model.inboundTrackIds = this._model.inboundTrackIds.filter((id) => id !== result.trackId);

@@ -28,6 +28,14 @@ export type ObservedInboundTrackStats<K extends MediaKind> = ObservedInboundTrac
 	bitrate: number;
 	fractionLost: number;
 	rttInMs?: number;
+	lostPackets?: number;
+	receivedPackets?: number;
+	receivedFrames?: number;
+	decodedFrames?: number;
+	droppedFrames?: number;
+	receivedSamples?: number;
+	silentConcealedSamples?: number;
+	fractionLoss?: number;
 };
 
 // {
@@ -76,6 +84,14 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	private _remoteOutboundTrack?: ObservedOutboundTrack<Kind>;
 	public bitrate = -1;
 	public rttInMs = -1;
+	public lostPackets = 0;
+	public receivedPackets = 0;
+	public receivedFrames = 0;
+	public decodedFrames = 0;
+	public droppedFrames = 0;
+	public receivedSamples = 0;
+	public silentConcealedSamples = 0;
+	public fractionLoss = 0;
 	
 	private constructor(
 		private readonly _model: Models.InboundTrack,
@@ -211,19 +227,52 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		const lostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
 		const receivedPackets = (sample.packetsReceived ?? 0) - (lastStat?.packetsReceived ?? 0);
 		const fractionLost = 0 < receivedPackets && 0 < lostPackets ? (lostPackets / (receivedPackets + lostPackets)) : 0;
+		let decodedFrames: number | undefined;
+		let droppedFrames: number | undefined;
+		let receivedFrames: number | undefined;
+		let silentConcealedSamples: number | undefined;
+
+		if (this.kind === 'video') {
+			const videoSample = sample as InboundVideoTrack;
+			const lastVideoStat = lastStat as InboundVideoTrack | undefined;
+
+			decodedFrames = (videoSample.framesDecoded ?? 0) - (lastVideoStat?.framesDecoded ?? 0);
+			droppedFrames = (videoSample.framesDropped ?? 0) - (lastVideoStat?.framesDropped ?? 0);
+			receivedFrames = (videoSample.framesReceived ?? 0) - (lastVideoStat?.framesReceived ?? 0);
+		} else if (this.kind === 'audio') {
+			const audioSample = sample as InboundAudioTrack;
+			const lastAudioStat = lastStat as InboundAudioTrack | undefined;
+
+			silentConcealedSamples = (audioSample.silentConcealedSamples ?? 0) - (lastAudioStat?.silentConcealedSamples ?? 0);
+		}
+
 		const stats: ObservedInboundTrackStats<Kind> = {
 			...sample,
 			fractionLost,
 			rttInMs,
 			bitrate,
 			ssrc: sample.ssrc,
+			lostPackets,
+			receivedPackets,
+			receivedFrames,
+			decodedFrames,
+			droppedFrames,
+			silentConcealedSamples,
 		};
 
 		this._stats.set(sample.ssrc, stats);
 
 		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
 		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
-		
+		this.lostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
+		this.receivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
+		this.receivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
+		this.decodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
+		this.droppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
+		this.receivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
+		this.silentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
+		this.fractionLoss = 0 < this.receivedPackets && 0 < this.lostPackets ? (this.lostPackets / (this.receivedPackets + this.lostPackets)) : 0;
+
 		if (executeSave) await this._save();
 
 		this._updated = timestamp;
