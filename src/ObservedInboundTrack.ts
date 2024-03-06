@@ -75,6 +75,8 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 
 		return new ObservedInboundTrack<K>(model, peerConnection, storageProvider);
 	}
+	
+	public created = Date.now();
 
 	private readonly _stats = new Map<number, ObservedInboundTrackStats<Kind>>();
 	private readonly _execute = createSingleExecutor();
@@ -82,16 +84,27 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	private _closed = false;
 	private _updated = Date.now();
 	private _remoteOutboundTrack?: ObservedOutboundTrack<Kind>;
-	public bitrate = -1;
-	public rttInMs = -1;
-	public lostPackets = 0;
-	public receivedPackets = 0;
-	public receivedFrames = 0;
-	public decodedFrames = 0;
-	public droppedFrames = 0;
-	public receivedSamples = 0;
-	public silentConcealedSamples = 0;
+	public bitrate = 0;
+	public rttInMs?: number;
 	public fractionLoss = 0;
+
+	public totalLostPackets = 0;
+	public totalReceivedPackets = 0;
+	public totalBytesReceived = 0;
+	public totalReceivedFrames = 0;
+	public totalDecodedFrames = 0;
+	public totalDroppedFrames = 0;
+	public totalReceivedSamples = 0;
+	public totalSilentConcealedSamples = 0;
+	
+	public deltaLostPackets = 0;
+	public deltaReceivedPackets = 0;
+	public deltaBytesReceived = 0;
+	public deltaReceivedFrames = 0;
+	public deltaDecodedFrames = 0;
+	public deltaDroppedFrames = 0;
+	public deltaReceivedSamples = 0;
+	public deltaSilentConcealedSamples = 0;
 	
 	private constructor(
 		private readonly _model: Models.InboundTrack,
@@ -161,6 +174,10 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		return this.peerConnection.reports;
 	}
 
+	public get uptimeInMs() {
+		return this._updated - this.created;
+	}
+
 	public set remoteOutboundTrack(track: ObservedOutboundTrack<Kind> | undefined) {
 		if (this._closed) return;
 		if (this._remoteOutboundTrack) return;
@@ -190,6 +207,19 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			.finally(() => this.emit('close'));
 	}
 
+	public resetMetrics() {
+		this.bitrate = 0;
+		this.rttInMs = undefined;
+		this.deltaBytesReceived = 0;
+		this.deltaLostPackets = 0;
+		this.deltaReceivedFrames = 0;
+		this.deltaDecodedFrames = 0;
+		this.deltaDroppedFrames = 0;
+		this.deltaReceivedSamples = 0;
+		this.deltaSilentConcealedSamples = 0;
+		this.fractionLoss = 0;
+	}
+
 	public async update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number) {
 		if (this._closed) return;
 		let executeSave = false;
@@ -205,6 +235,11 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			...sample,
 			timestamp,
 			sampleSeq: -1,
+
+			remoteClientId: sample.remoteClientId ?? this.remoteOutboundTrack?.peerConnection.client.clientId,
+			remoteUserId: this.remoteOutboundTrack?.peerConnection.client.userId,
+			remoteTrackId: this.remoteOutboundTrack?.trackId,
+			remotePeerConnectionId: this.remoteOutboundTrack?.peerConnection.peerConnectionId,
 		};
 
 		if (this.kind === 'audio') this.reports.addInboundAudioTrackReport(report);
@@ -264,14 +299,24 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 
 		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
 		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
-		this.lostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
-		this.receivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
-		this.receivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
-		this.decodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
-		this.droppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
-		this.receivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
-		this.silentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
-		this.fractionLoss = 0 < this.receivedPackets && 0 < this.lostPackets ? (this.lostPackets / (this.receivedPackets + this.lostPackets)) : 0;
+		this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
+		this.totalReceivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
+		this.totalBytesReceived = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesReceived ?? 0), 0);
+		this.totalReceivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
+		this.totalDecodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
+		this.totalDroppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
+		this.totalReceivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
+		this.totalSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
+
+		this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
+		this.deltaReceivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
+		this.deltaBytesReceived = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesReceived ?? 0), 0);
+		this.deltaReceivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
+		this.deltaDecodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
+		this.deltaDroppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
+		this.deltaReceivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
+		this.deltaSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
+		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
 
 		if (executeSave) await this._save();
 

@@ -25,6 +25,12 @@ export type ObservedOutboundTrackStats<K extends MediaKind> = ObservedOutboundTr
 	ssrc: number;
 	bitrate: number;
 	rttInMs?: number;
+
+	deltaLostPackets: number;
+	deltaSentPackets: number;
+	deltaSentBytes: number;
+	deltaSentFrames?: number;
+	deltaEncodedFrames?: number;
 };
 
 // export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = {
@@ -64,8 +70,21 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		return new ObservedOutboundTrack<K>(model, peerConnection, storageProvider);
 	}
 
-	public bitrate?: number;
+	public bitrate = 0;
 	public rttInMs?: number;
+
+	public totalLostPackets = 0;
+	public totalSentPackets = 0;
+	public totalSentBytes = 0;
+	public totalSentFrames = 0;
+
+	public deltaLostPackets = 0;
+	public deltaSentPackets = 0;
+	public deltaSentBytes = 0;
+	public deltaSentFrames = 0;
+	public deltaEncodedFrames = 0;
+
+	public created = Date.now();
 
 	private readonly _stats = new Map<number, ObservedOutboundTrackStats<Kind>>();
 	private readonly _execute = createSingleExecutor();
@@ -96,10 +115,6 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		return this._model.sfuStreamId;
 	}
 
-	public get closed() {
-		return this._closed;
-	}
-
 	public get remoteInboundTracks(): ReadonlyMap<string, ObservedInboundTrack<Kind>> {
 		return this._remoteInboundTracks;
 	}
@@ -111,7 +126,19 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 	public get updated() {
 		return this._updated;
 	}
+	
+	public get stats(): ReadonlyMap<number, ObservedOutboundTrackStats<Kind>> {
+		return this._stats;
+	}
 
+	public get uptimeInMs() {
+		return this._updated - this.created;
+	}
+
+	public get closed() {
+		return this._closed;
+	}
+	
 	public close() {
 		if (this._closed) return;
 
@@ -122,8 +149,15 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			.finally(() => this.emit('close'));
 	}
 
-	public get stats(): ReadonlyMap<number, ObservedOutboundTrackStats<Kind>> {
-		return this._stats;
+	public resetMetrics() {
+		this.bitrate = 0;
+		this.rttInMs = 0;
+
+		this.deltaLostPackets = 0;
+		this.deltaSentPackets = 0;
+		this.deltaSentBytes = 0;
+		this.deltaSentFrames = 0;
+		this.deltaEncodedFrames = 0;
 	}
 
 	public async update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number): Promise<void> {
@@ -150,19 +184,46 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
 		const bitrate = ((sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0)) * 8 / (elapsedTimeInMs / 1000);
-		// const lostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
-		// const sentPackets = (sample.packetsSent ?? 0) - (lastStat?.packetsSent ?? 0);
+		const deltaLostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
+		const deltaSentPackets = (sample.packetsSent ?? 0) - (lastStat?.packetsSent ?? 0);
+		const deltaSentBytes = (sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0);
+		let deltaEncodedFrames: number | undefined;
+		let deltaSentFrames: number | undefined;
+
+		if (this.kind === 'video') {
+			const videoSample = sample as OutboundVideoTrack;
+			const lastVideoStats = lastStat as OutboundVideoTrack | undefined;
+
+			deltaEncodedFrames = (videoSample.framesEncoded ?? 0) - (lastVideoStats?.framesEncoded ?? 0);
+			deltaSentFrames = (videoSample.framesSent ?? 0) - (lastVideoStats?.framesSent ?? 0);
+		}
 		const stats: ObservedOutboundTrackStats<Kind> = {
 			...sample,
 			rttInMs,
 			bitrate,
 			ssrc: sample.ssrc,
+
+			deltaLostPackets,
+			deltaSentPackets,
+			deltaSentBytes,
+			deltaEncodedFrames,
+			deltaSentFrames,
 		};
 
 		this._stats.set(sample.ssrc, stats);
 
 		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
 		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
+
+		this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsLost ?? 0), 0);
+		this.totalSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsSent ?? 0), 0);
+		this.totalSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesSent ?? 0), 0);
+
+		this.deltaEncodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaEncodedFrames ?? 0), 0);
+		this.deltaSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentFrames ?? 0), 0);
+		this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaLostPackets, 0);
+		this.deltaSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentPackets, 0);
+		this.deltaSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentBytes, 0);
 
 		// setting up sfu connection as it is not always available at the first sample
 		if (sample.sfuStreamId && !this._model.sfuStreamId) {

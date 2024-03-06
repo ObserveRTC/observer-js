@@ -88,6 +88,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return result;
 	}
 
+	public created = Date.now();
+
 	private readonly _peerConnections = new Map<string, ObservedPeerConnection>();
 	private readonly _execute = createSingleExecutor();
 	
@@ -101,37 +103,22 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
-	public totalOutboundPacketsLost = 0;
-	public totalOutboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
 	public totalDataChannelBytesSent = 0;
 	public totalDataChannelBytesReceived = 0;
-	public totalSentAudioBytes = 0;
-	public totalSentVideoBytes = 0;
-	public totalReceivedAudioBytes = 0;
-	public totalReceivedVideoBytes = 0;
-
-	public deltaInboundPacketsLost?: number;
-	public deltaInboundPacketsReceived?: number;
-	public deltaOutboundPacketsLost?: number;
-	public deltaOutboundPacketsReceived?: number;
-	public deltaOutboundPacketsSent?: number;
-	public deltaDataChannelBytesSent?: number;
-	public deltaDataChannelBytesReceived?: number;
-	public deltaReceivedAudioBytes?: number;
-	public deltaReceivedVideoBytes?: number;
-	public deltaSentAudioBytes?: number;
-	public deltaSentVideoBytes?: number;
+	public totalSentBytes = 0;
+	public totalReceivedBytes = 0;
 
 	public avgRttInS?: number;
-	public sendingAudioBitrate?: number;
-	public sendingVideoBitrate?: number;
-	public receivingAudioBitrate?: number;
-	public receivingVideoBitrate?: number;
+	public sendingBitrate?: number;
+	public receivingBitrate?: number;
 
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
 	public readonly userMediaErrors: string[] = [];
+
+	public readonly ωpendingCreatedTracksTimestamp = new Map<string, number>();
+	public readonly ωpendingCreatedPeerConnectionTimestamp = new Map<string, number>();
 
 	private constructor(
 		private readonly _model: Models.Client,
@@ -212,6 +199,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this._updated;
 	}
 
+	public get uptimeInMs() {
+		return this._updated - this.created;
+	}
+
 	public get closed() {
 		return this._closed;
 	}
@@ -244,6 +235,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 
 		return this._execute(async () => {
+			for (const peerConnection of this._peerConnections.values()) {
+				if (peerConnection.closed) continue;
+				peerConnection.resetMetrics();
+			}
+
 			let executeSave = false;
 
 			if (this.userId !== sample.userId) {
@@ -398,10 +394,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				});
 			}
 
-			for (const { timestamp = Date.now(), ...callEvent } of sample.customCallEvents ?? []) {
+			for (const { timestamp, ...callEvent } of sample.customCallEvents ?? []) {
 				const peerConnection = this._peerConnections.get(callEvent.peerConnectionId ?? '');
 				
 				switch (callEvent.name) {
+					case CallEventType.CLIENT_JOINED:
+						this.created = timestamp ?? this.created;
+						break;
 					case CallEventType.CLIENT_LEFT:
 						this._leaveReported = true;
 						break;
@@ -414,6 +413,26 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					case CallEventType.PEER_CONNECTION_STATE_CHANGED:
 						peerConnection && callEvent.value && peerConnection.emit('connectionstatechange', callEvent.value);
 						break;
+					case CallEventType.PEER_CONNECTION_OPENED: {
+						if (!callEvent.peerConnectionId) break;
+						if (peerConnection) {
+							peerConnection.created = timestamp ?? peerConnection.created;
+						} else {
+							this.ωpendingCreatedPeerConnectionTimestamp.set(callEvent.peerConnectionId, timestamp ?? Date.now());
+						}
+						break;
+					}
+					case CallEventType.MEDIA_TRACK_ADDED: {
+						if (!callEvent.mediaTrackId) break;
+						const track = peerConnection?.getTrack(callEvent.mediaTrackId);
+
+						if (track) {
+							track.created = timestamp ?? track.created;
+						} else {
+							this.ωpendingCreatedTracksTimestamp.set(callEvent.mediaTrackId, timestamp ?? Date.now());
+						}
+					}
+
 				}
 
 				this.reports.addCallEventReport({
@@ -423,7 +442,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					callId: this.callId,
 					clientId: this.clientId,
 					userId: this.userId,
-					timestamp,
+					timestamp: timestamp ?? Date.now(),
 					...callEvent,
 				});
 			}
@@ -712,6 +731,35 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					}
 				}
 			}
+
+			// update metrics
+			this.totalSentBytes = 0;
+			this.totalReceivedBytes = 0;
+			this.totalOutboundPacketsSent = 0;
+			this.totalInboundPacketsReceived = 0;
+			this.totalInboundPacketsLost = 0;
+			this.totalDataChannelBytesSent = 0;
+			this.totalDataChannelBytesReceived = 0;
+			this.sendingBitrate = 0;
+			this.receivingBitrate = 0;
+			let sumRttInS = 0;
+
+			for (const peerConnection of this._peerConnections.values()) {
+				if (peerConnection.closed) continue;
+				peerConnection.updateMetrics();
+				this.totalSentBytes += peerConnection.totalSentAudioBytes + peerConnection.totalSentVideoBytes;
+				this.totalReceivedBytes += peerConnection.totalReceivedAudioBytes + peerConnection.totalReceivedVideoBytes;
+				this.totalOutboundPacketsSent += peerConnection.totalOutboundPacketsSent;
+				this.totalInboundPacketsReceived += peerConnection.totalInboundPacketsReceived;
+				this.totalInboundPacketsLost += peerConnection.totalInboundPacketsLost;
+				this.totalDataChannelBytesSent += peerConnection.totalDataChannelBytesSent;
+				this.totalDataChannelBytesReceived += peerConnection.totalDataChannelBytesReceived;
+				this.sendingBitrate += peerConnection.sendingAudioBitrate + peerConnection.sendingVideoBitrate;
+				this.receivingBitrate += peerConnection.receivingAudioBitrate + peerConnection.receivingVideoBitrate;
+				sumRttInS += peerConnection.avgRttInS ?? 0;
+			}
+
+			this.avgRttInS = this._peerConnections.size ? sumRttInS / this._peerConnections.size : -1;
 			
 			if (executeSave) await this._save();
 
@@ -726,6 +774,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const result = await ObservedPeerConnection.create({
 			peerConnectionId,
 		}, this, this._storageProvider);
+
+		const pendingTracksTimestamp = this.ωpendingCreatedTracksTimestamp.get(peerConnectionId);
+
+		if (pendingTracksTimestamp) {
+			result.created = pendingTracksTimestamp;
+			this.ωpendingCreatedTracksTimestamp.delete(peerConnectionId);
+		}
 
 		result.once('close', () => {
 			this._peerConnections.delete(peerConnectionId);

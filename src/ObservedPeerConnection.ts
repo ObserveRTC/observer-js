@@ -56,27 +56,35 @@ export class ObservedPeerConnection extends EventEmitter {
 		return new ObservedPeerConnection(model, client, storageProvider);
 	}
 
+	public created = Date.now();
+
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
-	public totalOutboundPacketsLost = 0;
-	public totalOutboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
 	public totalDataChannelBytesSent = 0;
 	public totalDataChannelBytesReceived = 0;
+
 	public totalSentAudioBytes = 0;
 	public totalSentVideoBytes = 0;
+	public totalSentAudioPackets = 0;
+	public totalSentVideoPackets = 0;
+	public totalReceivedAudioPacktes = 0;
+	public totalReceivedVideoPackets = 0;
 	public totalReceivedAudioBytes = 0;
 	public totalReceivedVideoBytes = 0;
 
-	public deltaInboundPacketsLost = 0;
-	public deltaInboundPacketsReceived = 0;
-	public deltaOutboundPacketsLost = 0;
-	public deltaOutboundPacketsReceived	= 0;
-	public deltaOutboundPacketsSent = 0;
+	public deltaInboundLostPackets = 0;
+	public deltaInboundReceivedPackets = 0;
+	public deltaOutboundSentPackets = 0;
 	public deltaDataChannelBytesSent = 0;
 	public deltaDataChannelBytesReceived = 0;
+	public deltaInboundReceivedBytes = 0;
+	public deltaOutboundSentBytes = 0;
+	
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
+	public deltaReceivedAudioPackets = 0;
+	public deltaReceivedVideoPackets = 0;
 	public deltaSentAudioBytes = 0;
 	public deltaSentVideoBytes = 0;
 	public sendingAudioBitrate = 0;
@@ -148,6 +156,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		return this._outboundVideoTracks;
 	}
 
+	public get uptimeInMs() {
+		return this._updated - this.created;
+	}
+
 	public get closed() {
 		return this._closed;
 	}
@@ -166,16 +178,15 @@ export class ObservedPeerConnection extends EventEmitter {
 			.finally(() => this.emit('close')); 
 	}
 
-	public updateMetrics() {
-		this.deltaInboundPacketsLost = 0;
-		this.deltaInboundPacketsReceived = 0;
-		this.deltaOutboundPacketsLost = 0;
-		this.deltaOutboundPacketsReceived = 0;
-		this.deltaOutboundPacketsSent = 0;
-		this.sendingAudioBitrate = 0;
-		this.sendingVideoBitrate = 0;
-		this.receivingAudioBitrate = 0;
-		this.receivingVideoBitrate = 0;
+	public getTrack(trackId: string): ObservedInboundTrack<'audio'> | ObservedInboundTrack<'video'> | ObservedOutboundTrack<'audio'> | ObservedOutboundTrack<'video'> | undefined {
+		return this._inboundAudioTracks.get(trackId) ?? this._inboundVideoTracks.get(trackId) ?? this._outboundAudioTracks.get(trackId) ?? this._outboundVideoTracks.get(trackId);
+	}
+
+	public resetMetrics() {
+		this.deltaInboundLostPackets = 0;
+		this.deltaInboundReceivedPackets = 0;
+		this.deltaOutboundSentPackets = 0;
+
 		this.deltaDataChannelBytesSent = 0;
 		this.deltaDataChannelBytesReceived = 0;
 		this.deltaReceivedAudioBytes = 0;
@@ -183,13 +194,101 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
 
+		this._inboundAudioTracks.forEach((track) => track.resetMetrics());
+		this._inboundVideoTracks.forEach((track) => track.resetMetrics());
+		this._outboundAudioTracks.forEach((track) => track.resetMetrics());
+		this._outboundVideoTracks.forEach((track) => track.resetMetrics());
+	}
+
+	public updateMetrics() {
+		this.totalInboundPacketsLost = 0;
+		this.totalInboundPacketsReceived = 0;
+		this.totalOutboundPacketsSent = 0;
+		this.totalDataChannelBytesSent = 0;
+		this.totalDataChannelBytesReceived = 0;
+	
+		this.totalSentAudioBytes = 0;
+		this.totalSentVideoBytes = 0;
+		this.totalReceivedAudioBytes = 0;
+		this.totalReceivedVideoBytes = 0;
+		this.sendingAudioBitrate = 0;
+		this.sendingVideoBitrate = 0;
+		this.receivingAudioBitrate = 0;
+		this.receivingVideoBitrate = 0;
+
+		let sumRttInS = 0;
+
 		this._inboundAudioTracks.forEach((track) => {
-			this.deltaReceivedAudioBytes += track.receivedPackets;
+			this.deltaInboundLostPackets += track.deltaLostPackets;
+			this.deltaInboundReceivedPackets += track.deltaReceivedPackets;
+			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
+			
+			this.deltaReceivedAudioBytes += track.deltaBytesReceived;
+			this.deltaReceivedAudioPackets += track.deltaReceivedPackets;
+			
+			this.receivingAudioBitrate += track.bitrate;
+
+			this.totalInboundPacketsLost += track.totalLostPackets;
+			this.totalInboundPacketsReceived += track.totalReceivedPackets;
+			this.totalReceivedAudioBytes += track.totalBytesReceived;
+			this.totalReceivedAudioPacktes += track.totalReceivedPackets;
+
+			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
 		});
 
 		this._inboundVideoTracks.forEach((track) => {
-			this.deltaReceivedVideoBytes += track.receivedPackets;
+			this.deltaInboundLostPackets += track.deltaLostPackets;
+			this.deltaInboundReceivedPackets += track.deltaReceivedPackets;
+			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
+			
+			this.deltaReceivedVideoBytes += track.deltaBytesReceived;
+			this.deltaReceivedVideoPackets += track.deltaReceivedPackets;
+			
+			this.receivingVideoBitrate += track.bitrate;
+
+			this.totalInboundPacketsLost += track.totalLostPackets;
+			this.totalInboundPacketsReceived += track.totalReceivedPackets;
+			this.totalReceivedVideoBytes += track.totalBytesReceived;
+			this.totalReceivedVideoPackets += track.totalReceivedPackets;
+
+			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
 		});
+
+		this._outboundAudioTracks.forEach((track) => {
+			this.deltaOutboundSentPackets += track.deltaSentPackets;
+			this.deltaOutboundSentBytes += track.deltaSentBytes;
+			
+			this.deltaSentAudioBytes += track.deltaSentBytes;
+			this.deltaSentAudioBytes += track.deltaSentPackets;
+			
+			this.sendingAudioBitrate += track.bitrate;
+
+			this.totalOutboundPacketsSent += track.totalSentPackets;
+			this.totalSentAudioBytes += track.totalSentBytes;
+			this.totalSentAudioPackets += track.totalSentPackets;
+
+			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+		});
+
+		this._outboundVideoTracks.forEach((track) => {
+			this.deltaOutboundSentPackets += track.deltaSentPackets;
+			this.deltaOutboundSentBytes += track.deltaSentBytes;
+			
+			this.deltaSentVideoBytes += track.deltaSentBytes;
+			this.deltaSentVideoBytes += track.deltaSentPackets;
+			
+			this.sendingVideoBitrate += track.bitrate;
+
+			this.totalOutboundPacketsSent += track.totalSentPackets;
+			this.totalSentVideoBytes += track.totalSentBytes;
+			this.totalSentVideoPackets += track.totalSentPackets;
+
+			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+		});
+
+		const nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
+
+		this.avgRttInS = 0 < nrOfBelongings ? sumRttInS / nrOfBelongings : undefined;
 	}
 
 	public update(sample: PeerConnectionTransport, timestamp: number) {
@@ -228,6 +327,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			kind: 'audio',
 			trackId: config.trackId,
 		}, this, this._storageProvider);
+
+		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
+
+		if (pendingTracksTimestamp) {
+			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
+			result.created = pendingTracksTimestamp;
+		}
 		
 		result.on('close', () => {
 			this._inboundAudioTracks.delete(result.trackId);
@@ -250,6 +356,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			kind: 'video',
 			trackId: config.trackId,
 		}, this, this._storageProvider);
+		
+		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
+
+		if (pendingTracksTimestamp) {
+			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
+			result.created = pendingTracksTimestamp;
+		}
 
 		result.on('close', () => {
 			this._inboundVideoTracks.delete(result.trackId);
@@ -272,6 +385,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			kind: 'audio',
 			trackId: config.trackId,
 		}, this, this._storageProvider);
+
+		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
+
+		if (pendingTracksTimestamp) {
+			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
+			result.created = pendingTracksTimestamp;
+		}
 
 		result.on('close', () => {
 			this._outboundAudioTracks.delete(result.trackId);
@@ -298,6 +418,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			kind: 'video',
 			trackId: config.trackId,
 		}, this, this._storageProvider);
+
+		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
+
+		if (pendingTracksTimestamp) {
+			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
+			result.created = pendingTracksTimestamp;
+		}
 
 		result.on('close', () => {
 			this._outboundVideoTracks.delete(result.trackId);
