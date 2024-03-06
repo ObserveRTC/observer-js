@@ -1,4 +1,4 @@
-import { ClientSample } from '@observertc/sample-schemas-js';
+import { ClientSample, IceLocalCandidate, IceRemoteCandidate } from '@observertc/sample-schemas-js';
 import { ObservedCall } from './ObservedCall';
 import * as Models from './models/Models';
 import { StorageProvider } from './storages/StorageProvider';
@@ -34,6 +34,23 @@ export type ObservedClientEvents = {
 	close: [],
 	'processing-sample-overflow': [],
 	newpeerconnection: [ObservedPeerConnection],
+	iceconnectionstatechange: [{
+		peerConnection: ObservedPeerConnection,
+		state: string,
+	}],
+	icegatheringstatechange: [{
+		peerConnection: ObservedPeerConnection,
+		state: string,
+	}],
+	connectionstatechange: [{
+		peerConnection: ObservedPeerConnection,
+		state: string,
+	}],
+	selectedcandidatepair: [{
+		peerConnection: ObservedPeerConnection,
+		localCandidate: IceLocalCandidate,
+		remoteCandidate: IceRemoteCandidate,
+	}],
 };
 
 export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
@@ -405,13 +422,22 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 						this._leaveReported = true;
 						break;
 					case CallEventType.ICE_CONNECTION_STATE_CHANGED: 
-						peerConnection && callEvent.value && peerConnection.emit('iceconnectionstatechange', callEvent.value);
+						peerConnection && callEvent.value && this.emit('iceconnectionstatechange', {
+							peerConnection,
+							state: callEvent.value,
+						});
 						break;
 					case CallEventType.ICE_GATHERING_STATE_CHANGED:
-						peerConnection && callEvent.value && peerConnection.emit('icegatheringstatechange', callEvent.value);
+						peerConnection && callEvent.value && this.emit('icegatheringstatechange', {
+							peerConnection,
+							state: callEvent.value,
+						});
 						break;
 					case CallEventType.PEER_CONNECTION_STATE_CHANGED:
-						peerConnection && callEvent.value && peerConnection.emit('connectionstatechange', callEvent.value);
+						peerConnection && callEvent.value && this.emit('connectionstatechange', {
+							peerConnection,
+							state: callEvent.value,
+						});
 						break;
 					case CallEventType.PEER_CONNECTION_OPENED: {
 						if (!callEvent.peerConnectionId) break;
@@ -782,11 +808,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.ωpendingCreatedTracksTimestamp.delete(peerConnectionId);
 		}
 
+		const onNewSelectedCandidatePair = ({ localCandidate, remoteCandidate }: { localCandidate: IceLocalCandidate, remoteCandidate: IceRemoteCandidate }) => {
+			this.emit('selectedcandidatepair', {
+				peerConnection: result,
+				localCandidate,
+				remoteCandidate,
+			});
+		};
+
 		result.once('close', () => {
+			result.ICE.off('new-selected-candidate-pair', onNewSelectedCandidatePair);
 			this._peerConnections.delete(peerConnectionId);
 			this._model.peerConnectionIds = this._model.peerConnectionIds.filter((id) => id !== peerConnectionId);
 			this._save().catch(() => void 0);
 		});
+		result.ICE.on('new-selected-candidate-pair', onNewSelectedCandidatePair);
 		this._peerConnections.set(peerConnectionId, result);
 		this._model.peerConnectionIds.push(peerConnectionId);
 		await this._save();

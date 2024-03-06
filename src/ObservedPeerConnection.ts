@@ -16,10 +16,6 @@ export type ObservedPeerConnectionEvents = {
 	newinboudvideotrack: [ObservedInboundTrack<'video'>],
 	newoutboundaudiotrack: [ObservedOutboundTrack<'audio'>],
 	newoutboundvideotrack: [ObservedOutboundTrack<'video'>],
-
-	iceconnectionstatechange: [string],
-	icegatheringstatechange: [string],
-	connectionstatechange: [string],
 };
 
 export type ObservedPeerConnectionConfig = {
