@@ -51,6 +51,7 @@ export type ObservedClientEvents = {
 		localCandidate: IceLocalCandidate,
 		remoteCandidate: IceRemoteCandidate,
 	}],
+	usingturn: [boolean],
 };
 
 export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
@@ -100,8 +101,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			));
 		}
 
-		result.once('close', () => result._addClientLeftReport());
-
 		return result;
 	}
 
@@ -116,9 +115,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _acceptedSample = 0;
 	private _processingSample = 0;
 	private _timeZoneOffsetInHours?: number;
-	private _leaveReported = false;
+	private _left?: number;
 	private _numberOfAcceptedUpdates = 0;
 
+	public usingTURN = false;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
 	public totalInboundPacketsLost = 0;
@@ -227,6 +227,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this._updated - this.created;
 	}
 
+	public get durationInMs(): number | undefined {
+		if (!this._left) return;
+		
+		return this._left - this.joined;
+	}
+
 	public get closed() {
 		return this._closed;
 	}
@@ -238,6 +244,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public close() {
 		if (this._closed) return;
 		this._closed = true;
+
+		!this._left && this._addClientLeftReport();
 
 		Array.from(this._peerConnections.values()).forEach((peerConnection) => peerConnection.close());
 
@@ -425,10 +433,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				
 				switch (callEvent.name) {
 					case CallEventType.CLIENT_JOINED:
-						this.created = timestamp ?? this.created;
+						if (timestamp) {
+							this.created = timestamp;
+							this._model.joined = BigInt(timestamp);
+							await this._save();
+						}
+						
 						break;
 					case CallEventType.CLIENT_LEFT:
-						this._leaveReported = true;
+						this._left = timestamp ?? Date.now();
 						break;
 					case CallEventType.ICE_CONNECTION_STATE_CHANGED: 
 						peerConnection && callEvent.value && this.emit('iceconnectionstatechange', {
@@ -573,7 +586,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				try {
 					const peerConnection = this._peerConnections.get(transport.transportId) ?? await this._createPeerConnection(transport.peerConnectionId);
 
-					peerConnection.update(transport, sample.timestamp); 
+					await peerConnection.update(transport, sample.timestamp); 
 				} catch (err) {
 					logger.error(`Error creating peer connection: ${(err as Error)?.message}`);
 				}
@@ -768,6 +781,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			// update metrics
+			const wasUsingTURN = this.usingTURN;
+
+			this.usingTURN = false;
 			this.availableIncomingBitrate = 0;
 			this.availableOutgoingBitrate = 0;
 			this.totalSentBytes = 0;
@@ -796,11 +812,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.availableIncomingBitrate += peerConnection.availableIncomingBitrate ?? 0;
 				this.availableOutgoingBitrate += peerConnection.availableOutgoingBitrate ?? 0;
 				sumRttInMs += peerConnection.avgRttInMs ?? 0;
+
+				if (peerConnection.usingTURN) this.usingTURN = true;
 			}
 
 			this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
 			
 			if (executeSave) await this._save();
+			if (wasUsingTURN !== this.usingTURN) this.emit('usingturn', this.usingTURN);
 
 			this._updated = sample.timestamp;
 			this.emit('update');
@@ -852,8 +871,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	}
 
 	private _addClientLeftReport() {
-		if (this._leaveReported) return;
-		this._leaveReported = true;
+		if (this._left) return;
+		this._left = Date.now();
 
 		this.reports.addCallEventReport(createClientLeftEventReport(
 			this.serviceId,

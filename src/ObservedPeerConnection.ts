@@ -109,6 +109,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		super();
 	}
 
+	public get label() {
+		return this._model.label;
+	}
+
+	public get usingTURN() {
+		return this.ICE.selectedRemoteCandidate?.candidateType?.toLowerCase() === 'relay';
+	}
+
 	public get availableOutgoingBitrate() {
 		return this.ICE.stats?.availableOutgoingBitrate;
 	}
@@ -289,11 +297,15 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
 	}
 
-	public update(sample: PeerConnectionTransport, timestamp: number) {
+	public async update(sample: PeerConnectionTransport, timestamp: number) {
 		if (this._closed) return;
 		if (sample.peerConnectionId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
 
 		this._sample = sample;
+		if (this._model.label !== sample.label) {
+			this._model.label = sample.label;
+			await this._save().catch(() => void 0);
+		}
 
 		const report: PeerConnectionTransportReport = {
 			serviceId: this.client.call.serviceId,
