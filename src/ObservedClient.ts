@@ -117,7 +117,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _processingSample = 0;
 	private _timeZoneOffsetInHours?: number;
 	private _leaveReported = false;
+	private _numberOfAcceptedUpdates = 0;
 
+	public availableOutgoingBitrate = 0;
+	public availableIncomingBitrate = 0;
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
@@ -126,7 +129,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public totalSentBytes = 0;
 	public totalReceivedBytes = 0;
 
-	public avgRttInS?: number;
+	public avgRttInMs?: number;
 	public sendingBitrate?: number;
 	public receivingBitrate?: number;
 
@@ -136,7 +139,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public readonly ωpendingCreatedTracksTimestamp = new Map<string, number>();
 	public readonly ωpendingCreatedPeerConnectionTimestamp = new Map<string, number>();
-
+	
 	private constructor(
 		private readonly _model: Models.Client,
 		public readonly call: ObservedCall,
@@ -216,6 +219,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this._updated;
 	}
 
+	public get numberOfAcceptedUpdates() {
+		return this._numberOfAcceptedUpdates;
+	}
+
 	public get uptimeInMs() {
 		return this._updated - this.created;
 	}
@@ -252,6 +259,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 
 		return this._execute(async () => {
+			++this._numberOfAcceptedUpdates;
+			
 			for (const peerConnection of this._peerConnections.values()) {
 				if (peerConnection.closed) continue;
 				peerConnection.resetMetrics();
@@ -759,6 +768,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			// update metrics
+			this.availableIncomingBitrate = 0;
+			this.availableOutgoingBitrate = 0;
 			this.totalSentBytes = 0;
 			this.totalReceivedBytes = 0;
 			this.totalOutboundPacketsSent = 0;
@@ -768,7 +779,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.totalDataChannelBytesReceived = 0;
 			this.sendingBitrate = 0;
 			this.receivingBitrate = 0;
-			let sumRttInS = 0;
+			let sumRttInMs = 0;
 
 			for (const peerConnection of this._peerConnections.values()) {
 				if (peerConnection.closed) continue;
@@ -782,10 +793,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.totalDataChannelBytesReceived += peerConnection.totalDataChannelBytesReceived;
 				this.sendingBitrate += peerConnection.sendingAudioBitrate + peerConnection.sendingVideoBitrate;
 				this.receivingBitrate += peerConnection.receivingAudioBitrate + peerConnection.receivingVideoBitrate;
-				sumRttInS += peerConnection.avgRttInS ?? 0;
+				this.availableIncomingBitrate += peerConnection.availableIncomingBitrate ?? 0;
+				this.availableOutgoingBitrate += peerConnection.availableOutgoingBitrate ?? 0;
+				sumRttInMs += peerConnection.avgRttInMs ?? 0;
 			}
 
-			this.avgRttInS = this._peerConnections.size ? sumRttInS / this._peerConnections.size : -1;
+			this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
 			
 			if (executeSave) await this._save();
 

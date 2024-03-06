@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import * as Models from './models/Models';
 import { StorageProvider } from './storages/StorageProvider';
-import { IceLocalCandidate, IceRemoteCandidate, PeerConnectionTransport } from '@observertc/sample-schemas-js';
+import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
 import { ObservedInboundTrack, ObservedInboundTrackConfig } from './ObservedInboundTrack';
 import { ObservedOutboundTrack, ObservedOutboundTrackConfig } from './ObservedOutboundTrack';
@@ -88,13 +88,11 @@ export class ObservedPeerConnection extends EventEmitter {
 	public receivingAudioBitrate = 0;
 	public receivingVideoBitrate = 0;
     
-	public avgRttInS?: number;
+	public avgRttInMs?: number;
 
 	private _closed = false;
 	private _updated = Date.now();
 	private _sample?: ObservedPeerConnectionStats;
-	private _selectedLocalIceCandidate?: IceLocalCandidate;
-	private _selectedRemoteIceCandidate?: IceRemoteCandidate;
 
 	public readonly ICE = ObservedICE.create(this);
 	private readonly _inboundAudioTracks = new Map<string, ObservedInboundTrack<'audio'>>();
@@ -109,6 +107,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		private readonly _storageProvider: StorageProvider,
 	) {
 		super();
+	}
+
+	public get availableOutgoingBitrate() {
+		return this.ICE.stats?.availableOutgoingBitrate;
+	}
+
+	public get availableIncomingBitrate() {
+		return this.ICE.stats?.availableIncomingBitrate;
 	}
 
 	public get peerConnectionId(): string {
@@ -126,14 +132,6 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public get updated(): number {
 		return this._updated;
-	}
-
-	public get selectedLocalIceCandidate() {
-		return this._selectedLocalIceCandidate;
-	}
-
-	public get selectedRemoteIceCandidate() {
-		return this._selectedRemoteIceCandidate;
 	}
 
 	public get inboundAudioTracks(): ReadonlyMap<string, ObservedInboundTrack<'audio'>> {
@@ -212,7 +210,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.receivingAudioBitrate = 0;
 		this.receivingVideoBitrate = 0;
 
-		let sumRttInS = 0;
+		let sumRttInMs = 0;
 
 		this._inboundAudioTracks.forEach((track) => {
 			this.deltaInboundLostPackets += track.deltaLostPackets;
@@ -229,7 +227,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.totalReceivedAudioBytes += track.totalBytesReceived;
 			this.totalReceivedAudioPacktes += track.totalReceivedPackets;
 
-			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+			sumRttInMs = (track.rttInMs ?? 0);
 		});
 
 		this._inboundVideoTracks.forEach((track) => {
@@ -247,7 +245,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.totalReceivedVideoBytes += track.totalBytesReceived;
 			this.totalReceivedVideoPackets += track.totalReceivedPackets;
 
-			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+			sumRttInMs = (track.rttInMs ?? 0);
 		});
 
 		this._outboundAudioTracks.forEach((track) => {
@@ -263,7 +261,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.totalSentAudioBytes += track.totalSentBytes;
 			this.totalSentAudioPackets += track.totalSentPackets;
 
-			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+			sumRttInMs = (track.rttInMs ?? 0);
 		});
 
 		this._outboundVideoTracks.forEach((track) => {
@@ -279,12 +277,16 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.totalSentVideoBytes += track.totalSentBytes;
 			this.totalSentVideoPackets += track.totalSentPackets;
 
-			sumRttInS = (track.rttInMs ?? 0) / 1000.0;
+			sumRttInMs = (track.rttInMs ?? 0);
 		});
+		const iceRttInMs = this.ICE.stats?.currentRoundTripTime;
+		let nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
 
-		const nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
-
-		this.avgRttInS = 0 < nrOfBelongings ? sumRttInS / nrOfBelongings : undefined;
+		if (iceRttInMs) {
+			sumRttInMs += iceRttInMs;
+			nrOfBelongings += 1;
+		}
+		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
 	}
 
 	public update(sample: PeerConnectionTransport, timestamp: number) {
@@ -309,11 +311,6 @@ export class ObservedPeerConnection extends EventEmitter {
 		
 		this._updated = timestamp;
 		this.emit('update');
-	}
-
-	public updateSelectedCandidate(localCandidate: IceLocalCandidate, remoteCandidate: IceRemoteCandidate) {
-		this._selectedLocalIceCandidate = localCandidate;
-		this._selectedRemoteIceCandidate = remoteCandidate;
 	}
 
 	public async createInboundAudioTrack(config: Omit<ObservedInboundTrackConfig<'audio'>, 'kind'>): Promise<ObservedInboundTrack<'audio'>> {
