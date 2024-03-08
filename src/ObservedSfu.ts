@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 import * as Models from './models/Models';
 import { Observer } from './Observer';
+import { createSingleExecutor } from './common/SingleExecutor';
+import { SfuSample } from '@observertc/sample-schemas-js';
 
 export type ObservedSfuConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	serviceId: string;
@@ -35,6 +37,7 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		});
 		const result = new ObservedSfu(
 			model,
+			observer,
 			config.appData,
 		);
 
@@ -44,12 +47,62 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 
 		return result;
 	}
+
+	private _updated = Date.now();
+	private readonly _execute = createSingleExecutor();
+	private _closed = false;
 	
 	private constructor(
 		private readonly _model: Models.Sfu,
+		public readonly observer: Observer,
 		public readonly appData: AppData,
 	) {
 		super();
+	}
+
+	public get serviceId() {
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		return this._model.serviceId!;
+	}
+
+	public get sfuId() {
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		return this._model.sfuId!;
+	}
+
+	public get joined() {
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		return Number(this._model.joined!);
+	}
+
+	public get closed() {
+		return this._closed;
+	}
+
+	public close() {
+		if (this._closed) return;
+		this._closed = true;
+		this.emit('close');
+	}
+
+	public async update(sample: SfuSample) {
+		if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
+		if (sample.sfuId !== this.sfuId) throw new Error(`Sfu ${this.sfuId} is not the same as sample.sfuId`);
+		
+		return this._execute(async () => {
+			if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
+			await this._save();
+			this.emit('update');
+		});
+	}
+
+	private async _save() {
+		if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
+		
+		return this._execute(async () => {
+			if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
+			await this.observer.storage.sfuStorage.set(this.sfuId, this._model);
+		});		
 	}
 	
 }
