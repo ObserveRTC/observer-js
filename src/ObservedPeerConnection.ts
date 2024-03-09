@@ -5,6 +5,7 @@ import { ObservedInboundTrack, ObservedInboundTrackModel } from './ObservedInbou
 import { ObservedOutboundTrack, ObservedOutboundTrackModel } from './ObservedOutboundTrack';
 import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 import { ObservedICE } from './ObservedICE';
+import { ObservedDataChannel } from './ObservedDataChannel';
 
 export type ObservedPeerConnectionEvents = {
 	update: [],
@@ -77,6 +78,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	private readonly _inboundVideoTracks = new Map<string, ObservedInboundTrack<'video'>>();
 	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundTrack<'audio'>>();
 	private readonly _outboundVideoTracks = new Map<string, ObservedOutboundTrack<'video'>>();
+	private readonly _dataChannels = new Map<number, ObservedDataChannel>();
 	
 	public constructor(
 		private readonly _model: ObservedPeerConnectionModel,
@@ -156,6 +158,10 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public get outboundVideoTracks(): ReadonlyMap<string, ObservedOutboundTrack<'video'>> {
 		return this._outboundVideoTracks;
+	}
+
+	public get dataChannels(): ReadonlyMap<number, ObservedDataChannel> {
+		return this._dataChannels;
 	}
 
 	public get uptimeInMs() {
@@ -285,6 +291,14 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			sumRttInMs = (track.rttInMs ?? 0);
 		});
+
+		this._dataChannels.forEach((channel) => {
+			this.deltaDataChannelBytesSent += channel.deltaBytesSent;
+			this.deltaDataChannelBytesReceived += channel.deltaBytesReceived;
+			this.totalDataChannelBytesSent += channel.totalBytesSent;
+			this.totalDataChannelBytesReceived += channel.totalBytesReceived;
+		});
+
 		const iceRttInMs = this.ICE.stats?.currentRoundTripTime;
 		let nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
 
@@ -390,6 +404,21 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._outboundVideoTracks.set(result.trackId, result);
 
 		this.emit('newoutboundvideotrack', result);
+
+		return result;
+	}
+
+	public createDataChannel(channelId: number) {
+		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
+		
+		const result = new ObservedDataChannel({
+			channelId,
+		}, this);
+
+		result.on('close', () => {
+			this._dataChannels.delete(result.channelId);
+		});
+		this._dataChannels.set(result.channelId, result);
 
 		return result;
 	}

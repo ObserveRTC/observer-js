@@ -85,10 +85,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.emit('close');
 	}
 
-	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { appData: ClientAppData, generateClientJoinedReport?: boolean }) {
+	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { appData: ClientAppData, generateClientJoinedReport?: boolean, joined?: number }) {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 
-		const { appData, generateClientJoinedReport, ...model } = config;
+		const { appData, generateClientJoinedReport, joined = Date.now(), ...model } = config;
 		
 		const result = new ObservedClient(model, this, appData);
 
@@ -104,7 +104,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				this.roomId,
 				this.callId,
 				result.clientId,
-				Date.now(),
+				joined,
 				result.userId,
 				result.marker,
 			));

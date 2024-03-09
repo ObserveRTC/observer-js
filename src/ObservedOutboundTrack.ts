@@ -124,10 +124,6 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		return this._stats;
 	}
 
-	public get uptimeInMs() {
-		return this._updated - this.created;
-	}
-
 	public get closed() {
 		return this._closed;
 	}
@@ -152,7 +148,8 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 	public update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number): void {
 		if (this._closed) return;
-
+		
+		const now = Date.now();
 		const report: OutboundAudioTrackReport | OutboundVideoTrackReport = {
 			serviceId: this.peerConnection.client.serviceId,
 			roomId: this.peerConnection.client.call.roomId,
@@ -169,7 +166,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		if (this.kind === 'audio') this.reports.addOutboundAudioTrackReport(report);
 		else if (this.kind === 'video') this.reports.addOutboundVideoTrackReport(report);
 
-		const elapsedTimeInMs = Math.max(1, timestamp - this._updated);
+		const elapsedTimeInMs = Math.max(1, now - this._updated);
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
 		const bitrate = ((sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0)) * 8 / (elapsedTimeInMs / 1000);
@@ -228,7 +225,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
 		}
 
-		this._updated = timestamp;
+		this._updated = now;
 		this.emit('update');
 	}
 

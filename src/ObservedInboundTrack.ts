@@ -136,10 +136,6 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		return this.peerConnection.reports;
 	}
 
-	public get uptimeInMs() {
-		return this._updated - this.created;
-	}
-
 	public set remoteOutboundTrack(track: ObservedOutboundTrack<Kind> | undefined) {
 		if (this._closed) return;
 		if (this._remoteOutboundTrack) return;
@@ -182,7 +178,8 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 
 	public update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number) {
 		if (this._closed) return;
-
+		
+		const now = Date.now();
 		const report: InboundAudioTrackReport | InboundVideoTrackReport = {
 			serviceId: this.peerConnection.client.call.serviceId,
 			roomId: this.peerConnection.client.call.roomId,
@@ -212,7 +209,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			this._model.sfuSinkId = sample.sfuSinkId;
 		}
 
-		const elapsedTimeInMs = Math.max(1, timestamp - this._updated);
+		const elapsedTimeInMs = Math.max(1, now - this._updated);
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
 		const bitrate = ((sample.bytesReceived ?? 0) - (lastStat?.bytesReceived ?? 0)) * 8 / (elapsedTimeInMs / 1000);
@@ -275,7 +272,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.deltaSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
 		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
 
-		this._updated = timestamp;
+		this._updated = now;
 		this.emit('update');
 	}
 }
