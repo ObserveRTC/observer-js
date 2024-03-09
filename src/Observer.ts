@@ -4,12 +4,14 @@ import { ReportsCollector } from './ReportsCollector';
 import { EventEmitter } from 'events';
 import { PartialBy } from './common/utils';
 import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
+import { ObserverSinkContext } from './common/types';
 
 const logger = createLogger('Observer');
 
 export type ObserverEvents = {
 	'newcall': [ObservedCall],
 	// 'newsfu': [ObservedSfu],
+	'reports': [ObserverSinkContext],
 	'close': [],
 }
 
@@ -72,8 +74,10 @@ export class Observer extends EventEmitter {
 	) {
 		super();
 		this.setMaxListeners(Infinity);
-		
+
 		logger.debug('Observer is created with config', this.config);
+
+		const onReports = (context: ObserverSinkContext) => this.emit('reports', context);
 		const onNewReport = (collectedReports: number) => {
 			if (!this.config.maxReports || this._closed) return;
 			if (this.config.maxReports < collectedReports) {
@@ -83,8 +87,12 @@ export class Observer extends EventEmitter {
 
 		this._emitReports();
 
-		this.once('close', () => this.reports.off('newreport', onNewReport));
+		this.once('close', () => { 
+			this.reports.off('newreport', onNewReport); 
+			this.reports.off('reports', onReports);
+		});
 		this.reports.on('newreport', onNewReport);
+		this.reports.on('reports', onReports);
 	}
 
 	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -140,6 +148,8 @@ export class Observer extends EventEmitter {
 			return logger.debug('Attempted to close twice');
 		}
 		this._closed = true;
+
+		this._observedCalls.forEach((call) => call.close());
 		
 		this.emit('close');
 	}
