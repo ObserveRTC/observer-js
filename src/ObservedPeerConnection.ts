@@ -85,6 +85,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		public readonly client: ObservedClient,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get serviceId() {

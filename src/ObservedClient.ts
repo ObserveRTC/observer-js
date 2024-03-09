@@ -95,6 +95,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		public readonly appData: AppData
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get clientId(): string {

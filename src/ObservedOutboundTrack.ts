@@ -70,6 +70,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		public readonly peerConnection: ObservedPeerConnection,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get serviceId() {

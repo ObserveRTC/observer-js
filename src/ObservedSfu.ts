@@ -32,6 +32,7 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		public readonly appData: AppData,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get serviceId() {

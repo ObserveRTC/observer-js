@@ -38,6 +38,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		public readonly appData: AppData,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get serviceId(): string {

@@ -71,6 +71,8 @@ export class Observer extends EventEmitter {
 		public readonly config: ObserverConfig,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
+		
 		logger.debug('Observer is created with config', this.config);
 		const onNewReport = (collectedReports: number) => {
 			if (!this.config.maxReports || this._closed) return;

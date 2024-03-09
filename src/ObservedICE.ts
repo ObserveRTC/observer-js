@@ -40,6 +40,7 @@ export class ObservedICE extends EventEmitter {
 		public readonly peerConnection: ObservedPeerConnection,
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public get reports() {
@@ -147,7 +148,7 @@ export class ObservedICE extends EventEmitter {
 		if (!candidatePair.nominated) return;
 
 		this._stats = candidatePair;
-		
+
 		if (
 			candidatePair.localCandidateId && 
             candidatePair.localCandidateId !== this._selectedLocalCandidateId && 
