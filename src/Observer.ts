@@ -1,10 +1,9 @@
 import { createLogger } from './common/logger';
-import { StorageProvider, createSimpleStorageProvider } from './storages/StorageProvider';
-import { ObservedCall, ObservedCallConfig } from './ObservedCall';
+import { ObservedCall, ObservedCallModel } from './ObservedCall';
 import { ReportsCollector } from './ReportsCollector';
 import { EventEmitter } from 'events';
 import { PartialBy } from './common/utils';
-import { createCallStartedEventReport } from './common/callEventReports';
+import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
 
 const logger = createLogger('Observer');
 
@@ -36,8 +35,6 @@ export type ObserverConfig = {
 	maxCollectingTimeInMs?: number | undefined;
 	
 	maxEntryIdleTimeInMs?: number | undefined;
-
-	storages?: StorageProvider;
 };
 
 export declare interface Observer {
@@ -63,9 +60,7 @@ export class Observer extends EventEmitter {
 			providedConfig
 		);
 
-		const storages = providedConfig.storages ?? createSimpleStorageProvider();
-		
-		return new Observer(config, storages);
+		return new Observer(config);
 	}
 
 	public readonly reports = new ReportsCollector();
@@ -74,7 +69,6 @@ export class Observer extends EventEmitter {
 	private _closed = false;
 	public constructor(
 		public readonly config: ObserverConfig,
-		public readonly storage: StorageProvider,
 	) {
 		super();
 		logger.debug('Observer is created with config', this.config);
@@ -91,25 +85,26 @@ export class Observer extends EventEmitter {
 		this.reports.on('newreport', onNewReport);
 	}
 
-	public async createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		config: PartialBy<ObservedCallConfig<T>, 'serviceId' | 'started'>
-	): Promise<ObservedCall<T>> {
+	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
+		config: PartialBy<ObservedCallModel, 'serviceId' | 'started'> & { appData: T }
+	): ObservedCall<T> {
 		if (this._closed) {
 			throw new Error('Attempted to create a call source on a closed observer');
 		}
 
-		const call = await ObservedCall.create({
+		const { appData, ...model } = config;
+		const call = new ObservedCall({
+			...model,
 			serviceId: this.config.defaultServiceId,
 			started: Date.now(),
-			...config,
-		}, this);
+		}, this, appData);
 
 		if (this._closed) throw new Error('Cannot create an observed call on a closed observer');
 		if (this._observedCalls.has(call.callId)) throw new Error(`Observed Call with id ${call.callId} already exists`);
 
 		call.once('close', () => {
 			this._observedCalls.delete(call.callId);
-			this.reports.addCallEventReport(createCallStartedEventReport(
+			this.reports.addCallEventReport(createCallEndedEventReport(
 				call.serviceId,
 				call.roomId,
 				call.callId,

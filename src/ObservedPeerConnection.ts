@@ -1,12 +1,9 @@
 import { EventEmitter } from 'events';
-import * as Models from './models/Models';
-import { StorageProvider } from './storages/StorageProvider';
 import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
-import { ObservedInboundTrack, ObservedInboundTrackConfig } from './ObservedInboundTrack';
-import { ObservedOutboundTrack, ObservedOutboundTrackConfig } from './ObservedOutboundTrack';
+import { ObservedInboundTrack, ObservedInboundTrackModel } from './ObservedInboundTrack';
+import { ObservedOutboundTrack, ObservedOutboundTrackModel } from './ObservedOutboundTrack';
 import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
-import { createSingleExecutor } from './common/SingleExecutor';
 import { ObservedICE } from './ObservedICE';
 
 export type ObservedPeerConnectionEvents = {
@@ -18,8 +15,9 @@ export type ObservedPeerConnectionEvents = {
 	newoutboundvideotrack: [ObservedOutboundTrack<'video'>],
 };
 
-export type ObservedPeerConnectionConfig = {
+export type ObservedPeerConnectionModel = {
 	peerConnectionId: string;
+	label?: string;
 };
 
 export type ObservedPeerConnectionStats = Omit<PeerConnectionTransport, 'transportId' | 'label'>;
@@ -32,27 +30,7 @@ export declare interface ObservedPeerConnection {
 }
 
 export class ObservedPeerConnection extends EventEmitter {
-	public static async create(
-		config: ObservedPeerConnectionConfig,
-		client: ObservedClient,
-		storageProvider: StorageProvider,
-	): Promise<ObservedPeerConnection> {
-		const model = new Models.PeerConnection({
-			roomId: client.roomId,
-			serviceId: client.serviceId,
-			callId: client.callId,
-			clientId: client.clientId,
-			peerConnectionId: config.peerConnectionId,
-		});
-
-		const alreadyInserted = await storageProvider.peerConnectionStorage.insert(config.peerConnectionId, model);
-
-		if (alreadyInserted) throw new Error(`PeerConnection with id ${config.peerConnectionId} already exists`);
-
-		return new ObservedPeerConnection(model, client, storageProvider);
-	}
-
-	public created = Date.now();
+	public readonly created = Date.now();
 
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
@@ -99,18 +77,40 @@ export class ObservedPeerConnection extends EventEmitter {
 	private readonly _inboundVideoTracks = new Map<string, ObservedInboundTrack<'video'>>();
 	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundTrack<'audio'>>();
 	private readonly _outboundVideoTracks = new Map<string, ObservedOutboundTrack<'video'>>();
-	private readonly _execute = createSingleExecutor();
 	
-	private constructor(
-		private readonly _model: Models.PeerConnection,
+	public constructor(
+		private readonly _model: ObservedPeerConnectionModel,
 		public readonly client: ObservedClient,
-		private readonly _storageProvider: StorageProvider,
 	) {
 		super();
 	}
 
+	public get serviceId() {
+		return this.client.serviceId;
+	}
+
+	public get roomId() {
+		return this.client.roomId;
+	}
+
+	public get callId() {
+		return this.client.callId;
+	}
+
+	public get clientId() {
+		return this.client.clientId;
+	}
+
+	public get mediaUnitId() {
+		return this.client.mediaUnitId;
+	}
+
 	public get label() {
 		return this._model.label;
+	}
+
+	public set label(value: string | undefined) {
+		this._model.label = value;
 	}
 
 	public get usingTURN() {
@@ -175,9 +175,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		Array.from(this._outboundAudioTracks.values()).forEach((track) => track.close());
 		Array.from(this._outboundVideoTracks.values()).forEach((track) => track.close());
 
-		this._execute(() => this._storageProvider.peerConnectionStorage.remove(this.peerConnectionId))
-			.catch(() => void 0)
-			.finally(() => this.emit('close')); 
+		this.emit('close');
 	}
 
 	public getTrack(trackId: string): ObservedInboundTrack<'audio'> | ObservedInboundTrack<'video'> | ObservedOutboundTrack<'audio'> | ObservedOutboundTrack<'video'> | undefined {
@@ -297,14 +295,13 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
 	}
 
-	public async update(sample: PeerConnectionTransport, timestamp: number) {
+	public update(sample: PeerConnectionTransport, timestamp: number) {
 		if (this._closed) return;
 		if (sample.peerConnectionId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
 
 		this._sample = sample;
 		if (this._model.label !== sample.label) {
 			this._model.label = sample.label;
-			await this._save().catch(() => void 0);
 		}
 
 		const report: PeerConnectionTransportReport = {
@@ -321,138 +318,79 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this.reports.addPeerConnectionTransportReports(report);
 		
-		this._updated = timestamp;
+		this._updated = Date.now();
 		this.emit('update');
 	}
 
-	public async createInboundAudioTrack(config: Omit<ObservedInboundTrackConfig<'audio'>, 'kind'>): Promise<ObservedInboundTrack<'audio'>> {
+	public createInboundAudioTrack(config: Omit<ObservedInboundTrackModel<'audio'>, 'kind'>): ObservedInboundTrack<'audio'> {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-
-		const result = await ObservedInboundTrack.create<'audio'>({
-			kind: 'audio',
-			trackId: config.trackId,
-		}, this, this._storageProvider);
-
-		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
-
-		if (pendingTracksTimestamp) {
-			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
-			result.created = pendingTracksTimestamp;
-		}
 		
+		const result = new ObservedInboundTrack<'audio'>({
+			kind: 'audio',
+			...config,
+		}, this);
+
 		result.on('close', () => {
 			this._inboundAudioTracks.delete(result.trackId);
-			this._model.inboundTrackIds = this._model.inboundTrackIds.filter((id) => id !== result.trackId);
-			!this._closed &&this._save().catch(() => void 0);
 		});
 		this._inboundAudioTracks.set(result.trackId, result);
-		this._model.inboundTrackIds = [ ...(new Set<string>([ ...this._model.inboundTrackIds, result.trackId ])) ];
-		await this._save();
 
 		this.emit('newinboudaudiotrack', result);
 
 		return result;
 	}
 
-	public async createInboundVideoTrack(config: Omit<ObservedInboundTrackConfig<'video'>, 'kind'>): Promise<ObservedInboundTrack<'video'>> {
+	public createInboundVideoTrack(config: Omit<ObservedInboundTrackModel<'video'>, 'kind'>): ObservedInboundTrack<'video'> {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-
-		const result = await ObservedInboundTrack.create<'video'>({
-			kind: 'video',
-			trackId: config.trackId,
-		}, this, this._storageProvider);
 		
-		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
-
-		if (pendingTracksTimestamp) {
-			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
-			result.created = pendingTracksTimestamp;
-		}
+		const result = new ObservedInboundTrack<'video'>({
+			kind: 'video',
+			...config,
+		}, this);
 
 		result.on('close', () => {
 			this._inboundVideoTracks.delete(result.trackId);
-			this._model.inboundTrackIds = this._model.inboundTrackIds.filter((id) => id !== result.trackId);
-			!this._closed &&this._save().catch(() => void 0);
 		});
 		this._inboundVideoTracks.set(result.trackId, result);
-		this._model.inboundTrackIds = [ ...(new Set<string>([ ...this._model.inboundTrackIds, result.trackId ])) ];
-		await this._save();
 
-		this.emit('newinboudvideotrack', result);	
-		
+		this.emit('newinboudvideotrack', result);
+
 		return result;
 	}
 
-	public async createOutboundAudioTrack(config: Omit<ObservedOutboundTrackConfig<'audio'>, 'kind'>): Promise<ObservedOutboundTrack<'audio'>> {
+	public createOutboundAudioTrack(config: Omit<ObservedOutboundTrackModel<'audio'>, 'kind'>): ObservedOutboundTrack<'audio'> {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = await ObservedOutboundTrack.create<'audio'>({
+		const result = new ObservedOutboundTrack<'audio'>({
 			kind: 'audio',
-			trackId: config.trackId,
-		}, this, this._storageProvider);
-
-		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
-
-		if (pendingTracksTimestamp) {
-			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
-			result.created = pendingTracksTimestamp;
-		}
+			...config,
+		}, this);
 
 		result.on('close', () => {
 			this._outboundAudioTracks.delete(result.trackId);
-			this._model.outboundTrackIds = this._model.outboundTrackIds.filter((id) => id !== result.trackId);
-			
-			result.sfuStreamId && this.client.call.sfuStreamIdToOutboundAudioTrack.delete(result.sfuStreamId);
-			!this._closed &&this._save().catch(() => void 0);
 		});
 		this._outboundAudioTracks.set(result.trackId, result);
-		this._model.outboundTrackIds = [ ...(new Set<string>([ ...this._model.outboundTrackIds, result.trackId ])) ];
-		
-		result.sfuStreamId && this.client.call.sfuStreamIdToOutboundAudioTrack.set(result.sfuStreamId, result);
-		await this._save();
 
 		this.emit('newoutboundaudiotrack', result);
 
 		return result;
 	}
 
-	public async createOutboundVideoTrack(config: Omit<ObservedOutboundTrackConfig<'video'>, 'kind'>): Promise<ObservedOutboundTrack<'video'>> {
+	public createOutboundVideoTrack(config: Omit<ObservedOutboundTrackModel<'video'>, 'kind'>): ObservedOutboundTrack<'video'> {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = await ObservedOutboundTrack.create<'video'>({
+		const result = new ObservedOutboundTrack<'video'>({
 			kind: 'video',
-			trackId: config.trackId,
-		}, this, this._storageProvider);
-
-		const pendingTracksTimestamp = this.client.ωpendingCreatedTracksTimestamp.get(result.trackId);
-
-		if (pendingTracksTimestamp) {
-			this.client.ωpendingCreatedTracksTimestamp.delete(result.trackId);
-			result.created = pendingTracksTimestamp;
-		}
+			...config,
+		}, this);
 
 		result.on('close', () => {
 			this._outboundVideoTracks.delete(result.trackId);
-			result.sfuStreamId && this.client.call.sfuStreamIdToOutboundVideoTrack.set(result.sfuStreamId, result);
-			this._model.outboundTrackIds = this._model.outboundTrackIds.filter((id) => id !== result.trackId);
-			!this._closed && this._save().catch(() => void 0);
 		});
 		this._outboundVideoTracks.set(result.trackId, result);
-		result.sfuStreamId && this.client.call.sfuStreamIdToOutboundVideoTrack.set(result.sfuStreamId, result);
-		this._model.outboundTrackIds = [ ...(new Set<string>([ ...this._model.outboundTrackIds, result.trackId ])) ];
-		await this._save();
 
 		this.emit('newoutboundvideotrack', result);
-		
-		return result;
-	}
 
-	private async _save() {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		return this._execute(async () => {
-			if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-			await this._storageProvider.peerConnectionStorage.set(this.peerConnectionId, this._model);
-		});
+		return result;
 	}
 }

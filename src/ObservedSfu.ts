@@ -1,14 +1,11 @@
 import { EventEmitter } from 'events';
-import * as Models from './models/Models';
 import { Observer } from './Observer';
-import { createSingleExecutor } from './common/SingleExecutor';
 import { SfuSample } from '@observertc/sample-schemas-js';
 
-export type ObservedSfuConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
+export type ObservedSfuModel= {
 	serviceId: string;
 	sfuId: string;
 	joined?: number;
-	appData: AppData;
 };
 
 export type ObservedSfuEvents = {
@@ -24,36 +21,13 @@ export declare interface ObservedSfu {
 }
 
 export class ObservedSfu<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
-	public static async create<T extends Record<string, unknown> = Record<string, unknown>>(
-		config: ObservedSfuConfig<T>, 
-		observer: Observer,
-		// reportsCollector: ReportsCollector,
-	) {
-		const model = new Models.Sfu({
-			serviceId: config.serviceId,
-			sfuId: config.sfuId,
-			sfuTransportIds: [],
-			joined: BigInt(config.joined ?? Date.now()),
-		});
-		const result = new ObservedSfu(
-			model,
-			observer,
-			config.appData,
-		);
-
-		const alreadyInserted = await observer.storage.sfuStorage.insert(config.sfuId, model);
-
-		if (alreadyInserted) throw new Error(`Sfu with id ${config.sfuId} already exists`);
-
-		return result;
-	}
+	public readonly created = Date.now();
 
 	private _updated = Date.now();
-	private readonly _execute = createSingleExecutor();
 	private _closed = false;
 	
-	private constructor(
-		private readonly _model: Models.Sfu,
+	public constructor(
+		private readonly _model: ObservedSfuModel,
 		public readonly observer: Observer,
 		public readonly appData: AppData,
 	) {
@@ -75,6 +49,10 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		return Number(this._model.joined!);
 	}
 
+	public get updated() {
+		return this._updated;
+	}
+
 	public get closed() {
 		return this._closed;
 	}
@@ -85,24 +63,11 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		this.emit('close');
 	}
 
-	public async update(sample: SfuSample) {
+	public update(sample: SfuSample) {
 		if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
 		if (sample.sfuId !== this.sfuId) throw new Error(`Sfu ${this.sfuId} is not the same as sample.sfuId`);
 		
-		return this._execute(async () => {
-			if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
-			await this._save();
-			this.emit('update');
-		});
+		this._updated = Date.now();
+		this.emit('update');
 	}
-
-	private async _save() {
-		if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
-		
-		return this._execute(async () => {
-			if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
-			await this.observer.storage.sfuStorage.set(this.sfuId, this._model);
-		});		
-	}
-	
 }

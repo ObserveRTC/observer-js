@@ -1,14 +1,11 @@
 import { EventEmitter } from 'events';
-import { StorageProvider } from './storages/StorageProvider';
-import * as Models from './models/Models';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { InboundAudioTrack, InboundVideoTrack } from '@observertc/sample-schemas-js';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { InboundAudioTrackReport, InboundVideoTrackReport } from '@observertc/report-schemas-js';
 import { MediaKind } from './common/types';
-import { createSingleExecutor } from './common/SingleExecutor';
 
-export type ObservedInboundTrackConfig<K extends MediaKind> = {
+export type ObservedInboundTrackModel<K extends MediaKind> = {
 	trackId: string;
 	kind: K;
 	sfuStreamId?: string;
@@ -51,35 +48,9 @@ export declare interface ObservedInboundTrack<Kind extends MediaKind> {
 }
 
 export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
-	public static async create<K extends MediaKind>(
-		config: ObservedInboundTrackConfig<K>,
-		peerConnection: ObservedPeerConnection,
-		storageProvider: StorageProvider,
-	) {
-		const model = new Models.InboundTrack({
-			serviceId: peerConnection.client.serviceId,
-			roomId: peerConnection.client.roomId,
-			callId: peerConnection.client.callId,
-			clientId: peerConnection.client.clientId,
-			mediaUnitId: peerConnection.client.mediaUnitId,
-			peerConnectionId: peerConnection.peerConnectionId,
-			trackId: config.trackId,
-			kind: config.kind,
-			sfuStreamId: config.sfuStreamId,
-			sfuSinkId: config.sfuSinkId,
-		});
-
-		const alreadyInserted = await storageProvider.inboundTrackStorage.insert(config.trackId, model);
-
-		if (alreadyInserted) throw new Error(`InboundAudioTrack with id ${config.trackId} already exists`);
-
-		return new ObservedInboundTrack<K>(model, peerConnection, storageProvider);
-	}
-	
-	public created = Date.now();
+	public readonly created = Date.now();
 
 	private readonly _stats = new Map<number, ObservedInboundTrackStats<Kind>>();
-	private readonly _execute = createSingleExecutor();
 	
 	private _closed = false;
 	private _updated = Date.now();
@@ -106,52 +77,43 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public deltaReceivedSamples = 0;
 	public deltaSilentConcealedSamples = 0;
 	
-	private constructor(
-		private readonly _model: Models.InboundTrack,
+	public constructor(
+		private readonly _model: ObservedInboundTrackModel<Kind>,
 		public readonly peerConnection: ObservedPeerConnection,
-		private readonly _storageProvider: StorageProvider,
 	) {
 		super();
 	}
 
 	public get serviceId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.serviceId!;
+		return this.peerConnection.serviceId;
 	}
 
 	public get roomId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.roomId!;
+		return this.peerConnection.roomId;
 	}
 
 	public get callId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.callId!;
+		return this.peerConnection.callId;
 	}
 
 	public get clientId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.clientId!;
+		return this.peerConnection.clientId;
 	}
 
 	public get mediaUnitId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.mediaUnitId!;
+		return this.peerConnection.mediaUnitId;
 	}
 
 	public get peerConnectionId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.peerConnectionId!;
+		return this.peerConnection.peerConnectionId;
 	}
 
 	public get trackId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.trackId!;
+		return this._model.trackId;
 	}
 
 	public get kind(): Kind {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.kind! as Kind;
+		return this._model.kind as Kind;
 	}
 
 	public get sfuStreamId() {
@@ -202,9 +164,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 
 		this._closed = true;
 
-		this._execute(() => this._storageProvider.inboundTrackStorage.remove(this.trackId))
-			.catch(() => void 0)
-			.finally(() => this.emit('close'));
+		this.emit('close');
 	}
 
 	public resetMetrics() {
@@ -220,9 +180,8 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.fractionLoss = 0;
 	}
 
-	public async update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number) {
+	public update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number) {
 		if (this._closed) return;
-		let executeSave = false;
 
 		const report: InboundAudioTrackReport | InboundVideoTrackReport = {
 			serviceId: this.peerConnection.client.call.serviceId,
@@ -247,12 +206,10 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		
 		if (!this._model.sfuStreamId && sample.sfuStreamId) {
 			this._model.sfuStreamId = sample.sfuStreamId;
-			executeSave = true;
 		}
 
 		if (!this._model.sfuSinkId && sample.sfuSinkId) {
 			this._model.sfuSinkId = sample.sfuSinkId;
-			executeSave = true;
 		}
 
 		const elapsedTimeInMs = Math.max(1, timestamp - this._updated);
@@ -318,15 +275,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.deltaSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
 		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
 
-		if (executeSave) await this._save();
-
 		this._updated = timestamp;
 		this.emit('update');
-	}
-
-	private async _save() {
-		if (this._closed) throw new Error(`OutboundTrack ${this.trackId} is closed`);
-		
-		return this._storageProvider.inboundTrackStorage.set(this.trackId, this._model);
 	}
 }
