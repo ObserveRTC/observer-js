@@ -110,6 +110,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				result.marker,
 			));
 		}
+
+		this.emit('newclient', result);
 		
 		return result;
 	}

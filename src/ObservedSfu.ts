@@ -13,11 +13,14 @@ export type ObservedSfuEvents = {
 	close: [],
 };
 
-export declare interface ObservedSfu {
+export declare interface ObservedSfu<AppData extends Record<string, unknown> = Record<string, unknown>> {
 	on<U extends keyof ObservedSfuEvents>(event: U, listener: (...args: ObservedSfuEvents[U]) => void): this;
 	off<U extends keyof ObservedSfuEvents>(event: U, listener: (...args: ObservedSfuEvents[U]) => void): this;
 	once<U extends keyof ObservedSfuEvents>(event: U, listener: (...args: ObservedSfuEvents[U]) => void): this;
 	emit<U extends keyof ObservedSfuEvents>(event: U, ...args: ObservedSfuEvents[U]): boolean;
+
+	readonly appData: AppData;
+	update(sample: SfuSample): void;
 }
 
 export class ObservedSfu<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
@@ -67,7 +70,7 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 	public update(sample: SfuSample) {
 		if (this._closed) throw new Error(`Sfu ${this.sfuId} is closed`);
 		if (sample.sfuId !== this.sfuId) throw new Error(`Sfu ${this.sfuId} is not the same as sample.sfuId`);
-		
+
 		this._updated = Date.now();
 		this.emit('update');
 	}

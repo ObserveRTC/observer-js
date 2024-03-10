@@ -14,6 +14,7 @@ export type ObservedPeerConnectionEvents = {
 	newinboudvideotrack: [ObservedInboundTrack<'video'>],
 	newoutboundaudiotrack: [ObservedOutboundTrack<'audio'>],
 	newoutboundvideotrack: [ObservedOutboundTrack<'video'>],
+	newdatachannel: [ObservedDataChannel],
 };
 
 export type ObservedPeerConnectionModel = {
@@ -420,6 +421,8 @@ export class ObservedPeerConnection extends EventEmitter {
 			this._dataChannels.delete(result.channelId);
 		});
 		this._dataChannels.set(result.channelId, result);
+
+		this.emit('newdatachannel', result);
 
 		return result;
 	}
