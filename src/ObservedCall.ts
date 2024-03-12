@@ -92,10 +92,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		const { appData, generateClientJoinedReport, joined = Date.now(), ...model } = config;
 		
 		const result = new ObservedClient(model, this, appData);
+		const onUpdate = () => this.emit('update');
 
 		result.once('close', () => {
+			result.off('update', onUpdate);
 			this._clients.delete(result.clientId);
 		});
+		result.on('update', onUpdate);
 		this._clients.set(result.clientId, result);
 
 		if (generateClientJoinedReport) {

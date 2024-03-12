@@ -49,6 +49,7 @@ export class ObservedDataChannel extends EventEmitter	{
 	private _closed = false;
 	private _updated = Date.now();
 	public bitrate = 0;
+	public marker?: string;
 
 	public totalReceivedMessages = 0;
 	public totalSentMessages = 0;
@@ -158,6 +159,7 @@ export class ObservedDataChannel extends EventEmitter	{
 			...sample,
 			timestamp,
 			sampleSeq: -1,
+			marker: this.marker,
 		};
 
 		this.reports.addClientDataChannelReport(report);

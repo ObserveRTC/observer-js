@@ -47,6 +47,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 	public bitrate = 0;
 	public rttInMs?: number;
+	public marker?: string;
 
 	public totalLostPackets = 0;
 	public totalSentPackets = 0;
@@ -162,6 +163,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			...sample,
 			timestamp,
 			sampleSeq: -1,
+			marker: this.marker,
 		};
 
 		if (this.kind === 'audio') this.reports.addOutboundAudioTrackReport(report);

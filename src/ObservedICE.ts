@@ -27,6 +27,8 @@ export class ObservedICE extends EventEmitter {
 		return new ObservedICE(peerConnection);
 	}
 
+	public marker?: string;
+
 	private readonly _localCandidates = new Map<string, IceLocalCandidate>();
 	private readonly _remoteCandidates = new Map<string, IceLocalCandidate>();
 	
@@ -141,6 +143,7 @@ export class ObservedICE extends EventEmitter {
 			timestamp,
 			...candidatePair,
 			sampleSeq: -1, // deprecated
+			marker: this.marker,
 		};
 
 		this.reports.addIceCandidatePairReport(report);

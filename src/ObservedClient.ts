@@ -8,6 +8,7 @@ import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
 import { isValidUuid } from './common/utils';
 import { createClientLeftEventReport } from './common/callEventReports';
 import { CallEventType } from './common/CallEventType';
+import { ObservedSfu } from './ObservedSfu';
 
 const logger = createLogger('ObservedClient');
 
@@ -58,7 +59,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 	public readonly created = Date.now();
 	public _updated = Date.now();
-
+	public sfuId?: string;
+	
 	private readonly _peerConnections = new Map<string, ObservedPeerConnection>();
 	
 	private _closed = false;
@@ -96,6 +98,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	) {
 		super();
 		this.setMaxListeners(Infinity);
+	}
+
+	public get sfu(): ObservedSfu | undefined {
+		if (!this.sfuId) return;
+		
+		return this.call.observer.observedSfus.get(this.sfuId);
 	}
 
 	public get clientId(): string {
@@ -203,6 +211,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 		if (this._model.marker !== sample.marker) {
 			this._model.marker = sample.marker;
+			this._peerConnections.forEach((peerConnection) => (peerConnection.marker = sample.marker));
 		}
 
 		if (this._timeZoneOffsetInHours !== sample.timeZoneOffsetInHours) {

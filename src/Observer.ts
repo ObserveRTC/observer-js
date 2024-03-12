@@ -5,12 +5,13 @@ import { EventEmitter } from 'events';
 import { PartialBy } from './common/utils';
 import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
 import { ObserverSinkContext } from './common/types';
+import { ObservedSfu, ObservedSfuModel } from './ObservedSfu';
 
 const logger = createLogger('Observer');
 
 export type ObserverEvents = {
 	'newcall': [ObservedCall],
-	// 'newsfu': [ObservedSfu],
+	'newsfu': [ObservedSfu],
 	'reports': [ObserverSinkContext],
 	'close': [],
 }
@@ -67,6 +68,8 @@ export class Observer extends EventEmitter {
 
 	public readonly reports = new ReportsCollector();
 	private readonly _observedCalls = new Map<string, ObservedCall>();
+	private readonly _observedSfus = new Map<string, ObservedSfu>();
+
 	private _reportTimer?: ReturnType<typeof setTimeout>;
 	private _closed = false;
 	public constructor(
@@ -135,8 +138,35 @@ export class Observer extends EventEmitter {
 		return call;
 	}
 
+	public createObservedSfu<AppData extends Record<string, unknown> = Record<string, unknown>>(
+		model: ObservedSfuModel,
+		appData: AppData,
+	): ObservedSfu<AppData> {
+		if (this._closed) {
+			throw new Error('Attempted to create an sfu source on a closed observer');
+		}
+
+		const sfu = new ObservedSfu<AppData>(model, this, appData);
+
+		if (this._closed) throw new Error('Cannot create an observed sfu on a closed observer');
+		if (this._observedSfus.has(sfu.sfuId)) throw new Error(`Observed SFU with id ${sfu.sfuId} already exists`);
+
+		sfu.once('close', () => {
+			this._observedSfus.delete(sfu.sfuId);
+		});
+
+		this._observedSfus.set(sfu.sfuId, sfu);
+		this.emit('newsfu', sfu);
+		
+		return sfu;
+	}
+
 	public get observedCalls(): ReadonlyMap<string, ObservedCall> {
 		return this._observedCalls;
+	}
+
+	public get observedSfus(): ReadonlyMap<string, ObservedSfu> {
+		return this._observedSfus;
 	}
 
 	public get closed() {

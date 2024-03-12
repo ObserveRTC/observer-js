@@ -2,14 +2,7 @@ export interface ClientSummary {
 	clientId: string;
 	userId: string;
 	joined: number;
-	left: number;
-}
-
-export interface DetectedIssues {
-	clientId: string,
-	issue: string,
-	started: number,
-	ended: number,
+	durationInMs: number;
 }
 
 export interface CallSummary {
@@ -17,7 +10,6 @@ export interface CallSummary {
 	roomId: string;
 	callId: string;
 	started: number;
-	ended: number;
+	durationInMs: number;
 	clients: ClientSummary[];
-	detectedIssues: DetectedIssues[];
 }

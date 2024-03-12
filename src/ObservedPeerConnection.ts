@@ -73,6 +73,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	private _closed = false;
 	private _updated = Date.now();
 	private _sample?: ObservedPeerConnectionStats;
+	private _marker?: string;
 
 	public readonly ICE = ObservedICE.create(this);
 	private readonly _inboundAudioTracks = new Map<string, ObservedInboundTrack<'audio'>>();
@@ -168,6 +169,20 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public get uptimeInMs() {
 		return this._updated - this.created;
+	}
+
+	public get marker() {
+		return this._marker;
+	}
+
+	public set marker(value: string | undefined) {
+		this._marker = value;
+		this._inboundAudioTracks.forEach((track) => (track.marker = value));
+		this._inboundVideoTracks.forEach((track) => (track.marker = value));
+		this._outboundAudioTracks.forEach((track) => (track.marker = value));
+		this._outboundVideoTracks.forEach((track) => (track.marker = value));
+		this._dataChannels.forEach((channel) => (channel.marker = value));
+		this.ICE.marker = value;
 	}
 
 	public get closed() {
@@ -330,6 +345,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			...sample,
 			timestamp,
 			sampleSeq: -1, // deprecated
+			marker: this.marker,
 		};
 
 		this.reports.addPeerConnectionTransportReports(report);

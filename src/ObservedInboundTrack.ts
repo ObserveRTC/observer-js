@@ -58,6 +58,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public bitrate = 0;
 	public rttInMs?: number;
 	public fractionLoss = 0;
+	public marker?: string;
 
 	public totalLostPackets = 0;
 	public totalReceivedPackets = 0;
@@ -197,6 +198,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			remoteUserId: this.remoteOutboundTrack?.peerConnection.client.userId,
 			remoteTrackId: this.remoteOutboundTrack?.trackId,
 			remotePeerConnectionId: this.remoteOutboundTrack?.peerConnection.peerConnectionId,
+			marker: this.marker,
 		};
 
 		if (this.kind === 'audio') this.reports.addInboundAudioTrackReport(report);
