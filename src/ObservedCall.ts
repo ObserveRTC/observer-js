@@ -25,11 +25,14 @@ export declare interface ObservedCall {
 }
 
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
+	public readonly created = Date.now();
+
 	private readonly _clients = new Map<string, ObservedClient>();
 	
 	public readonly sfuStreamIdToOutboundAudioTrack = new Map<string | number, ObservedOutboundTrack<'audio'>>();
 	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundTrack<'video'>>();
 	private _closed = false;
+	private _updated = Date.now();
 	private _ended?: number;
 
 	public constructor(
@@ -92,7 +95,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		const { appData, generateClientJoinedReport, joined = Date.now(), ...model } = config;
 		
 		const result = new ObservedClient(model, this, appData);
-		const onUpdate = () => this.emit('update');
+		const onUpdate = () => {
+			this._updated = Date.now();
+			this.emit('update');
+		};
 
 		result.once('close', () => {
 			result.off('update', onUpdate);

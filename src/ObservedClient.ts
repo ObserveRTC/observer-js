@@ -79,10 +79,26 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public totalDataChannelBytesReceived = 0;
 	public totalSentBytes = 0;
 	public totalReceivedBytes = 0;
+	public totalReceivedAudioBytes = 0;
+	public totalReceivedVideoBytes = 0;
+	public totalSentAudioBytes = 0;
+	public totalSentVideoBytes = 0;
+
+	public deltaReceivedAudioBytes = 0;
+	public deltaReceivedVideoBytes = 0;
+	public deltaSentAudioBytes = 0;
+	public deltaSentVideoBytes = 0;
+	public deltaDataChannelBytesSent = 0;
+	public deltaDataChannelBytesReceived = 0;
+	public deltaInboundPacketsLost = 0;
+	public deltaInboundPacketsReceived = 0;
+	public deltaOutboundPacketsSent = 0;
 
 	public avgRttInMs?: number;
-	public sendingBitrate?: number;
-	public receivingBitrate?: number;
+	public outboundAudioBitrate?: number;
+	public outboundVideoBitrate?: number;
+	public inboundAudioBitrate?: number;
+	public inboundVideoBitrate?: number;
 
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
@@ -677,39 +693,64 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		// update metrics
 		const wasUsingTURN = this.usingTURN;
+		const elapsedTimeInMs = now - this._updated;
 
 		this.usingTURN = false;
 		this.availableIncomingBitrate = 0;
 		this.availableOutgoingBitrate = 0;
-		this.totalSentBytes = 0;
-		this.totalReceivedBytes = 0;
-		this.totalOutboundPacketsSent = 0;
-		this.totalInboundPacketsReceived = 0;
-		this.totalInboundPacketsLost = 0;
-		this.totalDataChannelBytesSent = 0;
-		this.totalDataChannelBytesReceived = 0;
-		this.sendingBitrate = 0;
-		this.receivingBitrate = 0;
+		this.deltaInboundPacketsLost = 0;
+		this.deltaInboundPacketsReceived = 0;
+		this.deltaOutboundPacketsSent = 0;
+		this.deltaReceivedAudioBytes = 0;
+		this.deltaReceivedVideoBytes = 0;
+		this.deltaSentAudioBytes = 0;
+		this.deltaSentVideoBytes = 0;
+		this.deltaDataChannelBytesReceived = 0;
+		this.deltaDataChannelBytesSent = 0;
+		
+		this.outboundAudioBitrate = 0;
+		this.outboundVideoBitrate = 0;
+		this.inboundAudioBitrate = 0;
+		this.inboundVideoBitrate = 0;
 		let sumRttInMs = 0;
 
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
 			peerConnection.updateMetrics();
-			this.totalSentBytes += peerConnection.totalSentAudioBytes + peerConnection.totalSentVideoBytes;
-			this.totalReceivedBytes += peerConnection.totalReceivedAudioBytes + peerConnection.totalReceivedVideoBytes;
-			this.totalOutboundPacketsSent += peerConnection.totalOutboundPacketsSent;
-			this.totalInboundPacketsReceived += peerConnection.totalInboundPacketsReceived;
-			this.totalInboundPacketsLost += peerConnection.totalInboundPacketsLost;
-			this.totalDataChannelBytesSent += peerConnection.totalDataChannelBytesSent;
-			this.totalDataChannelBytesReceived += peerConnection.totalDataChannelBytesReceived;
-			this.sendingBitrate += peerConnection.sendingAudioBitrate + peerConnection.sendingVideoBitrate;
-			this.receivingBitrate += peerConnection.receivingAudioBitrate + peerConnection.receivingVideoBitrate;
+			this.deltaInboundPacketsLost += peerConnection.deltaInboundPacketsLost;
+			this.deltaInboundPacketsReceived += peerConnection.deltaInboundPacketsReceived;
+			this.deltaOutboundPacketsSent += peerConnection.deltaOutboundPacketsSent;
+			this.deltaReceivedAudioBytes += peerConnection.deltaReceivedAudioBytes;
+			this.deltaReceivedVideoBytes += peerConnection.deltaReceivedVideoBytes;
+			this.deltaSentAudioBytes += peerConnection.deltaSentAudioBytes;
+			this.deltaSentVideoBytes += peerConnection.deltaSentVideoBytes;
+			this.deltaDataChannelBytesReceived += peerConnection.deltaDataChannelBytesReceived;
+			this.deltaDataChannelBytesSent += peerConnection.deltaDataChannelBytesSent;
+
 			this.availableIncomingBitrate += peerConnection.availableIncomingBitrate ?? 0;
 			this.availableOutgoingBitrate += peerConnection.availableOutgoingBitrate ?? 0;
+
 			sumRttInMs += peerConnection.avgRttInMs ?? 0;
 
 			if (peerConnection.usingTURN) this.usingTURN = true;
 		}
+
+		this.totalSentBytes += this.deltaSentAudioBytes + this.deltaSentVideoBytes;
+		this.totalReceivedBytes += this.deltaReceivedAudioBytes + this.deltaReceivedVideoBytes;
+		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
+		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;	
+		this.totalSentAudioBytes += this.deltaSentAudioBytes;
+		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
+		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
+		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		
+		this.outboundAudioBitrate = (this.deltaSentAudioBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
+		this.outboundVideoBitrate = (this.deltaSentVideoBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
+		this.inboundAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
+		this.inboundVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
 
 		this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
 			

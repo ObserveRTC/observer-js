@@ -207,6 +207,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsLost ?? 0), 0);
 		this.totalSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsSent ?? 0), 0);
 		this.totalSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesSent ?? 0), 0);
+		this.totalSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentPackets ?? 0), 0);
 
 		this.deltaEncodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaEncodedFrames ?? 0), 0);
 		this.deltaSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentFrames ?? 0), 0);
