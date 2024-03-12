@@ -209,13 +209,21 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaInboundPacketsLost = 0;
 		this.deltaInboundPacketsReceived = 0;
 		this.deltaOutboundPacketsSent = 0;
-
 		this.deltaDataChannelBytesSent = 0;
 		this.deltaDataChannelBytesReceived = 0;
+		this.deltaInboundReceivedBytes = 0;
+		this.deltaOutboundSentBytes = 0;
+		
 		this.deltaReceivedAudioBytes = 0;
 		this.deltaReceivedVideoBytes = 0;
+		this.deltaReceivedAudioPackets = 0;
+		this.deltaReceivedVideoPackets = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
+		this.sendingAudioBitrate = 0;
+		this.sendingVideoBitrate = 0;
+		this.receivingAudioBitrate = 0;
+		this.receivingVideoBitrate = 0;
 
 		this._inboundAudioTracks.forEach((track) => track.resetMetrics());
 		this._inboundVideoTracks.forEach((track) => track.resetMetrics());
@@ -224,21 +232,6 @@ export class ObservedPeerConnection extends EventEmitter {
 	}
 
 	public updateMetrics() {
-		// this.totalInboundPacketsLost = 0;
-		// this.totalInboundPacketsReceived = 0;
-		// this.totalOutboundPacketsSent = 0;
-		// this.totalDataChannelBytesSent = 0;
-		// this.totalDataChannelBytesReceived = 0;
-	
-		// this.totalSentAudioBytes = 0;
-		// this.totalSentVideoBytes = 0;
-		// this.totalReceivedAudioBytes = 0;
-		// this.totalReceivedVideoBytes = 0;
-		// this.sendingAudioBitrate = 0;
-		// this.sendingVideoBitrate = 0;
-		// this.receivingAudioBitrate = 0;
-		// this.receivingVideoBitrate = 0;
-
 		let sumRttInMs = 0;
 
 		this._inboundAudioTracks.forEach((track) => {

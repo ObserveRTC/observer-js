@@ -8,7 +8,6 @@ export type ObservedCallModel = {
 	serviceId: string;
 	roomId: string;
 	callId: string;
-	started: number,
 };
 
 export type ObservedCallEvents = {
@@ -63,8 +62,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this._model.callId!;
 	}
 
-	public get started() {
-		return Number(this._model.started);
+	public get updated() {
+		return this._updated;
 	}
 
 	public get ended() {

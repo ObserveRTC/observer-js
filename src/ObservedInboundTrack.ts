@@ -215,10 +215,24 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		const elapsedTimeInMs = Math.max(1, now - this._updated);
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
-		const bitrate = ((sample.bytesReceived ?? 0) - (lastStat?.bytesReceived ?? 0)) * 8 / (elapsedTimeInMs / 1000);
-		const lostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
-		const receivedPackets = (sample.packetsReceived ?? 0) - (lastStat?.packetsReceived ?? 0);
-		const fractionLost = 0 < receivedPackets && 0 < lostPackets ? (lostPackets / (receivedPackets + lostPackets)) : 0;
+		let bitrate = 0;
+		let fractionLost = 0;
+		let lostPackets = 0;
+		let receivedPackets = 0;
+		
+		if (lastStat?.bytesReceived && sample.bytesReceived && lastStat.bytesReceived < sample.bytesReceived) {
+			bitrate = (sample.bytesReceived - lastStat.bytesReceived) / (elapsedTimeInMs / 1000);
+		}
+		if (lastStat?.packetsReceived && sample?.packetsReceived && lastStat.packetsReceived < sample.packetsReceived) {
+			receivedPackets = sample.packetsReceived - lastStat.packetsReceived;
+		}
+		if (lastStat?.packetsLost && sample.packetsLost && lastStat.packetsLost < sample.packetsLost) {
+			lostPackets = sample.packetsLost - lastStat.packetsLost;
+			if (0 < receivedPackets) {
+				fractionLost = lostPackets / (receivedPackets + lostPackets);
+			}
+		}
+		
 		let decodedFrames: number | undefined;
 		let droppedFrames: number | undefined;
 		let receivedFrames: number | undefined;
@@ -228,14 +242,22 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			const videoSample = sample as InboundVideoTrack;
 			const lastVideoStat = lastStat as InboundVideoTrack | undefined;
 
-			decodedFrames = (videoSample.framesDecoded ?? 0) - (lastVideoStat?.framesDecoded ?? 0);
-			droppedFrames = (videoSample.framesDropped ?? 0) - (lastVideoStat?.framesDropped ?? 0);
-			receivedFrames = (videoSample.framesReceived ?? 0) - (lastVideoStat?.framesReceived ?? 0);
+			if (videoSample.framesDecoded && lastVideoStat?.framesDecoded && lastVideoStat.framesDecoded < videoSample.framesDecoded) {
+				decodedFrames = videoSample.framesDecoded - lastVideoStat.framesDecoded;
+			}
+			if (videoSample.framesDropped && lastVideoStat?.framesDropped && lastVideoStat.framesDropped < videoSample.framesDropped) {
+				droppedFrames = videoSample.framesDropped - lastVideoStat.framesDropped;
+			}
+			if (videoSample.framesReceived && lastVideoStat?.framesReceived && lastVideoStat.framesReceived < videoSample.framesReceived) {
+				receivedFrames = videoSample.framesReceived - lastVideoStat.framesReceived;
+			}
 		} else if (this.kind === 'audio') {
 			const audioSample = sample as InboundAudioTrack;
 			const lastAudioStat = lastStat as InboundAudioTrack | undefined;
-
-			silentConcealedSamples = (audioSample.silentConcealedSamples ?? 0) - (lastAudioStat?.silentConcealedSamples ?? 0);
+			
+			if (audioSample.silentConcealedSamples && lastAudioStat?.silentConcealedSamples && lastAudioStat.silentConcealedSamples < audioSample.silentConcealedSamples) {
+				silentConcealedSamples = audioSample.silentConcealedSamples - lastAudioStat.silentConcealedSamples;
+			}
 		}
 
 		const stats: ObservedInboundTrackStats<Kind> = {

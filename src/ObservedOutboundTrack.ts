@@ -172,10 +172,24 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		const elapsedTimeInMs = Math.max(1, now - this._updated);
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
-		const bitrate = ((sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0)) * 8 / (elapsedTimeInMs / 1000);
-		const deltaLostPackets = (sample.packetsLost ?? 0) - (lastStat?.packetsLost ?? 0);
-		const deltaSentPackets = (sample.packetsSent ?? 0) - (lastStat?.packetsSent ?? 0);
-		const deltaSentBytes = (sample.bytesSent ?? 0) - (lastStat?.bytesSent ?? 0);
+		let bitrate = 0;
+		let deltaLostPackets = 0;
+		let deltaSentPackets = 0;
+		let deltaSentBytes = 0;
+
+		if (sample.bytesSent && lastStat?.bytesSent && lastStat.bytesSent < sample.bytesSent) {
+			bitrate = (sample.bytesSent - lastStat.bytesSent) * 8 / (elapsedTimeInMs / 1000);
+		}
+		if (sample.packetsLost && lastStat?.packetsLost && lastStat.packetsLost < sample.packetsLost) {
+			deltaLostPackets = sample.packetsLost - lastStat.packetsLost;
+		}
+		if (sample.packetsSent && lastStat?.packetsSent && lastStat.packetsSent < sample.packetsSent) {
+			deltaSentPackets = sample.packetsSent - lastStat.packetsSent;
+		}
+		if (sample.bytesSent && lastStat?.bytesSent && lastStat.bytesSent < sample.bytesSent) {
+			deltaSentBytes = sample.bytesSent - lastStat.bytesSent;
+		}
+		
 		let deltaEncodedFrames: number | undefined;
 		let deltaSentFrames: number | undefined;
 
@@ -183,8 +197,12 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			const videoSample = sample as OutboundVideoTrack;
 			const lastVideoStats = lastStat as OutboundVideoTrack | undefined;
 
-			deltaEncodedFrames = (videoSample.framesEncoded ?? 0) - (lastVideoStats?.framesEncoded ?? 0);
-			deltaSentFrames = (videoSample.framesSent ?? 0) - (lastVideoStats?.framesSent ?? 0);
+			if (videoSample?.framesEncoded && lastVideoStats?.framesEncoded && lastVideoStats.framesEncoded < videoSample.framesEncoded) {
+				deltaEncodedFrames = videoSample.framesEncoded - lastVideoStats.framesEncoded;
+			}
+			if (videoSample?.framesSent && lastVideoStats?.framesSent && lastVideoStats.framesSent < videoSample.framesSent) {
+				deltaSentFrames = videoSample.framesSent - lastVideoStats.framesSent;
+			}
 		}
 		const stats: ObservedOutboundTrackStats<Kind> = {
 			...sample,
