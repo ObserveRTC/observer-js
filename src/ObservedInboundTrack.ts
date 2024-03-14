@@ -25,14 +25,16 @@ export type ObservedInboundTrackStats<K extends MediaKind> = ObservedInboundTrac
 	bitrate: number;
 	fractionLost: number;
 	rttInMs?: number;
-	lostPackets?: number;
-	receivedPackets?: number;
-	receivedFrames?: number;
-	decodedFrames?: number;
-	droppedFrames?: number;
-	receivedSamples?: number;
-	silentConcealedSamples?: number;
+	deltaReceivedBytes?: number;
+	deltaLostPackets?: number;
+	deltaReceivedPackets?: number;
+	deltaReceivedFrames?: number;
+	deltaDecodedFrames?: number;
+	deltaDroppedFrames?: number;
+	deltaReceivedSamples?: number;
+	deltaSilentConcealedSamples?: number;
 	fractionLoss?: number;
+	statsTimestamp: number;
 };
 
 // {
@@ -55,6 +57,8 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	private _closed = false;
 	private _updated = Date.now();
 	private _remoteOutboundTrack?: ObservedOutboundTrack<Kind>;
+	private _lastMaxStatsTimestamp = 0;
+
 	public bitrate = 0;
 	public rttInMs?: number;
 	public fractionLoss = 0;
@@ -165,20 +169,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.emit('close');
 	}
 
-	public resetMetrics() {
-		this.bitrate = 0;
-		this.rttInMs = undefined;
-		this.deltaBytesReceived = 0;
-		this.deltaLostPackets = 0;
-		this.deltaReceivedFrames = 0;
-		this.deltaDecodedFrames = 0;
-		this.deltaDroppedFrames = 0;
-		this.deltaReceivedSamples = 0;
-		this.deltaSilentConcealedSamples = 0;
-		this.fractionLoss = 0;
-	}
-
-	public update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number) {
+	public update(sample: ObservedInboundTrackStatsUpdate<Kind>, statsTimestamp: number) {
 		if (this._closed) return;
 		
 		const now = Date.now();
@@ -191,7 +182,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			mediaUnitId: this.peerConnection.client.mediaUnitId,
 			peerConnectionId: this.peerConnection.peerConnectionId,
 			...sample,
-			timestamp,
+			timestamp: statsTimestamp,
 			sampleSeq: -1,
 
 			remoteClientId: sample.remoteClientId ?? this.remoteOutboundTrack?.peerConnection.client.clientId,
@@ -216,47 +207,49 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		const lastStat = this._stats.get(sample.ssrc);
 		const rttInMs = sample.roundTripTime ? sample.roundTripTime * 1000 : undefined;
 		let bitrate = 0;
+		let deltaReceivedBytes = 0;
 		let fractionLost = 0;
-		let lostPackets = 0;
-		let receivedPackets = 0;
+		let deltaLostPackets = 0;
+		let deltaReceivedPackets = 0;
 		
 		if (lastStat?.bytesReceived && sample.bytesReceived && lastStat.bytesReceived < sample.bytesReceived) {
-			bitrate = (sample.bytesReceived - lastStat.bytesReceived) / (elapsedTimeInMs / 1000);
+			deltaReceivedBytes = sample.bytesReceived - lastStat.bytesReceived;
+			bitrate = deltaReceivedBytes / (elapsedTimeInMs / 1000);
 		}
 		if (lastStat?.packetsReceived && sample?.packetsReceived && lastStat.packetsReceived < sample.packetsReceived) {
-			receivedPackets = sample.packetsReceived - lastStat.packetsReceived;
+			deltaReceivedPackets = sample.packetsReceived - lastStat.packetsReceived;
 		}
 		if (lastStat?.packetsLost && sample.packetsLost && lastStat.packetsLost < sample.packetsLost) {
-			lostPackets = sample.packetsLost - lastStat.packetsLost;
-			if (0 < receivedPackets) {
-				fractionLost = lostPackets / (receivedPackets + lostPackets);
+			deltaLostPackets = sample.packetsLost - lastStat.packetsLost;
+			if (0 < deltaReceivedPackets) {
+				fractionLost = deltaLostPackets / (deltaReceivedPackets + deltaLostPackets);
 			}
 		}
 		
-		let decodedFrames: number | undefined;
-		let droppedFrames: number | undefined;
-		let receivedFrames: number | undefined;
-		let silentConcealedSamples: number | undefined;
+		let deltaDecodedFrames: number | undefined;
+		let deltaDroppedFrames: number | undefined;
+		let deltaReceivedFrames: number | undefined;
+		let deltaSilentConcealedSamples: number | undefined;
 
 		if (this.kind === 'video') {
 			const videoSample = sample as InboundVideoTrack;
 			const lastVideoStat = lastStat as InboundVideoTrack | undefined;
 
 			if (videoSample.framesDecoded && lastVideoStat?.framesDecoded && lastVideoStat.framesDecoded < videoSample.framesDecoded) {
-				decodedFrames = videoSample.framesDecoded - lastVideoStat.framesDecoded;
+				deltaDecodedFrames = videoSample.framesDecoded - lastVideoStat.framesDecoded;
 			}
 			if (videoSample.framesDropped && lastVideoStat?.framesDropped && lastVideoStat.framesDropped < videoSample.framesDropped) {
-				droppedFrames = videoSample.framesDropped - lastVideoStat.framesDropped;
+				deltaDroppedFrames = videoSample.framesDropped - lastVideoStat.framesDropped;
 			}
 			if (videoSample.framesReceived && lastVideoStat?.framesReceived && lastVideoStat.framesReceived < videoSample.framesReceived) {
-				receivedFrames = videoSample.framesReceived - lastVideoStat.framesReceived;
+				deltaReceivedFrames = videoSample.framesReceived - lastVideoStat.framesReceived;
 			}
 		} else if (this.kind === 'audio') {
 			const audioSample = sample as InboundAudioTrack;
 			const lastAudioStat = lastStat as InboundAudioTrack | undefined;
 			
 			if (audioSample.silentConcealedSamples && lastAudioStat?.silentConcealedSamples && lastAudioStat.silentConcealedSamples < audioSample.silentConcealedSamples) {
-				silentConcealedSamples = audioSample.silentConcealedSamples - lastAudioStat.silentConcealedSamples;
+				deltaSilentConcealedSamples = audioSample.silentConcealedSamples - lastAudioStat.silentConcealedSamples;
 			}
 		}
 
@@ -266,38 +259,69 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			rttInMs,
 			bitrate,
 			ssrc: sample.ssrc,
-			lostPackets,
-			receivedPackets,
-			receivedFrames,
-			decodedFrames,
-			droppedFrames,
-			silentConcealedSamples,
+			deltaReceivedBytes,
+			deltaLostPackets,
+			deltaReceivedPackets,
+			deltaReceivedFrames,
+			deltaDecodedFrames,
+			deltaDroppedFrames,
+			deltaSilentConcealedSamples,
+			statsTimestamp,
 		};
 
 		this._stats.set(sample.ssrc, stats);
 
-		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
-		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
-		this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
-		this.totalReceivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
-		this.totalBytesReceived = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesReceived ?? 0), 0);
-		this.totalReceivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
-		this.totalDecodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
-		this.totalDroppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
-		this.totalReceivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
-		this.totalSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
-
-		this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.lostPackets ?? 0), 0);
-		this.deltaReceivedPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedPackets ?? 0), 0);
-		this.deltaBytesReceived = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesReceived ?? 0), 0);
-		this.deltaReceivedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedFrames ?? 0), 0);
-		this.deltaDecodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.decodedFrames ?? 0), 0);
-		this.deltaDroppedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.droppedFrames ?? 0), 0);
-		this.deltaReceivedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.receivedSamples ?? 0), 0);
-		this.deltaSilentConcealedSamples = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.silentConcealedSamples ?? 0), 0);
-		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
-
 		this._updated = now;
 		this.emit('update');
+	}
+
+	public updateMetrics() {
+		let maxStatsTimestamp = 0;
+		let rttInMsSum = 0;
+		let size = 0;
+
+		this.bitrate = 0;
+		this.rttInMs = undefined;
+		this.deltaBytesReceived = 0;
+		this.deltaLostPackets = 0;
+		this.deltaReceivedFrames = 0;
+		this.deltaDecodedFrames = 0;
+		this.deltaDroppedFrames = 0;
+		this.deltaReceivedSamples = 0;
+		this.deltaSilentConcealedSamples = 0;
+		this.fractionLoss = 0;
+
+		for (const [ , stats ] of this._stats) {
+			if (stats.statsTimestamp <= this._lastMaxStatsTimestamp) continue;
+
+			this.deltaBytesReceived += stats.deltaReceivedBytes ?? 0;
+			this.deltaLostPackets += stats.deltaLostPackets ?? 0;
+			this.deltaReceivedPackets += stats.deltaReceivedFrames ?? 0;
+			this.deltaReceivedFrames += stats.deltaReceivedFrames ?? 0;
+			this.deltaDecodedFrames += stats.deltaDecodedFrames ?? 0;
+			this.deltaDroppedFrames += stats.deltaDroppedFrames ?? 0;
+			this.deltaReceivedSamples += stats.deltaReceivedSamples ?? 0;
+			this.deltaSilentConcealedSamples += stats.deltaSilentConcealedSamples ?? 0;
+			this.bitrate += stats.bitrate;
+
+			maxStatsTimestamp = Math.max(maxStatsTimestamp, stats.statsTimestamp);
+			
+			rttInMsSum += stats.rttInMs ?? 0;
+			++size;
+		}
+
+		this.totalBytesReceived += this.deltaBytesReceived;
+		this.totalLostPackets += this.deltaLostPackets;
+		this.totalReceivedPackets += this.deltaReceivedPackets;
+		this.totalReceivedFrames += this.deltaReceivedFrames;
+		this.totalDecodedFrames += this.deltaDecodedFrames;
+		this.totalDroppedFrames += this.deltaDroppedFrames;
+		this.totalReceivedSamples += this.deltaReceivedSamples;
+		this.totalSilentConcealedSamples += this.deltaSilentConcealedSamples;
+
+		this.rttInMs = rttInMsSum / Math.max(size, 1);
+		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
+
+		this._lastMaxStatsTimestamp = maxStatsTimestamp;
 	}
 }

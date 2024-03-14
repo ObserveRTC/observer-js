@@ -224,17 +224,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.sendingVideoBitrate = 0;
 		this.receivingAudioBitrate = 0;
 		this.receivingVideoBitrate = 0;
-
-		this._inboundAudioTracks.forEach((track) => track.resetMetrics());
-		this._inboundVideoTracks.forEach((track) => track.resetMetrics());
-		this._outboundAudioTracks.forEach((track) => track.resetMetrics());
-		this._outboundVideoTracks.forEach((track) => track.resetMetrics());
 	}
 
 	public updateMetrics() {
 		let sumRttInMs = 0;
 
 		this._inboundAudioTracks.forEach((track) => {
+			track.updateMetrics();
+
 			this.deltaInboundPacketsLost += track.deltaLostPackets;
 			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
 			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
@@ -248,6 +245,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		});
 
 		this._inboundVideoTracks.forEach((track) => {
+			track.updateMetrics();
+
 			this.deltaInboundPacketsLost += track.deltaLostPackets;
 			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
 			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
@@ -261,6 +260,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		});
 
 		this._outboundAudioTracks.forEach((track) => {
+			track.updateMetrics();
+
 			this.deltaOutboundPacketsSent += track.deltaSentPackets;
 			this.deltaOutboundSentBytes += track.deltaSentBytes;
 			
@@ -273,6 +274,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		});
 
 		this._outboundVideoTracks.forEach((track) => {
+			track.updateMetrics();
+			
 			this.deltaOutboundPacketsSent += track.deltaSentPackets;
 			this.deltaOutboundSentBytes += track.deltaSentBytes;
 			

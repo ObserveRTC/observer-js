@@ -28,6 +28,8 @@ export type ObservedOutboundTrackStats<K extends MediaKind> = ObservedOutboundTr
 	deltaSentBytes: number;
 	deltaSentFrames?: number;
 	deltaEncodedFrames?: number;
+
+	statsTimestamp: number;
 };
 
 // export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = {
@@ -61,6 +63,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 	public deltaEncodedFrames = 0;
 
 	private readonly _stats = new Map<number, ObservedOutboundTrackStats<Kind>>();
+	private _lastMaxStatsTimestamp = 0;
 	
 	private _closed = false;
 	private _updated = Date.now();
@@ -137,18 +140,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.emit('close');
 	}
 
-	public resetMetrics() {
-		this.bitrate = 0;
-		this.rttInMs = 0;
-
-		this.deltaLostPackets = 0;
-		this.deltaSentPackets = 0;
-		this.deltaSentBytes = 0;
-		this.deltaSentFrames = 0;
-		this.deltaEncodedFrames = 0;
-	}
-
-	public update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number): void {
+	public update(sample: ObservedOutboundTrackStatsUpdate<Kind>, statsTimestamp: number): void {
 		if (this._closed) return;
 		
 		const now = Date.now();
@@ -161,7 +153,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			mediaUnitId: this.peerConnection.client.mediaUnitId,
 			peerConnectionId: this.peerConnection.peerConnectionId,
 			...sample,
-			timestamp,
+			timestamp: statsTimestamp,
 			sampleSeq: -1,
 			marker: this.marker,
 		};
@@ -215,23 +207,25 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			deltaSentBytes,
 			deltaEncodedFrames,
 			deltaSentFrames,
+
+			statsTimestamp,
 		};
 
 		this._stats.set(sample.ssrc, stats);
 
-		this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
-		this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
+		// this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
+		// this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
 
-		this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsLost ?? 0), 0);
-		this.totalSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsSent ?? 0), 0);
-		this.totalSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesSent ?? 0), 0);
-		this.totalSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentPackets ?? 0), 0);
+		// this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsLost ?? 0), 0);
+		// this.totalSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsSent ?? 0), 0);
+		// this.totalSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesSent ?? 0), 0);
+		// this.totalSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentPackets ?? 0), 0);
 
-		this.deltaEncodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaEncodedFrames ?? 0), 0);
-		this.deltaSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentFrames ?? 0), 0);
-		this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaLostPackets, 0);
-		this.deltaSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentPackets, 0);
-		this.deltaSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentBytes, 0);
+		// this.deltaEncodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaEncodedFrames ?? 0), 0);
+		// this.deltaSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentFrames ?? 0), 0);
+		// this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaLostPackets, 0);
+		// this.deltaSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentPackets, 0);
+		// this.deltaSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentBytes, 0);
 
 		// setting up sfu connection as it is not always available at the first sample
 		if (sample.sfuStreamId && !this._model.sfuStreamId) {
@@ -260,5 +254,45 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		});
 
 		this._remoteInboundTracks.set(track.trackId, track);
+	}
+
+	public updateMetrics() {
+		let maxStatsTimestamp = 0;
+		let rttInMsSum = 0;
+		let size = 0;
+
+		this.bitrate = 0;
+		this.rttInMs = undefined;
+
+		this.deltaLostPackets = 0;
+		this.deltaSentPackets = 0;
+		this.deltaSentBytes = 0;
+		this.deltaSentFrames = 0;
+		this.deltaEncodedFrames = 0;
+
+		for (const [ , stats ] of this._stats) {
+			if (stats.statsTimestamp <= this._lastMaxStatsTimestamp) continue;
+
+			this.deltaLostPackets += stats.deltaLostPackets ?? 0;
+			this.deltaSentPackets += stats.deltaSentPackets ?? 0;
+			this.deltaSentBytes += stats.deltaSentBytes ?? 0;
+			this.deltaSentFrames += stats.deltaSentFrames ?? 0;
+			this.deltaEncodedFrames += stats.deltaEncodedFrames ?? 0;
+			this.bitrate += stats.bitrate;
+
+			maxStatsTimestamp = Math.max(maxStatsTimestamp, stats.statsTimestamp);
+			
+			rttInMsSum += stats.rttInMs ?? 0;
+			++size;
+		}
+
+		this.totalLostPackets += this.deltaLostPackets;
+		this.totalSentPackets += this.deltaSentPackets;
+		this.totalSentBytes += this.deltaSentBytes;
+		this.totalSentFrames += this.deltaSentFrames;
+
+		this.rttInMs = rttInMsSum / Math.max(size, 1);
+
+		this._lastMaxStatsTimestamp = maxStatsTimestamp;
 	}
 }
