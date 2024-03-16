@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "0.40.7-beta",
+  "version": "0.40.8-beta",
   "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -18,9 +18,8 @@
   },
   "keywords": [
     "webrtc",
-    "getStats",
     "observertc",
-    "client",
+    "server",
     "integration"
   ],
   "author": "Balazs Kreith",
@@ -29,10 +28,6 @@
     "@bufbuild/protobuf": "1.1.1",
     "@observertc/report-schemas-js": "2.2.10",
     "@observertc/sample-schemas-js": "2.2.10",
-    "@types/events": "^3.0.0",
-    "@types/uuid": "^8.3.4",
-    "ipaddr.js": "^2.1.0",
-    "package-lock-only": "^0.0.4",
     "uuid": "^8.3.2"
   },
   "devDependencies": {
@@ -40,6 +35,8 @@
     "@types/node": "^20.9.0",
     "@typescript-eslint/eslint-plugin": "^5.38.0",
     "@typescript-eslint/parser": "^5.38.0",
+    "@types/events": "^3.0.0",
+    "@types/uuid": "^8.3.4",
     "bufferutil": "^4.0.6",
     "eslint": "^8.24.0",
     "jest": "^27.5.0",

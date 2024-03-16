@@ -713,6 +713,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.inboundAudioBitrate = 0;
 		this.inboundVideoBitrate = 0;
 		let sumRttInMs = 0;
+		let anyPeerConnectionUsingTurn = false;
 
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
@@ -732,8 +733,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			sumRttInMs += peerConnection.avgRttInMs ?? 0;
 
-			if (peerConnection.usingTURN) this.usingTURN = true;
+			anyPeerConnectionUsingTurn ||= peerConnection.usingTURN;
 		}
+
+		this.usingTURN = anyPeerConnectionUsingTurn === true;
+		
+		if (wasUsingTURN !== this.usingTURN) this.emit('usingturn', this.usingTURN);
 
 		this.totalSentBytes += this.deltaSentAudioBytes + this.deltaSentVideoBytes;
 		this.totalReceivedBytes += this.deltaReceivedAudioBytes + this.deltaReceivedVideoBytes;
@@ -754,8 +759,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
 			
-		if (wasUsingTURN !== this.usingTURN) this.emit('usingturn', this.usingTURN);
-
 		this._updated = now;
 		this.emit('update');
 	}
