@@ -13,7 +13,9 @@ export type ObservedInboundTrackModel<K extends MediaKind> = {
 }
 
 export type ObservedInboundTrackEvents<K extends MediaKind> = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 	remoteoutboundtrack: [ObservedOutboundTrack<K>],
 };
@@ -272,7 +274,9 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this._stats.set(sample.ssrc, stats);
 
 		this._updated = now;
-		this.emit('update');
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 
 	public updateMetrics() {

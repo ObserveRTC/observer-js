@@ -8,7 +8,9 @@ import { ObservedICE } from './ObservedICE';
 import { ObservedDataChannel } from './ObservedDataChannel';
 
 export type ObservedPeerConnectionEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 	newinboudaudiotrack: [ObservedInboundTrack<'audio'>],
 	newinboudvideotrack: [ObservedInboundTrack<'video'>],
@@ -119,7 +121,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	}
 
 	public get usingTURN() {
-		return this.ICE.selectedRemoteCandidate?.candidateType?.toLowerCase() === 'relay';
+		return this.ICE.usingTURN;
 	}
 
 	public get availableOutgoingBitrate() {
@@ -224,6 +226,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.sendingVideoBitrate = 0;
 		this.receivingAudioBitrate = 0;
 		this.receivingVideoBitrate = 0;
+
+		this.ICE.resetMetrics();
 	}
 
 	public updateMetrics() {
@@ -275,7 +279,7 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this._outboundVideoTracks.forEach((track) => {
 			track.updateMetrics();
-			
+
 			this.deltaOutboundPacketsSent += track.deltaSentPackets;
 			this.deltaOutboundSentBytes += track.deltaSentBytes;
 			
@@ -325,7 +329,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (this._model.label !== sample.label) {
 			this._model.label = sample.label;
 		}
-
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
 		const report: PeerConnectionTransportReport = {
 			serviceId: this.client.call.serviceId,
 			roomId: this.client.call.roomId,
@@ -341,8 +346,10 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this.reports.addPeerConnectionTransportReports(report);
 		
-		this._updated = Date.now();
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 
 	public createInboundAudioTrack(config: Omit<ObservedInboundTrackModel<'audio'>, 'kind'>): ObservedInboundTrack<'audio'> {

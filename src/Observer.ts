@@ -6,6 +6,10 @@ import { PartialBy } from './common/utils';
 import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
 import { ObserverSinkContext } from './common/types';
 import { ObservedSfu, ObservedSfuModel } from './ObservedSfu';
+import { CallSummaryMonitor } from './monitors/CallSummaryMonitor';
+import { TurnUsageMonitor } from './monitors/TurnUsageMonitor';
+import { ObservedClient } from './ObservedClient';
+import { ObservedPeerConnection } from './ObservedPeerConnection';
 
 const logger = createLogger('Observer');
 
@@ -69,6 +73,7 @@ export class Observer extends EventEmitter {
 	public readonly reports = new ReportsCollector();
 	private readonly _observedCalls = new Map<string, ObservedCall>();
 	private readonly _observedSfus = new Map<string, ObservedSfu>();
+	private readonly _monitors = new Map<string, { close:() => void, once: (e: 'close', l: () => void) => void }>();
 
 	private _reportTimer?: ReturnType<typeof setTimeout>;
 	private _closed = false;
@@ -158,6 +163,87 @@ export class Observer extends EventEmitter {
 		this.emit('newsfu', sfu);
 		
 		return sfu;
+	}
+
+	public createCallSummaryMonitor(options?: { timeoutAfterCallClose?: number }): CallSummaryMonitor {
+		if (this._closed) throw new Error('Cannot create a call summary monitor on a closed observer');
+
+		const existingMonitor = this._monitors.get(CallSummaryMonitor.name);
+		
+		if (existingMonitor) return existingMonitor as CallSummaryMonitor;
+
+		const monitor = new CallSummaryMonitor();
+		const onNewCall = (call: ObservedCall) => {
+			monitor.addCall(call);
+
+			call.once('close', () => setTimeout(() => {
+				const summary = monitor.takeSummary(call.callId);
+
+				summary && monitor.emit('summary', summary);
+				
+			}, options?.timeoutAfterCallClose ?? 1000));
+		};
+
+		monitor.once('close', () => {
+			this._monitors.delete(CallSummaryMonitor.name);
+			this.off('newcall', onNewCall);
+		});
+
+		this._monitors.set(CallSummaryMonitor.name, monitor);
+		this.on('newcall', onNewCall);
+		
+		this.once('close', () => {
+			monitor.close();
+		});
+
+		return monitor;
+	}
+
+	public createTurnUsageMonitor() {
+		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+
+		const existingMonitor = this._monitors.get(TurnUsageMonitor.name);
+		
+		if (existingMonitor) return existingMonitor as TurnUsageMonitor;
+
+		const monitor = new TurnUsageMonitor();
+
+		const onNewCall = (call: ObservedCall) => {
+			const onNewClient = (client: ObservedClient) => {
+				const onNewPeerConnection = (pc: ObservedPeerConnection) => {
+					const onUsingTurnChanged = (usingTurn: boolean) => {
+						if (usingTurn) monitor.addPeerConnection(pc);
+						else monitor.removePeerConnection(pc);
+					};
+
+					pc.once('close', () => {
+						pc.ICE.off('usingturnchanged', onUsingTurnChanged);
+						monitor.removePeerConnection(pc);
+					});
+					pc.ICE.on('usingturnchanged', onUsingTurnChanged);
+				};
+
+				client.once('close', () => client.off('newpeerconnection', onNewPeerConnection));
+				client.on('newpeerconnection', onNewPeerConnection);
+			};
+
+			call.once('close', () => call.off('newclient', onNewClient));
+			call.on('newclient', onNewClient);
+		};
+
+		monitor.once('close', () => {
+			this._monitors.delete(CallSummaryMonitor.name);
+			this.off('newcall', onNewCall);
+		});
+
+		this._monitors.set(CallSummaryMonitor.name, monitor);
+		this.on('newcall', onNewCall);
+		
+		this.once('close', () => {
+			monitor.close();
+		});
+
+		return monitor;
 	}
 
 	public get observedCalls(): ReadonlyMap<string, ObservedCall> {

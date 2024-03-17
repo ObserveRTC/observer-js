@@ -10,7 +10,9 @@ export type ObservedDataChannelModel = {
 }
 
 export type ObservedDataChannelEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 };
 
@@ -184,6 +186,8 @@ export class ObservedDataChannel extends EventEmitter	{
 
 		this._stats = sample;
 		this._updated = timestamp;
-		this.emit('update');
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 }

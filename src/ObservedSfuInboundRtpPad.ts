@@ -8,7 +8,9 @@ export type ObservedSfuInboundRtpPadModel= {
 };
 
 export type ObservedSfuInboundRtpPadEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 };
 
@@ -76,6 +78,8 @@ export class ObservedSfuInboundRtpPad extends EventEmitter {
 	}
 
 	public update(sample: SfuInboundRtpPad, timestamp: number) {
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
 
 		const { streamId: sfuStreamId, padId: rtpPadId, ...reportData } = sample;
 
@@ -94,7 +98,9 @@ export class ObservedSfuInboundRtpPad extends EventEmitter {
 		this.reports.addSfuInboundRtpPadReport(report);
 		this.stats = sample;
 
-		this._updated = Date.now();
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 }

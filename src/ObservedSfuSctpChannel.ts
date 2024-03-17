@@ -8,7 +8,9 @@ export type ObservedSfuSctpChannelModel= {
 };
 
 export type ObservedSfuSctpChannelEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 };
 
@@ -76,6 +78,8 @@ export class ObservedSfuSctpChannel extends EventEmitter {
 	}
 
 	public update(sample: SfuSctpChannel, timestamp: number) {
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
 
 		const report: SfuSctpStreamReport = {
 			serviceId: this.serviceId,
@@ -91,7 +95,9 @@ export class ObservedSfuSctpChannel extends EventEmitter {
 		this.reports.addSfuTransportReport(report);
 		this.stats = sample;
 
-		this._updated = Date.now();
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 }

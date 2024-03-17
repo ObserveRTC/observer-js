@@ -5,13 +5,16 @@ import { IceCandidatePairReport } from '@observertc/report-schemas-js';
 import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
 
 export type ObservedICEEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	'new-local-candidate': [IceLocalCandidate],
 	'new-remote-candidate': [IceRemoteCandidate],
 	'new-selected-candidate-pair': [{
 		localCandidate: IceLocalCandidate,
 		remoteCandidate: IceRemoteCandidate,
 	}],
+	usingturnchanged: [boolean],
 	close: [],
 };
 
@@ -32,6 +35,20 @@ export class ObservedICE extends EventEmitter {
 	private readonly _localCandidates = new Map<string, IceLocalCandidate>();
 	private readonly _remoteCandidates = new Map<string, IceLocalCandidate>();
 	
+	public usingTURN = false;
+
+	public deltaBytesReceived = 0;
+	public deltaBytesSent = 0;
+	public deltaPacketsReceived = 0;
+	public deltaPacketsSent = 0;
+
+	public totalBytesReceived = 0;
+	public totalBytesSent = 0;
+	public totalPacketsReceived = 0;
+	public totalPacketsSent = 0;
+
+	public currentRttInMs?: number;
+
 	private _selectedLocalCandidateId?: string;
 	private _selectedRemoteCandidateId?: string;
 	private _updated = Date.now();
@@ -131,8 +148,18 @@ export class ObservedICE extends EventEmitter {
 		}
 	}
 
-	public update(candidatePair: IceCandidatePair, timestamp: number) {
+	public resetMetrics() {
+		this.deltaBytesReceived = 0;
+		this.deltaBytesSent = 0;
+		this.deltaPacketsReceived = 0;
+		this.deltaPacketsSent = 0;
 
+		this.currentRttInMs = undefined;
+	}
+
+	public update(candidatePair: IceCandidatePair, timestamp: number) {
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
 		const report: IceCandidatePairReport = {
 			serviceId: this.peerConnection.client.serviceId,
 			mediaUnitId: this.peerConnection.client.mediaUnitId,
@@ -149,6 +176,18 @@ export class ObservedICE extends EventEmitter {
 		this.reports.addIceCandidatePairReport(report);
 
 		if (!candidatePair.nominated) return;
+		
+		this.deltaBytesReceived = (candidatePair.bytesReceived ?? 0) - (this._stats?.bytesReceived ?? 0);
+		this.deltaBytesSent = (candidatePair.bytesSent ?? 0) - (this._stats?.bytesSent ?? 0);
+		this.deltaPacketsReceived = (candidatePair.packetsReceived ?? 0) - (this._stats?.packetsReceived ?? 0);
+		this.deltaPacketsSent = (candidatePair.packetsSent ?? 0) - (this._stats?.packetsSent ?? 0);
+		
+		this.totalBytesReceived += this.deltaBytesReceived;
+		this.totalBytesSent += this.deltaBytesSent;
+		this.totalPacketsReceived += this.deltaPacketsReceived;
+		this.totalPacketsSent += this.deltaPacketsSent;
+		
+		this.currentRttInMs = candidatePair.currentRoundTripTime ? candidatePair.currentRoundTripTime * 1000 : undefined;
 
 		this._stats = candidatePair;
 
@@ -167,14 +206,24 @@ export class ObservedICE extends EventEmitter {
 			const remoteCandidate = this._remoteCandidates.get(candidatePair.remoteCandidateId);
 
 			if (localCandidate && remoteCandidate) {
+				const wasUsingTURN = this.usingTURN;
+
+				this.usingTURN = remoteCandidate.candidateType?.toLocaleLowerCase() === 'relay';
+
 				this.emit('new-selected-candidate-pair', {
 					localCandidate,
 					remoteCandidate,
 				});
+
+				if (wasUsingTURN !== this.usingTURN) {
+					this.emit('usingturnchanged', this.usingTURN);
+				}
 			}
 		}
 
-		this._updated = timestamp;
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 }

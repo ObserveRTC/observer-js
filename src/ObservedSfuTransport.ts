@@ -11,7 +11,9 @@ export type ObservedSfuTransportModel= {
 };
 
 export type ObservedSfuTransportEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 	newsfuoutboundrtppad: [ObservedSfuOutboundRtpPad],
 	newsfuinboundrtppad: [ObservedSfuInboundRtpPad],
@@ -110,7 +112,9 @@ export class ObservedSfuTransport extends EventEmitter {
 	}
 
 	public update(sample: SfuTransport, timestamp: number) {
-		
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
+
 		const report: SFUTransportReport = {
 			serviceId: this.serviceId,
 			mediaUnitId: this.mediaUnitId,
@@ -125,8 +129,10 @@ export class ObservedSfuTransport extends EventEmitter {
 		this.reports.addSfuTransportReport(report);
 		this.stats = sample;
 
-		this._updated = Date.now();
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 
 	public createSfuOutboundRtpPad(model: ObservedSfuOutboundRtpPadModel) {

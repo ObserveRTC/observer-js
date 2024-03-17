@@ -24,7 +24,9 @@ export type ObservedClientModel= {
 };
 
 export type ObservedClientEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number,
+	}],
 	close: [],
 	newpeerconnection: [ObservedPeerConnection],
 	iceconnectionstatechange: [{
@@ -758,9 +760,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.inboundVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
 
 		this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
-			
+		
 		this._updated = now;
-		this.emit('update');
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 
 	private _createPeerConnection(peerConnectionId: string, label?: string): ObservedPeerConnection {

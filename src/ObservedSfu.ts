@@ -12,7 +12,9 @@ export type ObservedSfuModel= {
 };
 
 export type ObservedSfuEvents = {
-	update: [],
+	update: [{
+		elapsedTimeInMs: number;
+	}],
 	close: [],
 	newtransport: [ObservedSfuTransport],
 };
@@ -103,6 +105,9 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 			this._timeZoneOffsetInHours = sample.timeZoneOffsetInHours;
 		}
 
+		const now = Date.now();
+		const elapsedTimeInMs = now - this._updated;
+
 		for (const customSfuEvents of sample.customSfuEvents ?? []) {
 			const report: SfuEventReport = {
 				serviceId: this.serviceId,
@@ -174,8 +179,10 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 			observedSfuSctpChannel.update(sctpChannel, sample.timestamp);
 		}
 
-		this._updated = Date.now();
-		this.emit('update');
+		this._updated = now;
+		this.emit('update', {
+			elapsedTimeInMs,
+		});
 	}
 
 	private _createTransport(model: ObservedSfuTransportModel) {
