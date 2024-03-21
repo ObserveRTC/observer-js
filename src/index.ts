@@ -52,6 +52,7 @@ export type {
 	SFUTransportReport,
 } from '@observertc/report-schemas-js';
 
+export type { ObservedCall, ObservedCallModel } from './ObservedCall';
 export type { ObservedClient, ObservedClientModel } from './ObservedClient';
 export type { ObservedPeerConnection, ObservedPeerConnectionModel, ObservedPeerConnectionEvents } from './ObservedPeerConnection';
 export type { ObservedInboundTrack, ObservedInboundTrackModel, ObservedInboundTrackEvents } from './ObservedInboundTrack';
