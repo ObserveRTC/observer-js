@@ -100,7 +100,7 @@ export class ObservedICE extends EventEmitter {
 		this.emit('close');
 	}
 
-	public addLocalCandidate(candidate: IceLocalCandidate) {
+	public addLocalCandidate(candidate: IceLocalCandidate, sampleTimestamp?: number) {
 		if (!candidate.id) return;
 
 		const newCandidate = !this._localCandidates.has(candidate.id);
@@ -116,7 +116,11 @@ export class ObservedICE extends EventEmitter {
 				this.peerConnection.client.clientId, {
 					type: CallMetaType.ICE_LOCAL_CANDIDATE,
 					payload: candidate,
-				}, this.peerConnection.client.userId);
+				}, 
+				this.peerConnection.client.userId,
+				this.peerConnection.peerConnectionId,
+				sampleTimestamp,
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
 
@@ -124,7 +128,7 @@ export class ObservedICE extends EventEmitter {
 		}
 	}
 
-	public addRemoteCandidate(candidate: IceRemoteCandidate) {
+	public addRemoteCandidate(candidate: IceRemoteCandidate, sampleTimestamp?: number) {
 		if (!candidate.id) return;
 
 		const newCandidate = !this._remoteCandidates.has(candidate.id);
@@ -140,7 +144,11 @@ export class ObservedICE extends EventEmitter {
 				this.peerConnection.client.clientId, {
 					type: CallMetaType.ICE_REMOTE_CANDIDATE,
 					payload: candidate,
-				}, this.peerConnection.client.userId);
+				}, 
+				this.peerConnection.client.userId,
+				this.peerConnection.peerConnectionId,
+				sampleTimestamp
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
             

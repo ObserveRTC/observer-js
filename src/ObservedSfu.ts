@@ -105,6 +105,8 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 			this._timeZoneOffsetInHours = sample.timeZoneOffsetInHours;
 		}
 
+		this._marker = sample.marker;
+
 		const now = Date.now();
 		const elapsedTimeInMs = now - this._updated;
 

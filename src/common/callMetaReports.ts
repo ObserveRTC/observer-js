@@ -84,6 +84,7 @@ export function createCallMetaReport(
 	clientId: string,
 	reportType: CallMetaReportType,
 	userId?: string,
+	peerConnectionId?: string,
 	timestamp?: number
 ) {
 	const report: CallMetaReport = {

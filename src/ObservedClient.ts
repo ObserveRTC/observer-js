@@ -47,6 +47,7 @@ export type ObservedClientEvents = {
 		remoteCandidate: IceRemoteCandidate,
 	}],
 	usingturn: [boolean],
+	usermediaerror: [string],
 };
 
 export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
@@ -252,7 +253,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.OPERATION_SYSTEM,
 					payload: sample.os,
-				}, this.userId);
+				}, 
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 	
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -272,7 +277,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.ENGINE,
 					payload: sample.engine,
-				}, this.userId);
+				}, 
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 	
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -293,7 +302,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.PLATFORM,
 					payload: sample.platform,
-				}, this.userId);
+				},
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 	
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -313,7 +326,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.BROWSER,
 					payload: sample.browser,
-				}, this.userId);
+				}, 
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 	
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -328,7 +345,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.MEDIA_CONSTRAINT,
 					payload: mediaConstraint,
-				}, this.userId);
+				}, 
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -343,7 +364,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				{
 					type: CallMetaType.LOCAL_SDP,
 					payload: localSDP,
-				}, this.userId);
+				}, 
+				this.userId,
+				undefined,
+				sample.timestamp
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -390,10 +415,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.clientId, {
 					type: CallMetaType.USER_MEDIA_ERROR,
 					payload: userMediaError,
-				}, this.userId);
+				}, 
+				this.userId,
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
 			this.userMediaErrors.push(userMediaError);
+			this.emit('usermediaerror', userMediaError);
 		}
 
 		for (const certificate of sample.certificates ?? []) {
@@ -405,7 +433,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.clientId, {
 					type: CallMetaType.CERTIFICATE,
 					payload: certificate,
-				}, this.userId);
+				}, 
+				this.userId
+			);
 
 			this.reports.addCallMetaReport(callMetaReport);
 		}
@@ -606,7 +636,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				continue;
 			}
 
-			peerConnection.ICE.addLocalCandidate(iceLocalCandidate);
+			peerConnection.ICE.addLocalCandidate(iceLocalCandidate, sample.timestamp);
 		}
 	
 		for (const iceRemoteCandidate of sample.iceRemoteCandidates ?? []) {
@@ -621,7 +651,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				continue;
 			}
 
-			peerConnection.ICE.addRemoteCandidate(iceRemoteCandidate);
+			peerConnection.ICE.addRemoteCandidate(iceRemoteCandidate, sample.timestamp);
 		}
 
 		for (const candidatePair of sample.iceCandidatePairs ?? []) {
