@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from '../ObservedPeerConnection';
 import { ObservedICEEvents } from '../ObservedICE';
+import { ObservedClient } from '../ObservedClient';
 
 export type TurnUsageMonitorEvents = {
 	close: [],
@@ -109,6 +110,18 @@ export class TurnUsageMonitor extends EventEmitter {
 
 	public getUsage(turnIp: string) {
 		return this._turnUsage.get(turnIp);
+	}
+
+	public get clients(): ReadonlyMap<string, ObservedClient> {
+		const result = new Map<string, ObservedClient>();
+
+		for (const pc of this.peerConnections) {
+			if (result.has(pc.clientId)) continue;
+			
+			result.set(pc.clientId, pc.client);
+		}
+
+		return result;
 	}
 
 	public get closed() {

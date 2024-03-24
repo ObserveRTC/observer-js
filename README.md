@@ -1,4 +1,4 @@
-Server side component for monitoring WebRTC stack
+Server side component for monitoring WebRTC applications and services
 ---
 
 Table of Contents:
@@ -6,9 +6,7 @@ Table of Contents:
  * [Quick Start](#quick-start)
  * [Configurations](#configurations)
  * [NPM package](#npm-package)
- * [API docs](#api-docs)
  * [Schemas](#schemas)
- * [Getting Involved](#getting-involved)
  * [License](#license)
 
 ## Qucik Start
@@ -25,29 +23,23 @@ Use it in your server side NodeJS app.
 import { createObserver, ClientSample } from "@observertc/observer-js";
 
 const observer = createObserver({
-    // see full config in Configuration section
+    defaultServiceId: 'my-service-name',
+    defaultMediaUnitId: 'my-reporting-component',
 });
 
-const clientSource = observer.createClientSource({
+const observedCall = observer.createObservedCall({
     roomId: 'roomId',
     callId: 'room-session-id',
-    clientId: 'reporting-client-id',
+});
+
+const observedClient = observedCall.createObservedClient({
+    clientId: 'client-id',
+    mediaUnitId: 'media-unit-id',
 });
 
 const clientSample: ClientSample; // Receive your samples, for example, from a WebSocket
 
-clientSource.accept(clientSample);
-
-observer.addEvaluator(async context => {
-    const { endedCalls } = context;
-
-    // Observe call durations
-    for (const endedCall of endedCalls) {
-        const elapsedTimeInMins = (endedCall.ended -  Number(endedCall.started)) / (60 * 1000);
-        console.log(`Call ${endedCall.callId} duration was ${elapsedTimeInMins} minutes`);
-    }
-});
-
+observedClient.accept(clientSample);
 ```
 
 The above example do as follows:
@@ -55,9 +47,49 @@ The above example do as follows:
  2. create a client source object to accept client samples
  3. add an evaluator process to evaluate ended calls
 
-## API documentation
+ ### Get a Summary of a call when it ends
 
-https://observertc.org/docs/api/observer-js
+ ```javascript
+
+ const monitor = observer.createCallSummaryMonitor('summary', (summary) => {
+     console.log('Call Summary', summary);
+ });
+ ```
+
+ ### How Many Clients are using TURN?
+
+```javascript
+const monitor = observer.createTurnUsageMonitor('turn', (turn) => {
+    console.log('TURN', turn);
+});
+
+// at any point of time you can get the current state of the turn usage
+
+console.log('Currently ', monitor.clients.size, 'clients are using TURN');
+
+// you can get the incoming and outgoing bytes of the TURN server
+console.log(`${YOUR_TURN_SERVER_ADDRESS} usage:`, monitor.getUsage(YOUR_TURN_SERVER_ADDRESS));
+
+```
+
+### Monitor Calls and Clients as they updated
+
+```javascript
+observer.on('newcall', (call) => {
+    call.on('update', () => {
+        console.log('Call Updated', call.callId);
+    });
+
+    call.on('newclient', (client) => {
+
+        client.on('update', () => {
+            console.log('Client Updated', client.clientId);
+
+            console.log(`The avaialble incoming bitrate for the client ${client.clientId} is: ${client.availableIncomingBitrate}`)
+        });
+    })
+});
+```
 
 ## NPM package
 
@@ -68,10 +100,6 @@ https://www.npmjs.com/package/@observertc/observer-js
 
 https://github.com/observertc/schemas
 
-
-## Getting Involved
-
-The repository is open for contributions.
 
 ## License
 
