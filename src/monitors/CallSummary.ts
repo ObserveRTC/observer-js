@@ -1,4 +1,4 @@
-export interface ClientIssue {
+export interface ClientIssue extends Record<string, unknown> {
 	severity: 'critical' | 'major' | 'minor';
 	timestamp: number;
 	description?: string;
@@ -7,7 +7,7 @@ export interface ClientIssue {
 	attachments?: Record<string, unknown>,
 }
 
-export interface ClientSummary {
+export interface ClientSummary extends Record<string, unknown> {
 	clientId: string;
 	mediaUnitId: string;
 	userId?: string;
@@ -23,7 +23,7 @@ export interface ClientSummary {
 	issues: ClientIssue[];
 }
 
-export interface CallSummary {
+export interface CallSummary extends Record<string, unknown> {
 	serviceId: string;
 	roomId: string;
 	callId: string;
