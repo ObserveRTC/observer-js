@@ -18,6 +18,7 @@ export interface ClientIssue {
 	description?: string;
 	peerConnectionId?: string,
 	trackId?: string,
+	attachments?: Record<string, unknown>,
 }
 
 export type ObservedClientModel= {
@@ -220,6 +221,31 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.emit('close');
 	}
 
+	public addIssue(issue: ClientIssue) {
+		try {
+			this.reports.addCallEventReport({
+				serviceId: this.serviceId,
+				mediaUnitId: this.mediaUnitId,
+				roomId: this.roomId,
+				callId: this.callId,
+				clientId: this.clientId,
+				userId: this.userId,
+				
+				name: CallEventType.CLIENT_ISSUE,
+				value: issue.severity,
+				peerConnectionId: issue.peerConnectionId,
+				mediaTrackId: issue.trackId,
+				message: issue.description,
+				timestamp: issue.timestamp ?? Date.now(),
+				attachments: issue.attachments ? JSON.stringify(issue.attachments): undefined,
+			});
+			this.emit('issue', issue);
+		} catch (err) {
+			logger.warn(`Error adding client issue: ${(err as Error)?.message}`);
+		}
+		
+	}
+
 	public accept(sample: ClientSample): void {
 		if (this._closed) throw new Error(`Client ${this.clientId} is closed`);
 		if (sample.clientId && sample.clientId !== 'NULL' && sample.clientId !== this.clientId) {
@@ -405,13 +431,20 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				case CallEventType.CLIENT_ISSUE: {
 					const severity = callEvent.value ? callEvent.value as ClientIssue['severity'] : 'minor';
 
-					this.emit('issue', {
-						severity,
-						timestamp: timestamp ?? Date.now(),
-						description: callEvent.message,
-						peerConnectionId: callEvent.peerConnectionId,
-						trackId: callEvent.mediaTrackId,
-					});
+					try {
+						const issue: ClientIssue = {
+							severity,
+							timestamp: timestamp ?? Date.now(),
+							description: callEvent.message,
+							peerConnectionId: callEvent.peerConnectionId,
+							trackId: callEvent.mediaTrackId,
+							attachments: callEvent.attachments ? JSON.parse(callEvent.attachments) : undefined,
+						};
+	
+						this.emit('issue', issue);
+					} catch (err) {
+						logger.warn(`Error parsing client issue: ${(err as Error)?.message}`);
+					}
 				}
 			}
 			this.reports.addCallEventReport({

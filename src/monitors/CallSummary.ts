@@ -22,5 +22,6 @@ export interface CallSummary {
 	callId: string;
 	started: number;
 	durationInMs: number;
+	maxNumberOfParticipants: number;
 	clients: ClientSummary[];
 }

@@ -44,12 +44,16 @@ export class CallSummaryMonitor extends EventEmitter {
 				serviceId: call.serviceId,
 				clients: [],
 				durationInMs: 0,
+				maxNumberOfParticipants: 0,
 				started: call.created,
 			};
 			this._summaries.set(call.callId, callSummary);
 		}
 		const constCallSummary = callSummary;
-		const onNewClient = (client: ObservedClient) => this._addClient(constCallSummary, client);
+		const onNewClient = (client: ObservedClient) => {
+			constCallSummary.maxNumberOfParticipants = Math.max(constCallSummary.maxNumberOfParticipants, call.clients.size);
+			this._addClient(constCallSummary, client);
+		};
 
 		call.once('close', () => {
 			call.off('newclient', onNewClient);
@@ -140,7 +144,7 @@ export class CallSummaryMonitor extends EventEmitter {
 	private _addOutboundVideoTrack(clientSummary: ClientSummary, track: ObservedOutboundTrack<'video'>) {
 		const onQualityLimitationChanged = (reason: string) => {
 			if (!this.config.detectMediaTrackQualityLimitationIssues) return;
-			
+
 			clientSummary.issues.push({
 				severity: 'minor',
 				timestamp: Date.now(),
