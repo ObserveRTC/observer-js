@@ -12,6 +12,14 @@ import { ObservedSfu } from './ObservedSfu';
 
 const logger = createLogger('ObservedClient');
 
+export interface ClientIssue {
+	severity: 'critical' | 'major' | 'minor';
+	timestamp: number;
+	description?: string;
+	peerConnectionId?: string,
+	trackId?: string,
+}
+
 export type ObservedClientModel= {
 	clientId: string;
 	mediaUnitId: string;
@@ -46,6 +54,7 @@ export type ObservedClientEvents = {
 		localCandidate: IceLocalCandidate,
 		remoteCandidate: IceRemoteCandidate,
 	}],
+	issue: [ClientIssue],
 	usingturn: [boolean],
 	usermediaerror: [string],
 };
@@ -392,6 +401,17 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				case CallEventType.CLIENT_LEFT: {
 					this._left = timestamp;
 					break;
+				}
+				case CallEventType.CLIENT_ISSUE: {
+					const severity = callEvent.value ? callEvent.value as ClientIssue['severity'] : 'minor';
+
+					this.emit('issue', {
+						severity,
+						timestamp: timestamp ?? Date.now(),
+						description: callEvent.message,
+						peerConnectionId: callEvent.peerConnectionId,
+						trackId: callEvent.mediaTrackId,
+					});
 				}
 			}
 			this.reports.addCallEventReport({

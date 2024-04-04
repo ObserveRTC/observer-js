@@ -6,7 +6,7 @@ import { PartialBy } from './common/utils';
 import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
 import { ObserverSinkContext } from './common/types';
 import { ObservedSfu, ObservedSfuModel } from './ObservedSfu';
-import { CallSummaryMonitor } from './monitors/CallSummaryMonitor';
+import { CallSummaryMonitor, CallSummaryMonitorConfig } from './monitors/CallSummaryMonitor';
 import { TurnUsageMonitor } from './monitors/TurnUsageMonitor';
 import { ObservedClient } from './ObservedClient';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
@@ -104,13 +104,19 @@ export class Observer extends EventEmitter {
 	}
 
 	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		config: PartialBy<ObservedCallModel, 'serviceId'> & { appData: T, started?: number }
+		config: PartialBy<ObservedCallModel, 'serviceId'> & { appData: T, started?: number, reportCallStarted?: boolean, reportCallEnded?: boolean }
 	): ObservedCall<T> {
 		if (this._closed) {
 			throw new Error('Attempted to create a call source on a closed observer');
 		}
 
-		const { appData, started = Date.now(), ...model } = config;
+		const { 
+			appData, 
+			started = Date.now(), 
+			reportCallEnded = true,
+			reportCallStarted = true,
+			...model 
+		} = config;
 		const call = new ObservedCall({
 			...model,
 			serviceId: this.config.defaultServiceId,
@@ -121,7 +127,7 @@ export class Observer extends EventEmitter {
 
 		call.once('close', () => {
 			this._observedCalls.delete(call.callId);
-			this.reports.addCallEventReport(createCallEndedEventReport(
+			reportCallEnded && this.reports.addCallEventReport(createCallEndedEventReport(
 				call.serviceId,
 				call.roomId,
 				call.callId,
@@ -130,7 +136,7 @@ export class Observer extends EventEmitter {
 		});
 
 		this._observedCalls.set(call.callId, call);
-		this.reports.addCallEventReport(createCallStartedEventReport(
+		reportCallStarted && this.reports.addCallEventReport(createCallStartedEventReport(
 			call.serviceId,
 			call.roomId,
 			call.callId,
@@ -165,14 +171,14 @@ export class Observer extends EventEmitter {
 		return sfu;
 	}
 
-	public createCallSummaryMonitor(options?: { timeoutAfterCallClose?: number }): CallSummaryMonitor {
+	public createCallSummaryMonitor(options?: CallSummaryMonitorConfig & { timeoutAfterCallClose?: number }): CallSummaryMonitor {
 		if (this._closed) throw new Error('Cannot create a call summary monitor on a closed observer');
 
 		const existingMonitor = this._monitors.get(CallSummaryMonitor.name);
 		
 		if (existingMonitor) return existingMonitor as CallSummaryMonitor;
 
-		const monitor = new CallSummaryMonitor();
+		const monitor = new CallSummaryMonitor(options);
 		const onNewCall = (call: ObservedCall) => {
 			monitor.addCall(call);
 

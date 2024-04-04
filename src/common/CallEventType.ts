@@ -1,5 +1,4 @@
 // eslint-disable-next-line no-shadow
-
 export enum CallEventType {
 	CALL_STARTED = 'CALL_STARTED',
 	CALL_ENDED = 'CALL_ENDED',
@@ -20,4 +19,5 @@ export enum CallEventType {
 	DATA_CHANNEL_ERROR = 'DATA_CHANNEL_ERROR',
 	NEGOTIATION_NEEDED = 'NEGOTIATION_NEEDED',
 	SIGNALING_STATE_CHANGE = 'SIGNALING_STATE_CHANGE',
+	CLIENT_ISSUE = 'CLIENT_ISSUE',
 }

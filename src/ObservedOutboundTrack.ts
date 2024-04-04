@@ -12,6 +12,7 @@ export type ObservedOutboundTrackModel<K extends MediaKind> = {
 }
 
 export type ObservedOutboundTrackEvents = {
+	qualitylimitationchanged: [string];
 	update: [{
 		elapsedTimeInMs: number;
 	}],
@@ -197,6 +198,14 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			if (videoSample?.framesSent && lastVideoStats?.framesSent && lastVideoStats.framesSent < videoSample.framesSent) {
 				deltaSentFrames = videoSample.framesSent - lastVideoStats.framesSent;
 			}
+
+			if (videoSample.qualityLimitationReason && lastVideoStats?.qualityLimitationReason !== videoSample.qualityLimitationReason) {
+				this.emit('qualitylimitationchanged', videoSample.qualityLimitationReason);
+			}
+		} else if (this.kind === 'audio') {
+			// const audioSample = sample as OutboundAudioTrack;
+			// const lastAudioStats = lastStat as OutboundAudioTrack | undefined;
+
 		}
 		const stats: ObservedOutboundTrackStats<Kind> = {
 			...sample,
