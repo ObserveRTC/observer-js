@@ -19,6 +19,16 @@ export type TurnUsage = {
 	totalPacketsReceived: number;
 }
 
+export type TurnStats = {
+	turnIp: string;
+	totalBytesSent: number;
+	totalBytesReceived: number;
+	totalPacketsSent: number;
+	totalPacketsReceived: number;
+	deltaBytesSent: number;
+	deltaBytesReceived: number;
+}
+
 type ObservedConnection = {
 	peerConnection: ObservedPeerConnection,
 	onUpdate: (...e: ObservedICEEvents['update']) => void;
@@ -35,10 +45,40 @@ export declare interface TurnUsageMonitor {
 export class TurnUsageMonitor extends EventEmitter {
 	private readonly _connections = new Map<string, ObservedConnection>();
 	private readonly _turnUsage = new Map<string, TurnUsage>();
+	private readonly _stats = new Map<string, TurnStats>();
 
 	private _closed = false;
 	public constructor() {
 		super();
+	}
+
+	public getStats(): TurnStats[] {
+		const result: TurnStats[] = [];
+
+		for (const [ turnIp, usage ] of this._turnUsage) {
+			const stats = this._stats.get(turnIp) ?? {
+				turnIp,
+				totalBytesSent: 0,
+				totalBytesReceived: 0,
+				totalPacketsSent: 0,
+				totalPacketsReceived: 0,
+				deltaBytesSent: 0,
+				deltaBytesReceived: 0,
+			};
+
+			stats.deltaBytesSent = usage.totalBytesSent - stats.totalBytesSent;
+			stats.deltaBytesReceived = usage.totalBytesReceived - stats.totalBytesReceived;
+			stats.totalBytesSent = usage.totalBytesSent;
+			stats.totalBytesReceived = usage.totalBytesReceived;
+			stats.totalPacketsSent = usage.totalPacketsSent;
+			stats.totalPacketsReceived = usage.totalPacketsReceived;
+
+			this._stats.set(turnIp, stats);
+
+			result.push(stats);
+		}
+
+		return result;
 	}
 
 	public addPeerConnection(peerConnection: ObservedPeerConnection) {
