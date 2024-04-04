@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "0.40.16",
+  "version": "0.40.17",
   "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

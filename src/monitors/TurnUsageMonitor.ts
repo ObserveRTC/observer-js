@@ -27,6 +27,9 @@ export type TurnStats = {
 	totalPacketsReceived: number;
 	deltaBytesSent: number;
 	deltaBytesReceived: number;
+	timestamp: number;
+	outboundBitrate: number;
+	inboundBitrate: number;
 }
 
 type ObservedConnection = {
@@ -64,10 +67,16 @@ export class TurnUsageMonitor extends EventEmitter {
 				totalPacketsReceived: 0,
 				deltaBytesSent: 0,
 				deltaBytesReceived: 0,
+				timestamp: Date.now(),
+				outboundBitrate: 0,
+				inboundBitrate: 0,
 			};
 
 			stats.deltaBytesSent = usage.totalBytesSent - stats.totalBytesSent;
 			stats.deltaBytesReceived = usage.totalBytesReceived - stats.totalBytesReceived;
+			stats.timestamp = Date.now();
+			stats.outboundBitrate = (stats.deltaBytesSent * 8) / ((stats.timestamp - stats.timestamp) / 1000.0);
+			stats.inboundBitrate = (stats.deltaBytesReceived * 8) / ((stats.timestamp - stats.timestamp) / 1000.0);
 			stats.totalBytesSent = usage.totalBytesSent;
 			stats.totalBytesReceived = usage.totalBytesReceived;
 			stats.totalPacketsSent = usage.totalPacketsSent;
