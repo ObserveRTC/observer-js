@@ -115,13 +115,14 @@ export class CallSummaryMonitor extends EventEmitter {
 		client.on('usermediaerror', onUserMediaError);
 		client.on('newpeerconnection', onNewPeerConnection);
 		client.once('close', () => {
-			const elapsedTimeInS = (Date.now() - client.created) / 1000;
+			const now = Date.now();
+			const elapsedTimeInS = (now - client.created) / 1000;
 
-			clientSummary.avgInboundAudioBitrate = (client.totalReceivedBytes * 8) / elapsedTimeInS;
-			clientSummary.avgInboundVideoBitrate = (client.totalReceivedBytes * 8) / elapsedTimeInS;
-			clientSummary.avgOutboundAudioBitrate = (client.totalSentBytes * 8) / elapsedTimeInS;
-			clientSummary.avgOutboundVideoBitrate = (client.totalSentBytes * 8) / elapsedTimeInS;
-			clientSummary.durationInMs = elapsedTimeInS * 1000;
+			clientSummary.avgInboundAudioBitrate = (client.totalReceivedAudioBytes * 8) / elapsedTimeInS;
+			clientSummary.avgInboundVideoBitrate = (client.totalReceivedVideoBytes * 8) / elapsedTimeInS;
+			clientSummary.avgOutboundAudioBitrate = (client.totalSentAudioBytes * 8) / elapsedTimeInS;
+			clientSummary.avgOutboundVideoBitrate = (client.totalSentVideoBytes * 8) / elapsedTimeInS;
+			clientSummary.durationInMs = now - client.created;
 			client.off('update', updateClient);
 			client.off('usingturn', onUsingTurn);
 			client.off('issue', onIssue);
