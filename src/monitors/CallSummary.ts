@@ -1,4 +1,11 @@
-import { ClientIssue } from '../ObservedClient';
+export interface ClientIssue {
+	severity: 'critical' | 'major' | 'minor';
+	timestamp: number;
+	description?: string;
+	peerConnectionId?: string,
+	trackId?: string,
+	attachments?: Record<string, unknown>,
+}
 
 export interface ClientSummary {
 	clientId: string;
@@ -23,5 +30,7 @@ export interface CallSummary {
 	started: number;
 	durationInMs: number;
 	maxNumberOfParticipants: number;
+	numberOfIssues: number;
+	highestSeverity?: ClientIssue['severity'],
 	clients: ClientSummary[];
 }

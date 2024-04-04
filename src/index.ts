@@ -57,7 +57,7 @@ export type { ObservedClient, ObservedClientModel } from './ObservedClient';
 export type { ObservedPeerConnection, ObservedPeerConnectionModel, ObservedPeerConnectionEvents } from './ObservedPeerConnection';
 export type { ObservedInboundTrack, ObservedInboundTrackModel, ObservedInboundTrackEvents } from './ObservedInboundTrack';
 export type { ObservedOutboundTrack, ObservedOutboundTrackModel, ObservedOutboundTrackEvents } from './ObservedOutboundTrack';
-
+export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSummary';
 export type { ObserverSinkContext } from './common/types';
 
 import { Observer, ObserverConfig } from './Observer';

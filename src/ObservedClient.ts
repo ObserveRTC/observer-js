@@ -9,17 +9,9 @@ import { isValidUuid } from './common/utils';
 import { createClientLeftEventReport } from './common/callEventReports';
 import { CallEventType } from './common/CallEventType';
 import { ObservedSfu } from './ObservedSfu';
+import { ClientIssue } from './monitors/CallSummary';
 
 const logger = createLogger('ObservedClient');
-
-export interface ClientIssue {
-	severity: 'critical' | 'major' | 'minor';
-	timestamp: number;
-	description?: string;
-	peerConnectionId?: string,
-	trackId?: string,
-	attachments?: Record<string, unknown>,
-}
 
 export type ObservedClientModel= {
 	clientId: string;

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
-import { CallSummary, ClientSummary } from './CallSummary';
+import { CallSummary, ClientIssue, ClientSummary } from './CallSummary';
 import { ObservedCall } from '../ObservedCall';
-import { ClientIssue, ObservedClient } from '../ObservedClient';
+import { ObservedClient } from '../ObservedClient';
 import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
 import { ObservedPeerConnection } from '../ObservedPeerConnection';
 
@@ -35,7 +35,7 @@ export class CallSummaryMonitor extends EventEmitter {
 	public addCall(call: ObservedCall) {
 		if (this.closed) return;
 
-		let callSummary = this._summaries.get(call.callId);
+		let callSummary: CallSummary | undefined = this._summaries.get(call.callId);
 
 		if (!callSummary) {
 			callSummary = {
@@ -45,6 +45,7 @@ export class CallSummaryMonitor extends EventEmitter {
 				clients: [],
 				durationInMs: 0,
 				maxNumberOfParticipants: 0,
+				numberOfIssues: 0,
 				started: call.created,
 			};
 			this._summaries.set(call.callId, callSummary);
@@ -91,16 +92,15 @@ export class CallSummaryMonitor extends EventEmitter {
 		};
 
 		const onIssue = (issue: ClientIssue) => {
+			++callSummary.numberOfIssues;
 			clientSummary.issues.push(issue);
+			
 		};
 
 		const onUserMediaError = (error: string) => {
 			if (!this.config.detectUserMediaIssues) return;
 
-			// maybe the client also sned this issue, in which case the timestamp can be more accurate
-			const alreadyDetected = clientSummary.issues.find((issue) => issue.severity === 'critical' && issue.description === error);
-
-			!alreadyDetected && clientSummary.issues.push({
+			client.addIssue({
 				severity: 'critical',
 				timestamp: Date.now(),
 				description: error,
@@ -145,7 +145,7 @@ export class CallSummaryMonitor extends EventEmitter {
 		const onQualityLimitationChanged = (reason: string) => {
 			if (!this.config.detectMediaTrackQualityLimitationIssues) return;
 
-			clientSummary.issues.push({
+			track.peerConnection.client.addIssue({
 				severity: 'minor',
 				timestamp: Date.now(),
 				description: reason,
