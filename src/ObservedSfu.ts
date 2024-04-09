@@ -3,6 +3,7 @@ import { Observer } from './Observer';
 import { SfuSample } from '@observertc/sample-schemas-js';
 import { ObservedSfuTransport, ObservedSfuTransportModel } from './ObservedSfuTransport';
 import { SfuEventReport, SfuExtensionReport } from '@observertc/report-schemas-js';
+import { PartialBy } from './common/utils';
 
 export type ObservedSfuModel= {
 	serviceId: string;
@@ -95,6 +96,16 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		[ ...this._transports.values() ].forEach((transport) => transport.close()); 
 
 		this.emit('close');
+	}
+
+	public addEventReport(params: PartialBy<Omit<SfuEventReport, 'serviceId' | 'sfuId' | 'marker'>, 'timestamp'>) {
+		this.reports.addCallEventReport({
+			...params,
+			serviceId: this.serviceId,
+			mediaUnitId: this.mediaUnitId,
+			marker: this.marker,
+			timestamp: params.timestamp ?? Date.now(),
+		});
 	}
 
 	public update(sample: SfuSample) {

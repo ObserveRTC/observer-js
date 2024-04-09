@@ -3,6 +3,8 @@ import { ObservedClient, ObservedClientModel } from './ObservedClient';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { Observer } from './Observer';
 import { createClientJoinedEventReport } from './common/callEventReports';
+import { PartialBy } from './common/utils';
+import { CallEventReport } from '@observertc/report-schemas-js';
 
 export type ObservedCallModel = {
 	serviceId: string;
@@ -86,6 +88,16 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		Array.from(this._clients.values()).forEach((client) => client.close());
 		
 		this.emit('close');
+	}
+
+	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' >, 'timestamp'>) {
+		this.reports.addCallEventReport({
+			...params,
+			serviceId: this.serviceId,
+			roomId: this.roomId,
+			callId: this.callId,
+			timestamp: params.timestamp ?? Date.now(),
+		});
 	}
 
 	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { appData: ClientAppData, generateClientJoinedReport?: boolean, joined?: number }) {

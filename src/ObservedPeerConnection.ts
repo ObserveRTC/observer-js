@@ -3,9 +3,10 @@ import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
 import { ObservedInboundTrack, ObservedInboundTrackModel } from './ObservedInboundTrack';
 import { ObservedOutboundTrack, ObservedOutboundTrackModel } from './ObservedOutboundTrack';
-import { PeerConnectionTransportReport } from '@observertc/report-schemas-js';
+import { CallEventReport, PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 import { ObservedICE } from './ObservedICE';
 import { ObservedDataChannel } from './ObservedDataChannel';
+import { PartialBy } from './common/utils';
 
 export type ObservedPeerConnectionEvents = {
 	update: [{
@@ -185,6 +186,21 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._outboundVideoTracks.forEach((track) => (track.marker = value));
 		this._dataChannels.forEach((channel) => (channel.marker = value));
 		this.ICE.marker = value;
+	}
+
+	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'peerConnectionId' | 'marker'>, 'timestamp'>) {
+		this.reports.addCallEventReport({
+			...params,
+			serviceId: this.serviceId,
+			mediaUnitId: this.mediaUnitId,
+			roomId: this.roomId,
+			callId: this.callId,
+			clientId: this.clientId,
+			userId: this.client.userId,
+			peerConnectionId: this.peerConnectionId,
+			marker: this.client.marker,
+			timestamp: params.timestamp ?? Date.now(),
+		});
 	}
 
 	public get closed() {

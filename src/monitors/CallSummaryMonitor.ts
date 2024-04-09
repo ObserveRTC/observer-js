@@ -30,6 +30,7 @@ export class CallSummaryMonitor extends EventEmitter {
 		public readonly config: CallSummaryMonitorConfig = {},
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public addCall(call: ObservedCall) {

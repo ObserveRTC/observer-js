@@ -5,11 +5,12 @@ import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { createLogger } from './common/logger';
 import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
 // eslint-disable-next-line camelcase
-import { isValidUuid } from './common/utils';
+import { PartialBy, isValidUuid } from './common/utils';
 import { createClientLeftEventReport } from './common/callEventReports';
 import { CallEventType } from './common/CallEventType';
 import { ObservedSfu } from './ObservedSfu';
 import { ClientIssue } from './monitors/CallSummary';
+import { CallEventReport } from '@observertc/report-schemas-js';
 
 const logger = createLogger('ObservedClient');
 
@@ -212,6 +213,35 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		Array.from(this._peerConnections.values()).forEach((peerConnection) => peerConnection.close());
 
 		this.emit('close');
+	}
+
+	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker'>, 'timestamp'>) {
+		this.reports.addCallEventReport({
+			...params,
+			serviceId: this.serviceId,
+			mediaUnitId: this.mediaUnitId,
+			roomId: this.roomId,
+			callId: this.callId,
+			clientId: this.clientId,
+			userId: this.userId,
+			timestamp: params.timestamp ?? Date.now(),
+			marker: this.marker,
+		});
+	}
+
+	public addExtensionStatsReport(extensionType: string, payload: Record<string, unknown>) {
+		this.reports.addClientExtensionReport({
+			serviceId: this.serviceId,
+			mediaUnitId: this.mediaUnitId,
+			roomId: this.roomId,
+			callId: this.callId,
+			clientId: this.clientId,
+			userId: this.userId,
+			timestamp: Date.now(),
+			extensionType,
+			payload: JSON.stringify(payload),
+			marker: this.marker,
+		});
 	}
 
 	public addIssue(issue: ClientIssue) {

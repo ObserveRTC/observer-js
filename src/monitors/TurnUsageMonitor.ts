@@ -53,6 +53,7 @@ export class TurnUsageMonitor extends EventEmitter {
 	private _closed = false;
 	public constructor() {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public getStats(): TurnStats[] {
