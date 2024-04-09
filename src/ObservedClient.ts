@@ -231,11 +231,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				timestamp: issue.timestamp ?? Date.now(),
 				attachments: issue.attachments ? JSON.stringify(issue.attachments): undefined,
 			});
-			this.emit('issue', issue);
 		} catch (err) {
 			logger.warn(`Error adding client issue: ${(err as Error)?.message}`);
 		}
-		
+
+		this.emit('issue', issue);
 	}
 
 	public accept(sample: ClientSample): void {

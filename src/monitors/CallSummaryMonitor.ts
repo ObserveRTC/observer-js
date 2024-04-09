@@ -68,10 +68,12 @@ export class CallSummaryMonitor extends EventEmitter {
 			clientId: client.clientId,
 			mediaUnitId: client.mediaUnitId,
 			durationInMs: 0,
-			avgInboundAudioBitrate: 0,
-			avgInboundVideoBitrate: 0,
-			avgOutboundAudioBitrate: 0,
-			avgOutboundVideoBitrate: 0,
+			totalInboundAudioBytes: 0,
+			totalInboundVideoBytes: 0,
+			totalOutboundAudioBytes: 0,
+			totalOutboundVideoBytes: 0,
+			totalDataChannelBytesSent: 0,
+			totalDataChannelBytesReceived: 0,
 			ewmaRttInMs: 0,
 			joined: client.created,
 			userId: client.userId,
@@ -116,13 +118,16 @@ export class CallSummaryMonitor extends EventEmitter {
 		client.on('newpeerconnection', onNewPeerConnection);
 		client.once('close', () => {
 			const now = Date.now();
-			const elapsedTimeInS = (now - client.created) / 1000;
 
-			clientSummary.avgInboundAudioBitrate = (client.totalReceivedAudioBytes * 8) / elapsedTimeInS;
-			clientSummary.avgInboundVideoBitrate = (client.totalReceivedVideoBytes * 8) / elapsedTimeInS;
-			clientSummary.avgOutboundAudioBitrate = (client.totalSentAudioBytes * 8) / elapsedTimeInS;
-			clientSummary.avgOutboundVideoBitrate = (client.totalSentVideoBytes * 8) / elapsedTimeInS;
+			clientSummary.totalInboundAudioBytes = client.totalReceivedAudioBytes;
+			clientSummary.totalInboundVideoBytes = client.totalReceivedVideoBytes;
+			clientSummary.totalOutboundAudioBytes = client.totalSentAudioBytes;
+			clientSummary.totalOutboundVideoBytes = client.totalSentVideoBytes;
+			clientSummary.totalDataChannelBytesSent = client.totalDataChannelBytesSent;
+			clientSummary.totalDataChannelBytesReceived = client.totalDataChannelBytesReceived;
 			clientSummary.durationInMs = now - client.created;
+			clientSummary.left = now;
+			
 			client.off('update', updateClient);
 			client.off('usingturn', onUsingTurn);
 			client.off('issue', onIssue);

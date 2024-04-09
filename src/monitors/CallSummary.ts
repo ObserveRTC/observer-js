@@ -14,10 +14,12 @@ export interface ClientSummary extends Record<string, unknown> {
 	joined: number;
 	left?: number;
 	durationInMs: number;
-	avgOutboundAudioBitrate: number,
-	avgOutboundVideoBitrate: number,
-	avgInboundAudioBitrate: number,
-	avgInboundVideoBitrate: number,
+	totalOutboundAudioBytes: number,
+	totalOutboundVideoBytes: number,
+	totalInboundAudioBytes: number,
+	totalInboundVideoBytes: number,
+	totalDataChannelBytesSent: number,
+	totalDataChannelBytesReceived: number,
 	ewmaRttInMs: number,
 	usedTurn: boolean;
 	issues: ClientIssue[];
