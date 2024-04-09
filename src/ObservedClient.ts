@@ -215,7 +215,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.emit('close');
 	}
 
-	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker'>, 'timestamp'> & { attachments?: Record<string, unknown> }) {
+	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker' | 'attachments'>, 'timestamp'> & { attachments?: Record<string, unknown> }) {
 		const {
 			attachments,
 			...fields
