@@ -215,9 +215,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.emit('close');
 	}
 
-	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker'>, 'timestamp'>) {
+	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker'>, 'timestamp'> & { attachments?: Record<string, unknown> }) {
+		const {
+			attachments,
+			...fields
+		} = params;
+
 		this.reports.addCallEventReport({
-			...params,
+			...fields,
 			serviceId: this.serviceId,
 			mediaUnitId: this.mediaUnitId,
 			roomId: this.roomId,
@@ -226,10 +231,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			userId: this.userId,
 			timestamp: params.timestamp ?? Date.now(),
 			marker: this.marker,
+			attachments: attachments ? JSON.stringify(attachments) : undefined,
 		});
 	}
 
-	public addExtensionStatsReport(extensionType: string, payload: Record<string, unknown>) {
+	public addExtensionStatsReport(extensionType: string, payload?: Record<string, unknown>) {
 		this.reports.addClientExtensionReport({
 			serviceId: this.serviceId,
 			mediaUnitId: this.mediaUnitId,

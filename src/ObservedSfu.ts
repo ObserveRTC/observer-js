@@ -98,13 +98,31 @@ export class ObservedSfu<AppData extends Record<string, unknown> = Record<string
 		this.emit('close');
 	}
 
-	public addEventReport(params: PartialBy<Omit<SfuEventReport, 'serviceId' | 'sfuId' | 'marker'>, 'timestamp'>) {
+	public addEventReport(params: PartialBy<Omit<SfuEventReport, 'serviceId' | 'sfuId' | 'marker' | 'attachments'>, 'timestamp'> & { attachments?: Record<string, unknown> }) {
+		const {
+			attachments,
+			...fields
+		} = params;
+
 		this.reports.addCallEventReport({
-			...params,
+			...fields,
 			serviceId: this.serviceId,
 			mediaUnitId: this.mediaUnitId,
 			marker: this.marker,
 			timestamp: params.timestamp ?? Date.now(),
+			attachments: attachments ? JSON.stringify(attachments) : undefined,
+		});
+	}
+
+	public addExtensionStatsReport(extensionType: string, payload?: Record<string, unknown>) {
+		this.reports.addSfuExtensionReport({
+			serviceId: this.serviceId,
+			mediaUnitId: this.mediaUnitId,
+			timestamp: Date.now(),
+			extensionType,
+			payload: payload ? JSON.stringify(payload) : undefined,
+			marker: this.marker,
+			sfuId: this.sfuId,
 		});
 	}
 
