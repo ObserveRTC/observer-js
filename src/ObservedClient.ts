@@ -108,6 +108,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
 	public readonly userMediaErrors: string[] = [];
+	public readonly issues: ClientIssue[] = [];
 
 	public readonly ωpendingCreatedTracksTimestamp = new Map<string, number>();
 	public readonly ωpendingCreatedPeerConnectionTimestamp = new Map<string, number>();
@@ -235,6 +236,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			logger.warn(`Error adding client issue: ${(err as Error)?.message}`);
 		}
 
+		this.issues.push(issue);
 		this.emit('issue', issue);
 	}
 
@@ -433,6 +435,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 							attachments: callEvent.attachments ? JSON.parse(callEvent.attachments) : undefined,
 						};
 	
+						this.issues.push(issue);
 						this.emit('issue', issue);
 					} catch (err) {
 						logger.warn(`Error parsing client issue: ${(err as Error)?.message}`);

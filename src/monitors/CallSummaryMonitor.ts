@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { CallSummary, ClientIssue, ClientSummary } from './CallSummary';
+import { CallSummary, ClientSummary } from './CallSummary';
 import { ObservedCall } from '../ObservedCall';
 import { ObservedClient } from '../ObservedClient';
 import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
@@ -93,12 +93,6 @@ export class CallSummaryMonitor extends EventEmitter {
 			clientSummary.usedTurn ||= usingTurn;
 		};
 
-		const onIssue = (issue: ClientIssue) => {
-			++callSummary.numberOfIssues;
-			clientSummary.issues.push(issue);
-			
-		};
-
 		const onUserMediaError = (error: string) => {
 			if (!this.config.detectUserMediaIssues) return;
 
@@ -113,7 +107,6 @@ export class CallSummaryMonitor extends EventEmitter {
 
 		client.on('update', updateClient);
 		client.on('usingturn', onUsingTurn);
-		client.on('issue', onIssue);
 		client.on('usermediaerror', onUserMediaError);
 		client.on('newpeerconnection', onNewPeerConnection);
 		client.once('close', () => {
@@ -127,14 +120,15 @@ export class CallSummaryMonitor extends EventEmitter {
 			clientSummary.totalDataChannelBytesReceived = client.totalDataChannelBytesReceived;
 			clientSummary.durationInMs = now - client.created;
 			clientSummary.left = now;
-			
+			clientSummary.issues.push(...client.issues);
+
 			client.off('update', updateClient);
 			client.off('usingturn', onUsingTurn);
-			client.off('issue', onIssue);
 			client.off('usermediaerror', onUserMediaError);
 			client.off('newpeerconnection', onNewPeerConnection);
 
 			callSummary.durationInMs += clientSummary.durationInMs;
+			callSummary.numberOfIssues += clientSummary.issues.length;
 		});
 	}
 
