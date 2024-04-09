@@ -246,6 +246,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public addIssue(issue: ClientIssue) {
 		try {
+			
 			this.reports.addCallEventReport({
 				serviceId: this.serviceId,
 				mediaUnitId: this.mediaUnitId,
