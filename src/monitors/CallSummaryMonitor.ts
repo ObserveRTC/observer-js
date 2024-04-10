@@ -130,6 +130,13 @@ export class CallSummaryMonitor extends EventEmitter {
 
 			callSummary.durationInMs += clientSummary.durationInMs;
 			callSummary.numberOfIssues += clientSummary.issues.length;
+			callSummary.highestSeverity = clientSummary.issues.reduce((highest, issue) => {
+				if (issue.severity === 'critical') return 'critical';
+				if (issue.severity === 'major' && highest !== 'critical') return 'major';
+				if (issue.severity === 'minor' && highest !== 'critical' && highest !== 'major') return 'minor';
+				
+				return highest;
+			}, callSummary.highestSeverity);
 		});
 	}
 
