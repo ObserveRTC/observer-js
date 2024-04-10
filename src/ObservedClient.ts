@@ -123,6 +123,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.setMaxListeners(Infinity);
 	}
 
+	public getSfu<T extends Record<string, unknown> = Record<string, unknown>>(): ObservedSfu<T> | undefined {
+		const sfu = this.call.observer.observedSfus.get(this.sfuId ?? '');
+
+		if (!sfu) return;
+		
+		return sfu as ObservedSfu<T>;
+	}
+
 	public get sfu(): ObservedSfu | undefined {
 		if (!this.sfuId) return;
 		
@@ -160,6 +168,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get userId() {
 		return this._model.userId;
+	}
+
+	public set userId(userId: string | undefined) {
+		this._model.userId = userId;
 	}
 
 	public get timeZoneOffsetInHours() {
@@ -291,9 +303,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			peerConnection.resetMetrics();
 		}
 
-		if (this.userId !== sample.userId) {
+		if (this._model.userId) {
+			if (sample.userId && sample.userId !== 'NULL' && sample.userId !== this._model.userId) {
+				this._model.userId = sample.userId;
+			}
+		} else if (sample.userId && sample.userId !== 'NULL') {
 			this._model.userId = sample.userId;
 		}
+		
 		if (this._model.marker !== sample.marker) {
 			this._model.marker = sample.marker;
 			this._peerConnections.forEach((peerConnection) => (peerConnection.marker = sample.marker));
