@@ -10,6 +10,7 @@ import { CallSummaryMonitor, CallSummaryMonitorConfig } from './monitors/CallSum
 import { TurnUsageMonitor } from './monitors/TurnUsageMonitor';
 import { ObservedClient } from './ObservedClient';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
+import { ClientIssueMonitor } from './monitors/ClientIssueMonitor';
 
 const logger = createLogger('Observer');
 
@@ -236,6 +237,32 @@ export class Observer extends EventEmitter {
 			call.once('close', () => call.off('newclient', onNewClient));
 			call.on('newclient', onNewClient);
 		};
+
+		monitor.once('close', () => {
+			this._monitors.delete(CallSummaryMonitor.name);
+			this.off('newcall', onNewCall);
+		});
+
+		this._monitors.set(CallSummaryMonitor.name, monitor);
+		this.on('newcall', onNewCall);
+		
+		this.once('close', () => {
+			monitor.close();
+		});
+
+		return monitor;
+	}
+
+	public createClientIssueMonitor() {
+		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+
+		const existingMonitor = this._monitors.get(ClientIssueMonitor.name);
+		
+		if (existingMonitor) return existingMonitor as ClientIssueMonitor;
+
+		const monitor = new ClientIssueMonitor();
+
+		const onNewCall = (call: ObservedCall) => monitor.addCall(call);
 
 		monitor.once('close', () => {
 			this._monitors.delete(CallSummaryMonitor.name);
