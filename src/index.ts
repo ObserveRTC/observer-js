@@ -51,7 +51,11 @@ export type {
 	SfuSctpStreamReport,
 	SFUTransportReport,
 } from '@observertc/report-schemas-js';
-
+export type { 
+	ClientIssueMonitorConfig, 
+	ClientIssueMonitorEmittedIssueEvent, 
+	ClientIssueMonitor 
+} from './monitors/ClientIssueMonitor';
 export type { ObservedCall, ObservedCallModel } from './ObservedCall';
 export type { ObservedClient, ObservedClientModel } from './ObservedClient';
 export type { ObservedPeerConnection, ObservedPeerConnectionModel, ObservedPeerConnectionEvents } from './ObservedPeerConnection';
