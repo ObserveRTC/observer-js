@@ -41,8 +41,6 @@ export type ObserverConfig = {
 
 	maxReports?: number | undefined;
 	maxCollectingTimeInMs?: number | undefined;
-	
-	maxEntryIdleTimeInMs?: number | undefined;
 };
 
 export declare interface Observer {

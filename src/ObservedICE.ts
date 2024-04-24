@@ -216,7 +216,7 @@ export class ObservedICE extends EventEmitter {
 			if (localCandidate && remoteCandidate) {
 				const wasUsingTURN = this.usingTURN;
 
-				this.usingTURN = remoteCandidate.candidateType?.toLocaleLowerCase() === 'relay';
+				this.usingTURN = (localCandidate.candidateType?.toLocaleLowerCase() === 'relay' ?? false) && (localCandidate.url?.startsWith('turn:') ?? false);
 
 				this.emit('new-selected-candidate-pair', {
 					localCandidate,

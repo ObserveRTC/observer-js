@@ -49,6 +49,7 @@ export declare interface ObservedOutboundTrack<Kind extends MediaKind> {
 
 export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public readonly created = Date.now();
+	public visited = false;
 
 	public bitrate = 0;
 	public rttInMs?: number;
@@ -252,6 +253,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
 		}
 
+		this.visited = true;
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

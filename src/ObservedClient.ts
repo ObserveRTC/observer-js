@@ -788,41 +788,51 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		// close entries that are idle for too long
-		if (this.call.observer.config.maxEntryIdleTimeInMs && this._updated < sample.timestamp) {
+		for (const peerConnection of this._peerConnections.values()) {
+			if (!peerConnection.visited) {
+				peerConnection.close();
 
-			for (const peerConnection of this._peerConnections.values()) {
-				if (this.call.observer.config.maxEntryIdleTimeInMs < peerConnection.created - peerConnection.updated) {
-					logger.debug(`Closing peer connection ${peerConnection.peerConnectionId} due to inactivity`);
-					peerConnection.close();
+				continue;
+			}
+
+			for (const track of peerConnection.inboundAudioTracks.values()) {
+				if (!track.visited) {
+					track.close();
 
 					continue;
 				}
-				for (const track of peerConnection.inboundAudioTracks.values()) {
-					if (this.call.observer.config.maxEntryIdleTimeInMs < track.created - track.updated) {
-						logger.debug(`Closing inbound audio track ${track.trackId} due to inactivity`);
-						track.close();
-					}
-				}
-				for (const track of peerConnection.inboundVideoTracks.values()) {
-					if (this.call.observer.config.maxEntryIdleTimeInMs < track.created - track.updated) {
-						logger.debug(`Closing inbound video track ${track.trackId} due to inactivity`);
-						track.close();
-					}
-				}
-				for (const track of peerConnection.outboundAudioTracks.values()) {
-					if (this.call.observer.config.maxEntryIdleTimeInMs < track.created - track.updated) {
-						logger.debug(`Closing outbound audio track ${track.trackId} due to inactivity`);
-						track.close();
-					}
-				}
-				for (const dataChannel of peerConnection.dataChannels.values()) {
-					if (this.call.observer.config.maxEntryIdleTimeInMs < dataChannel.created - dataChannel.updated) {
-						logger.debug(`Closing DataChannel ${dataChannel.channelId} due to inactivity`);
-						dataChannel.close();
-					}
-				}
+
+				track.visited = false;
 			}
+			for (const track of peerConnection.inboundVideoTracks.values()) {
+				if (!track.visited) {
+					track.close();
+
+					continue;
+				}
+
+				track.visited = false;
+			}
+			for (const track of peerConnection.outboundAudioTracks.values()) {
+				if (!track.visited) {
+					track.close();
+
+					continue;
+				}
+
+				track.visited = false;
+			}
+			for (const dataChannel of peerConnection.dataChannels.values()) {
+				if (!dataChannel.visited) {
+					dataChannel.close();
+
+					continue;
+				}
+
+				dataChannel.visited = false;
+			}
+
+			peerConnection.visited = false;
 		}
 
 		// update metrics

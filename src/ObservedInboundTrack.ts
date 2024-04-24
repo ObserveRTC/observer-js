@@ -53,6 +53,7 @@ export declare interface ObservedInboundTrack<Kind extends MediaKind> {
 
 export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public readonly created = Date.now();
+	public visited = false;
 
 	private readonly _stats = new Map<number, ObservedInboundTrackStats<Kind>>();
 	
@@ -273,6 +274,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 
 		this._stats.set(sample.ssrc, stats);
 
+		this.visited = true;
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

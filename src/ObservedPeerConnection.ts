@@ -36,6 +36,7 @@ export declare interface ObservedPeerConnection {
 
 export class ObservedPeerConnection extends EventEmitter {
 	public readonly created = Date.now();
+	public visited = true;
 
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
@@ -362,6 +363,7 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this.reports.addPeerConnectionTransportReports(report);
 		
+		this.visited = true;
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

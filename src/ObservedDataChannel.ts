@@ -45,6 +45,7 @@ export declare interface ObservedDataChannel {
 
 export class ObservedDataChannel extends EventEmitter	{
 	public readonly created = Date.now();
+	public visited = false;
 
 	private _stats?: DataChannel;
 	
@@ -184,6 +185,7 @@ export class ObservedDataChannel extends EventEmitter	{
 		this.totalReceivedMessages = sample.messageReceived ?? 0;
 		this.totalSentMessages = sample.messageSent ?? 0;
 
+		this.visited = true;
 		this._stats = sample;
 		this._updated = timestamp;
 		this.emit('update', {
