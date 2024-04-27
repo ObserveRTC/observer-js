@@ -18,8 +18,7 @@ export type ClientIssueMonitorEvents = {
 }
 
 export type ClientIssueMonitorConfig = {
-	detectUserMediaClientIssues?: boolean;
-	detectMediaTrackQualityLimitationClientIssues?: boolean;
+	// empty
 }
 
 export declare interface ClientIssueMonitor {

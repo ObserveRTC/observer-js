@@ -1,10 +1,15 @@
 import { EventEmitter } from 'events';
-import { ObservedClient, ObservedClientModel } from './ObservedClient';
+import { ObservedClient, ObservedClientEvents, ObservedClientModel } from './ObservedClient';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { Observer } from './Observer';
 import { createClientJoinedEventReport } from './common/callEventReports';
 import { PartialBy } from './common/utils';
 import { CallEventReport } from '@observertc/report-schemas-js';
+import { createProcessor } from './common/Middleware';
+import { ClientSample } from '@observertc/sample-schemas-js';
+import { ClientIssue } from './monitors/CallSummary';
+
+type ClientIssueDetectionConfig = Pick<ClientIssue, 'severity'>;
 
 export type ObservedCallModel = {
 	serviceId: string;
@@ -27,6 +32,8 @@ export declare interface ObservedCall {
 
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly created = Date.now();
+
+	public readonly processor = createProcessor<ClientSample>();
 
 	private readonly _clients = new Map<string, ObservedClient>();
 	
@@ -100,21 +107,39 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		});
 	}
 
-	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { appData: ClientAppData, generateClientJoinedReport?: boolean, joined?: number }) {
+	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { 
+		appData: ClientAppData, 
+		generateClientJoinedReport?: boolean, 
+		joined?: number,
+		detectIssues?: {
+			rejoin: ClientIssue['severity'] | ClientIssueDetectionConfig,
+		},
+	}) {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 
-		const { appData, generateClientJoinedReport, joined = Date.now(), ...model } = config;
+		const { 
+			appData, 
+			generateClientJoinedReport, 
+			joined = Date.now(), 
+			detectIssues = {
+				rejoin: 'minor'
+			}, 
+			...model 
+		} = config;
 		
 		const result = new ObservedClient(model, this, appData);
-		const onUpdate = () => {
+		const onUpdate = ({ sample }: { sample: ClientSample }) => {
 			this._updated = Date.now();
 			this.emit('update');
+
+			this.processor.process(sample);
 		};
 
 		result.once('close', () => {
 			result.off('update', onUpdate);
 			this._clients.delete(result.clientId);
 		});
+
 		result.on('update', onUpdate);
 		this._clients.set(result.clientId, result);
 
@@ -129,6 +154,25 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				result.userId,
 				result.marker,
 			));
+		}
+
+		if (detectIssues?.rejoin) {
+			const issueBaseConfig = typeof detectIssues.rejoin === 'object' ? detectIssues.rejoin : { 
+				severity: detectIssues.rejoin 
+			};
+			
+			const rejoinedClientIssueListener = (event: ObservedClientEvents['rejoined'][0]) => {
+				event.lastJoined;
+				result.addIssue({
+					timestamp: Date.now(),
+					...issueBaseConfig,
+				});
+			};
+
+			result.once('close', () => {
+				result.off('rejoined', rejoinedClientIssueListener);
+			});
+			result.on('rejoined', rejoinedClientIssueListener);
 		}
 
 		this.emit('newclient', result);

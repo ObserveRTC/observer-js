@@ -23,10 +23,15 @@ export type ObservedClientModel= {
 	engine?: Engine,
 	platform?: Platform,
 	browser?: Browser,
+	coordinates?: {
+		latitude: number;
+		longitude: number;
+	},
 };
 
 export type ObservedClientEvents = {
 	update: [{
+		sample: ClientSample,
 		elapsedTimeInMs: number,
 	}],
 	close: [],
@@ -51,6 +56,9 @@ export type ObservedClientEvents = {
 	issue: [ClientIssue],
 	usingturn: [boolean],
 	usermediaerror: [string],
+	rejoined: [{
+		lastJoined: number,
+	}],
 };
 
 export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
@@ -71,7 +79,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 	private _closed = false;
 	
-	private _acceptedSample = 0;
+	private _joinedEventAt?: number;
+	private _acceptedSamples = 0;
 	private _timeZoneOffsetInHours?: number;
 	private _left?: number;
 	
@@ -137,6 +146,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this.call.observer.observedSfus.get(this.sfuId);
 	}
 
+	public get coordinates() {
+		return this._model.coordinates;
+	}
+
+	public set coordinates(value: { latitude: number; longitude: number } | undefined) {
+		this._model.coordinates = value;
+	}
+
 	public get clientId(): string {
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		return this._model.clientId!;
@@ -198,8 +215,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return this._model.platform;
 	}
 
-	public get acceptedSample() {
-		return this._acceptedSample;
+	public get acceptedSamples() {
+		return this._acceptedSamples;
 	}
 
 	public get updated() {
@@ -296,7 +313,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 		const now = Date.now();
 
-		++this._acceptedSample;
+		++this._acceptedSamples;
 		
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
@@ -472,6 +489,16 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		for (const { timestamp, ...callEvent } of sample.customCallEvents ?? []) {
 			switch (callEvent.name) {
+				case CallEventType.CLIENT_JOINED: {
+					const lastJoined = this._joinedEventAt;
+
+					this._joinedEventAt = timestamp ?? sample.timestamp;
+
+					if (lastJoined && this._joinedEventAt && lastJoined !== this._joinedEventAt) {
+						this.emit('rejoined', { lastJoined });
+					}
+					break;
+				}
 				case CallEventType.CLIENT_LEFT: {
 					this._left = timestamp;
 					break;
@@ -903,8 +930,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
 		
+		// to make sure when sample is emitted it can be associated to this client
+		sample.clientId = this.clientId;
+
 		this._updated = now;
 		this.emit('update', {
+			sample,
 			elapsedTimeInMs,
 		});
 	}
