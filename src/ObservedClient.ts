@@ -481,7 +481,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				callId: this.callId,
 				clientId: this.clientId,
 				userId: this.userId,
-				timestamp: Date.now(),
+				timestamp: now,
 				payload: extensionStats.payload,
 				extensionType: extensionStats.type,
 			});
@@ -521,8 +521,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} catch (err) {
 						logger.warn(`Error parsing client issue: ${(err as Error)?.message}`);
 					}
+					break;
 				}
 			}
+
 			this.reports.addCallEventReport({
 				serviceId: this.serviceId,
 				mediaUnitId: this.mediaUnitId,
@@ -530,9 +532,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				callId: this.callId,
 				clientId: this.clientId,
 				userId: this.userId,
-				timestamp: timestamp ?? Date.now(),
+				timestamp: timestamp ?? now,
 				...callEvent,
 			});
+
+			this.call.emit('callevent', {
+				mediaUnitId: this.mediaUnitId,
+				clientId: this.clientId,
+				userId: this.userId,
+				timestamp: timestamp ?? now,
+				...callEvent,
+			});
+			
 		}
 
 		for (const userMediaError of sample.userMediaErrors ?? []) {

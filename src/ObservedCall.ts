@@ -20,6 +20,7 @@ export type ObservedCallModel = {
 export type ObservedCallEvents = {
 	update: [],
 	newclient: [ObservedClient],
+	callevent: [Omit<CallEventReport, 'callId' | 'serviceId' | 'roomId'>],
 	close: [],
 }
 
