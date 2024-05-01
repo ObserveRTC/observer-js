@@ -66,6 +66,8 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 	public deltaSentFrames = 0;
 	public deltaEncodedFrames = 0;
 
+	public sendingBitrate = 0;
+
 	private readonly _stats = new Map<number, ObservedOutboundTrackStats<Kind>>();
 	private _lastMaxStatsTimestamp = 0;
 	
@@ -79,6 +81,8 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 	) {
 		super();
 		this.setMaxListeners(Infinity);
+		
+		if (this._model.sfuStreamId) this._assignSfuStreamId(this._model.sfuStreamId);
 	}
 
 	public get serviceId() {
@@ -241,16 +245,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 		// setting up sfu connection as it is not always available at the first sample
 		if (sample.sfuStreamId && !this._model.sfuStreamId) {
-			this._model.sfuStreamId = sample.sfuStreamId;
-		
-			this.once('close', () => {
-				if (!this._model.sfuStreamId) return;
-				if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.delete(this._model.sfuStreamId);
-				else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.delete(this._model.sfuStreamId);
-			});
-
-			if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'audio'>);
-			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
+			this._assignSfuStreamId(sample.sfuStreamId);
 		}
 
 		this.visited = true;
@@ -270,6 +265,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 		this._remoteInboundTracks.set(track.trackId, track);
 	}
+	private _lastUpdateMetrics?: number;
 
 	public updateMetrics() {
 		let maxStatsTimestamp = 0;
@@ -279,6 +275,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.bitrate = 0;
 		this.rttInMs = undefined;
 
+		this.sendingBitrate = 0;
 		this.deltaLostPackets = 0;
 		this.deltaSentPackets = 0;
 		this.deltaSentBytes = 0;
@@ -300,6 +297,13 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			rttInMsSum += stats.rttInMs ?? 0;
 			++size;
 		}
+		
+		const now = Date.now();
+
+		if (this._lastUpdateMetrics) {
+			this.sendingBitrate = (this.deltaSentBytes * 8) / ((now - this._lastUpdateMetrics) / 1000);
+		}
+		this._lastUpdateMetrics = now;
 
 		this.totalLostPackets += this.deltaLostPackets;
 		this.totalSentPackets += this.deltaSentPackets;
@@ -309,5 +313,18 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.rttInMs = rttInMsSum / Math.max(size, 1);
 
 		this._lastMaxStatsTimestamp = maxStatsTimestamp;
+	}
+
+	private _assignSfuStreamId(sfuStreamId: string) {
+		this._model.sfuStreamId = sfuStreamId;
+		
+		this.once('close', () => {
+			if (!this._model.sfuStreamId) return;
+			if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.delete(this._model.sfuStreamId);
+			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.delete(this._model.sfuStreamId);
+		});
+
+		if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'audio'>);
+		else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
 	}
 }
