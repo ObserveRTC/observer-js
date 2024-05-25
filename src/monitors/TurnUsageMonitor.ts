@@ -56,7 +56,7 @@ export class TurnUsageMonitor extends EventEmitter {
 		this.setMaxListeners(Infinity);
 	}
 
-	public getStats(): TurnStats[] {
+	public get stats(): TurnStats[] {
 		const result: TurnStats[] = [];
 
 		for (const [ turnIp, usage ] of this._turnUsage) {

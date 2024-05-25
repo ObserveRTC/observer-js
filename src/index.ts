@@ -63,6 +63,8 @@ export type { ObservedInboundTrack, ObservedInboundTrackModel, ObservedInboundTr
 export type { ObservedOutboundTrack, ObservedOutboundTrackModel, ObservedOutboundTrackEvents } from './ObservedOutboundTrack';
 export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSummary';
 export type { ObserverSinkContext } from './common/types';
+export type { SfuServerMonitorMetricsRecord } from './monitors/SfuServerMonitor';
+export type { TurnUsageMonitorEvents, TurnUsageMonitor, TurnStats, TurnUsage } from './monitors/TurnUsageMonitor';
 
 import { Observer, ObserverConfig } from './Observer';
 export function createObserver(config?: Partial<ObserverConfig>) {
