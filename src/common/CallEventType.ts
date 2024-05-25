@@ -22,7 +22,7 @@ export enum CallEventType {
 	CLIENT_ISSUE = 'CLIENT_ISSUE',
 }
 
-export type CallEventReportTyoe = {
+export type CallEventReportType = {
 	name: CallEventType.MEDIA_TRACK_ADDED,
 	attachment: MediaTrackAddedAttachment,
 } | {

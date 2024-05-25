@@ -65,7 +65,14 @@ export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSum
 export type { ObserverSinkContext } from './common/types';
 export type { SfuServerMonitorMetricsRecord } from './monitors/SfuServerMonitor';
 export type { TurnUsageMonitorEvents, TurnUsageMonitor, TurnStats, TurnUsage } from './monitors/TurnUsageMonitor';
-export { CallEventType, CallEventReportTyoe } from './common/CallEventType';
+export { 
+	CallEventType, 
+	CallEventReportType, 
+	MediaTrackAddedAttachment,
+	IceConnectionStateChangedAttachment,
+	IceGatheringStateChangedAttachment,
+	PeerConnectionStateChangedAttachment,
+} from './common/CallEventType';
 export { CallMetaType, CallMetaReportType } from './common/CallMetaReports';
 
 import { Observer, ObserverConfig } from './Observer';
