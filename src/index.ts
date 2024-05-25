@@ -65,6 +65,8 @@ export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSum
 export type { ObserverSinkContext } from './common/types';
 export type { SfuServerMonitorMetricsRecord } from './monitors/SfuServerMonitor';
 export type { TurnUsageMonitorEvents, TurnUsageMonitor, TurnStats, TurnUsage } from './monitors/TurnUsageMonitor';
+export type { CallEventType } from './common/CallEventType';
+export type { CallMetaType, CallMetaReportType } from './common/callMetaReports';
 
 import { Observer, ObserverConfig } from './Observer';
 export function createObserver(config?: Partial<ObserverConfig>) {
