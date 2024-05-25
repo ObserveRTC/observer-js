@@ -21,3 +21,36 @@ export enum CallEventType {
 	SIGNALING_STATE_CHANGE = 'SIGNALING_STATE_CHANGE',
 	CLIENT_ISSUE = 'CLIENT_ISSUE',
 }
+
+export type CallEventReportTyoe = {
+	name: CallEventType.MEDIA_TRACK_ADDED,
+	attachment: MediaTrackAddedAttachment,
+} | {
+	name: CallEventType.PEER_CONNECTION_STATE_CHANGED,
+	attachment: PeerConnectionStateChangedAttachment,
+} | {
+	name: CallEventType.ICE_CONNECTION_STATE_CHANGED,
+	attachment: IceConnectionStateChangedAttachment,
+} | {
+	name: CallEventType.ICE_GATHERING_STATE_CHANGED,
+	attachment: IceGatheringStateChangedAttachment,
+}
+
+export type MediaTrackAddedAttachment = {
+	kind?: 'audio' | 'video',
+	direction?: 'inbound' | 'outbound',
+	sfuStreamId?: string,
+	sfuSinkId?: string,
+}
+
+export type PeerConnectionStateChangedAttachment = {
+	iceConnectionState?: 'closed' | 'connected' | 'connecting' | 'disconnected' | 'failed' | 'new',
+}
+
+export type IceConnectionStateChangedAttachment = {
+	iceConnectionState?: 'new' | 'connected' | 'disconnected' | 'failed' | 'closed' | 'checking' | 'completed',
+}
+
+export type IceGatheringStateChangedAttachment = {
+	iceGatheringState?: 'new' | 'gathering' | 'complete',
+}

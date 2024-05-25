@@ -2,7 +2,7 @@ import { IceCandidatePair, IceLocalCandidate, IceRemoteCandidate } from '@observ
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { IceCandidatePairReport } from '@observertc/report-schemas-js';
-import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
+import { CallMetaType, createCallMetaReport } from './common/CallMetaReports';
 
 export type ObservedICEEvents = {
 	update: [{

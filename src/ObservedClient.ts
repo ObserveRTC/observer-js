@@ -3,7 +3,7 @@ import { ObservedCall } from './ObservedCall';
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { createLogger } from './common/logger';
-import { CallMetaType, createCallMetaReport } from './common/callMetaReports';
+import { CallMetaType, createCallMetaReport } from './common/CallMetaReports';
 // eslint-disable-next-line camelcase
 import { PartialBy, isValidUuid } from './common/utils';
 import { createClientLeftEventReport } from './common/callEventReports';
