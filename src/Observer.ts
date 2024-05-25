@@ -11,6 +11,7 @@ import { TurnUsageMonitor } from './monitors/TurnUsageMonitor';
 import { ObservedClient } from './ObservedClient';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ClientIssueMonitor } from './monitors/ClientIssueMonitor';
+import { SfuServerMonitor } from './monitors/SfuServerMonitor';
 
 const logger = createLogger('Observer');
 
@@ -237,11 +238,56 @@ export class Observer extends EventEmitter {
 		};
 
 		monitor.once('close', () => {
-			this._monitors.delete(CallSummaryMonitor.name);
+			this._monitors.delete(TurnUsageMonitor.name);
 			this.off('newcall', onNewCall);
 		});
 
-		this._monitors.set(CallSummaryMonitor.name, monitor);
+		this._monitors.set(TurnUsageMonitor.name, monitor);
+		this.on('newcall', onNewCall);
+		
+		this.once('close', () => {
+			monitor.close();
+		});
+
+		return monitor;
+	}
+
+	public createSfuServerMonitor() {
+		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+
+		const existingMonitor = this._monitors.get(SfuServerMonitor.name);
+		
+		if (existingMonitor) return existingMonitor as SfuServerMonitor;
+
+		const monitor = new SfuServerMonitor({
+			tooHighRttAlertSettings: {
+				minNumberOfPeerConnections: 10,
+				percentageOfPeerConnectionsHighWatermark: 0.5,
+				percentageOfPeerConnectionsLowWatermark: 0.2,
+				threshold: 'rtt-gt-300',
+			}
+		});
+
+		const onNewCall = (call: ObservedCall) => {
+			const onNewClient = (client: ObservedClient) => {
+				const onNewPeerConnection = (pc: ObservedPeerConnection) => {
+					monitor.addPeerConnection(pc);
+				};
+
+				client.once('close', () => client.off('newpeerconnection', onNewPeerConnection));
+				client.on('newpeerconnection', onNewPeerConnection);
+			};
+
+			call.once('close', () => call.off('newclient', onNewClient));
+			call.on('newclient', onNewClient);
+		};
+
+		monitor.once('close', () => {
+			this._monitors.delete(SfuServerMonitor.name);
+			this.off('newcall', onNewCall);
+		});
+
+		this._monitors.set(SfuServerMonitor.name, monitor);
 		this.on('newcall', onNewCall);
 		
 		this.once('close', () => {
@@ -263,11 +309,11 @@ export class Observer extends EventEmitter {
 		const onNewCall = (call: ObservedCall) => monitor.addCall(call);
 
 		monitor.once('close', () => {
-			this._monitors.delete(CallSummaryMonitor.name);
+			this._monitors.delete(ClientIssueMonitor.name);
 			this.off('newcall', onNewCall);
 		});
 
-		this._monitors.set(CallSummaryMonitor.name, monitor);
+		this._monitors.set(ClientIssueMonitor.name, monitor);
 		this.on('newcall', onNewCall);
 		
 		this.once('close', () => {

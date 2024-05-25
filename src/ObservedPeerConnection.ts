@@ -37,6 +37,8 @@ export declare interface ObservedPeerConnection {
 export class ObservedPeerConnection extends EventEmitter {
 	public readonly created = Date.now();
 	public visited = true;
+	
+	private _elapsedTimeSinceLastUpdate?: number;
 
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
@@ -67,6 +69,8 @@ export class ObservedPeerConnection extends EventEmitter {
 	public deltaReceivedVideoPackets = 0;
 	public deltaSentAudioBytes = 0;
 	public deltaSentVideoBytes = 0;
+	public receivingPacketsPerSecond = 0;
+	public sendingPacketsPerSecond = 0;
 	public sendingAudioBitrate = 0;
 	public sendingVideoBitrate = 0;
 	public receivingAudioBitrate = 0;
@@ -336,6 +340,13 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.totalSentAudioPackets += this.deltaSentAudioBytes;
 		this.totalSentVideoPackets += this.deltaSentVideoBytes;
 
+		if (this._elapsedTimeSinceLastUpdate && 0 < this._elapsedTimeSinceLastUpdate) {
+			this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / (this._elapsedTimeSinceLastUpdate / 1000);
+			this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / (this._elapsedTimeSinceLastUpdate / 1000);
+		} else {
+			this.sendingPacketsPerSecond = 0;
+			this.receivingPacketsPerSecond = 0;
+		}
 	}
 
 	public update(sample: PeerConnectionTransport, timestamp: number) {
@@ -347,7 +358,6 @@ export class ObservedPeerConnection extends EventEmitter {
 			this._model.label = sample.label;
 		}
 		const now = Date.now();
-		const elapsedTimeInMs = now - this._updated;
 		const report: PeerConnectionTransportReport = {
 			serviceId: this.client.call.serviceId,
 			roomId: this.client.call.roomId,
@@ -362,11 +372,11 @@ export class ObservedPeerConnection extends EventEmitter {
 		};
 
 		this.reports.addPeerConnectionTransportReports(report);
-		
+		this._elapsedTimeSinceLastUpdate = now - this._updated;		
 		this.visited = true;
 		this._updated = now;
 		this.emit('update', {
-			elapsedTimeInMs,
+			elapsedTimeInMs: this._elapsedTimeSinceLastUpdate,
 		});
 	}
 
