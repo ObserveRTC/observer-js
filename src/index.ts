@@ -73,7 +73,7 @@ export {
 	IceGatheringStateChangedAttachment,
 	PeerConnectionStateChangedAttachment,
 } from './common/CallEventType';
-export { CallMetaType, CallMetaReportType } from './common/CallMetaReports';
+export { CallMetaType, CallMetaReportType, CallMetaReportPayloads } from './common/CallMetaReports';
 
 import { Observer, ObserverConfig } from './Observer';
 export function createObserver(config?: Partial<ObserverConfig>) {

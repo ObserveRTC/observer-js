@@ -31,50 +31,29 @@ export enum CallMetaType {
 	BROWSER = 'BROWSER',
 }
 
-export type CallMetaReportType =
-	| {
-		type: CallMetaType.CERTIFICATE;
-		payload: Certificate;
-	} | {
-		type: CallMetaType.CODEC;
-		payload: MediaCodecStats;
-	} | {
-		type: CallMetaType.ICE_LOCAL_CANDIDATE;
-		payload: IceLocalCandidate;
-	} | {
-		type: CallMetaType.ICE_REMOTE_CANDIDATE;
-		payload: IceRemoteCandidate;
-	} | {
-		type: CallMetaType.ICE_SERVER;
-		payload: string;
-	} | {
-		type: CallMetaType.MEDIA_CONSTRAINT;
-		payload: string;
-	} | {
-		type: CallMetaType.MEDIA_DEVICE;
-		payload: MediaDevice;
-	} | {
-		type: CallMetaType.MEDIA_SOURCE;
-		payload: MediaSourceStat;
-	} | {
-		type: CallMetaType.USER_MEDIA_ERROR;
-		payload: string;
-	} | {
-		type: CallMetaType.OPERATION_SYSTEM;
-		payload: OperationSystem;
-	} | {
-		type: CallMetaType.PLATFORM;
-		payload: Platform;
-	} | {
-		type: CallMetaType.ENGINE;
-		payload: Engine;
-	} | {
-		type: CallMetaType.LOCAL_SDP;
-		payload: string;
-	} | {
-		type: CallMetaType.BROWSER;
-		payload: Browser;
+export type CallMetaReportPayloads = {
+	[CallMetaType.CERTIFICATE]: Certificate;
+	[CallMetaType.CODEC]: MediaCodecStats;
+	[CallMetaType.ICE_LOCAL_CANDIDATE]: IceLocalCandidate;
+	[CallMetaType.ICE_REMOTE_CANDIDATE]: IceRemoteCandidate;
+	[CallMetaType.ICE_SERVER]: string;
+	[CallMetaType.MEDIA_CONSTRAINT]: string;
+	[CallMetaType.MEDIA_DEVICE]: MediaDevice;
+	[CallMetaType.MEDIA_SOURCE]: MediaSourceStat;
+	[CallMetaType.USER_MEDIA_ERROR]: string;
+	[CallMetaType.OPERATION_SYSTEM]: OperationSystem;
+	[CallMetaType.PLATFORM]: Platform;
+	[CallMetaType.ENGINE]: Engine;
+	[CallMetaType.LOCAL_SDP]: string;
+	[CallMetaType.BROWSER]: Browser;
+}
+
+export type CallMetaReportType ={
+	[k in keyof CallMetaReportPayloads]: { 
+		type: k; 
+		payload: CallMetaReportPayloads[k]
 	};
+}[keyof CallMetaReportPayloads];
 
 export function createCallMetaReport(
 	serviceId: string,
