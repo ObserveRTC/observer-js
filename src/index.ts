@@ -63,6 +63,8 @@ export type { ObservedInboundTrack, ObservedInboundTrackModel, ObservedInboundTr
 export type { ObservedOutboundTrack, ObservedOutboundTrackModel, ObservedOutboundTrackEvents } from './ObservedOutboundTrack';
 export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSummary';
 export type { ObserverSinkContext } from './common/types';
+export type { CallEventType } from './common/CallEventType';
+export type { CallMetaReportType, CallMetaType } from './common/callMetaReports';
 export type { SfuServerMonitorMetricsRecord } from './monitors/SfuServerMonitor';
 export type { TurnUsageMonitorEvents, TurnUsageMonitor, TurnStats, TurnUsage } from './monitors/TurnUsageMonitor';
 export { 
