@@ -1,22 +1,27 @@
 import { EventEmitter } from 'events';
 import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
-import { ObservedInboundTrack, ObservedInboundTrackModel } from './ObservedInboundTrack';
-import { ObservedOutboundTrack, ObservedOutboundTrackModel } from './ObservedOutboundTrack';
 import { CallEventReport, PeerConnectionTransportReport } from '@observertc/report-schemas-js';
 import { ObservedICE } from './ObservedICE';
 import { ObservedDataChannel } from './ObservedDataChannel';
 import { PartialBy } from './common/utils';
+import { ObservedInboundAudioTrack, ObservedInboundAudioTrackModel } from './ObservedInboundAudioTrack';
+import { ObservedInboundVideoTrack, ObservedInboundVideoTrackModel } from './ObservedInboundVideoTrack';
+import { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackModel } from './ObservedOutboundAudioTrack';
+import { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackModel } from './ObservedOutboundVideoTrack';
+import { CalculatedScore, calculateLatencyMOS } from './common/CalculatedScore';
+import { ClientIssue } from './monitors/CallSummary';
 
 export type ObservedPeerConnectionEvents = {
 	update: [{
 		elapsedTimeInMs: number;
 	}],
 	close: [],
-	newinboudaudiotrack: [ObservedInboundTrack<'audio'>],
-	newinboudvideotrack: [ObservedInboundTrack<'video'>],
-	newoutboundaudiotrack: [ObservedOutboundTrack<'audio'>],
-	newoutboundvideotrack: [ObservedOutboundTrack<'video'>],
+	score: [CalculatedScore],
+	newinboudaudiotrack: [ObservedInboundAudioTrack],
+	newinboudvideotrack: [ObservedInboundVideoTrack],
+	newoutboundaudiotrack: [ObservedOutboundAudioTrack],
+	newoutboundvideotrack: [ObservedOutboundVideoTrack],
 	newdatachannel: [ObservedDataChannel],
 };
 
@@ -39,7 +44,11 @@ export class ObservedPeerConnection extends EventEmitter {
 	public visited = true;
 	
 	private _elapsedTimeSinceLastUpdate?: number;
+	private _statsTimestamp?: number;
+	
+	public ωpendingIssuesForScores: ClientIssue[] = [];
 
+	public score?: CalculatedScore;
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
@@ -77,6 +86,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	public receivingVideoBitrate = 0;
     
 	public avgRttInMs?: number;
+	public avgJitter?: number;
 
 	private _closed = false;
 	private _updated = Date.now();
@@ -84,10 +94,10 @@ export class ObservedPeerConnection extends EventEmitter {
 	private _marker?: string;
 
 	public readonly ICE = ObservedICE.create(this);
-	private readonly _inboundAudioTracks = new Map<string, ObservedInboundTrack<'audio'>>();
-	private readonly _inboundVideoTracks = new Map<string, ObservedInboundTrack<'video'>>();
-	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundTrack<'audio'>>();
-	private readonly _outboundVideoTracks = new Map<string, ObservedOutboundTrack<'video'>>();
+	private readonly _inboundAudioTracks = new Map<string, ObservedInboundAudioTrack>();
+	private readonly _inboundVideoTracks = new Map<string, ObservedInboundVideoTrack>();
+	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundAudioTrack>();
+	private readonly _outboundVideoTracks = new Map<string, ObservedOutboundVideoTrack>();
 	private readonly _dataChannels = new Map<number, ObservedDataChannel>();
 	
 	public constructor(
@@ -155,19 +165,19 @@ export class ObservedPeerConnection extends EventEmitter {
 		return this._updated;
 	}
 
-	public get inboundAudioTracks(): ReadonlyMap<string, ObservedInboundTrack<'audio'>> {
+	public get inboundAudioTracks(): ReadonlyMap<string, ObservedInboundAudioTrack> {
 		return this._inboundAudioTracks;
 	}
 
-	public get inboundVideoTracks(): ReadonlyMap<string, ObservedInboundTrack<'video'>> {
+	public get inboundVideoTracks(): ReadonlyMap<string, ObservedInboundVideoTrack> {
 		return this._inboundVideoTracks;
 	}
 
-	public get outboundAudioTracks(): ReadonlyMap<string, ObservedOutboundTrack<'audio'>> {
+	public get outboundAudioTracks(): ReadonlyMap<string, ObservedOutboundAudioTrack> {
 		return this._outboundAudioTracks;
 	}
 
-	public get outboundVideoTracks(): ReadonlyMap<string, ObservedOutboundTrack<'video'>> {
+	public get outboundVideoTracks(): ReadonlyMap<string, ObservedOutboundVideoTrack> {
 		return this._outboundVideoTracks;
 	}
 
@@ -218,13 +228,19 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		Array.from(this._inboundAudioTracks.values()).forEach((track) => track.close());
 		Array.from(this._inboundVideoTracks.values()).forEach((track) => track.close());
-		Array.from(this._outboundAudioTracks.values()).forEach((track) => track.close());
-		Array.from(this._outboundVideoTracks.values()).forEach((track) => track.close());
+		Array.from(this._outboundAudioTracks.values()).forEach((track) => {
+			this.client.call.sfuStreamIdToOutboundAudioTrack.delete(track.sfuStreamId ?? '');
+			track.close();
+		});
+		Array.from(this._outboundVideoTracks.values()).forEach((track) => {
+			this.client.call.sfuStreamIdToOutboundVideoTrack.delete(track.sfuStreamId ?? '');
+			track.close();
+		});
 
 		this.emit('close');
 	}
 
-	public getTrack(trackId: string): ObservedInboundTrack<'audio'> | ObservedInboundTrack<'video'> | ObservedOutboundTrack<'audio'> | ObservedOutboundTrack<'video'> | undefined {
+	public getTrack(trackId: string): ObservedInboundAudioTrack | ObservedInboundVideoTrack | ObservedOutboundAudioTrack | ObservedOutboundVideoTrack | undefined {
 		return this._inboundAudioTracks.get(trackId) ?? this._inboundVideoTracks.get(trackId) ?? this._outboundAudioTracks.get(trackId) ?? this._outboundVideoTracks.get(trackId);
 	}
 
@@ -249,104 +265,6 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.receivingVideoBitrate = 0;
 
 		this.ICE.resetMetrics();
-	}
-
-	public updateMetrics() {
-		let sumRttInMs = 0;
-
-		this._inboundAudioTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaInboundPacketsLost += track.deltaLostPackets;
-			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
-			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
-			
-			this.deltaReceivedAudioBytes += track.deltaBytesReceived;
-			this.deltaReceivedAudioPackets += track.deltaReceivedPackets;
-			
-			this.receivingAudioBitrate += track.bitrate;
-
-			sumRttInMs = (track.rttInMs ?? 0);
-		});
-
-		this._inboundVideoTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaInboundPacketsLost += track.deltaLostPackets;
-			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
-			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
-			
-			this.deltaReceivedVideoBytes += track.deltaBytesReceived;
-			this.deltaReceivedVideoPackets += track.deltaReceivedPackets;
-			
-			this.receivingVideoBitrate += track.bitrate;
-
-			sumRttInMs = (track.rttInMs ?? 0);
-		});
-
-		this._outboundAudioTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaOutboundPacketsSent += track.deltaSentPackets;
-			this.deltaOutboundSentBytes += track.deltaSentBytes;
-			
-			this.deltaSentAudioBytes += track.deltaSentBytes;
-			this.deltaSentAudioBytes += track.deltaSentPackets;
-			
-			this.sendingAudioBitrate += track.bitrate;
-
-			sumRttInMs = (track.rttInMs ?? 0);
-		});
-
-		this._outboundVideoTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaOutboundPacketsSent += track.deltaSentPackets;
-			this.deltaOutboundSentBytes += track.deltaSentBytes;
-			
-			this.deltaSentVideoBytes += track.deltaSentBytes;
-			this.deltaSentVideoBytes += track.deltaSentPackets;
-			
-			this.sendingVideoBitrate += track.bitrate;
-
-			sumRttInMs = (track.rttInMs ?? 0);
-		});
-
-		this._dataChannels.forEach((channel) => {
-			this.deltaDataChannelBytesSent += channel.deltaBytesSent;
-			this.deltaDataChannelBytesReceived += channel.deltaBytesReceived;
-		});
-
-		const iceRttInMs = this.ICE.stats?.currentRoundTripTime;
-		let nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
-
-		if (iceRttInMs) {
-			sumRttInMs += iceRttInMs;
-			nrOfBelongings += 1;
-		}
-
-		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
-		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
-		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
-		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
-		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
-		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
-		this.totalSentAudioBytes += this.deltaSentAudioBytes;
-		this.totalSentVideoBytes += this.deltaSentVideoBytes;
-		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
-		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
-		this.totalReceivedAudioPacktes += this.deltaReceivedAudioPackets;
-		this.totalReceivedVideoPackets += this.deltaReceivedVideoPackets;
-		this.totalSentAudioPackets += this.deltaSentAudioBytes;
-		this.totalSentVideoPackets += this.deltaSentVideoBytes;
-
-		if (this._elapsedTimeSinceLastUpdate && 0 < this._elapsedTimeSinceLastUpdate) {
-			this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / (this._elapsedTimeSinceLastUpdate / 1000);
-			this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / (this._elapsedTimeSinceLastUpdate / 1000);
-		} else {
-			this.sendingPacketsPerSecond = 0;
-			this.receivingPacketsPerSecond = 0;
-		}
 	}
 
 	public update(sample: PeerConnectionTransport, timestamp: number) {
@@ -375,18 +293,16 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._elapsedTimeSinceLastUpdate = now - this._updated;		
 		this.visited = true;
 		this._updated = now;
+		this._statsTimestamp = timestamp;
 		this.emit('update', {
 			elapsedTimeInMs: this._elapsedTimeSinceLastUpdate,
 		});
 	}
 
-	public createInboundAudioTrack(config: Omit<ObservedInboundTrackModel<'audio'>, 'kind'>): ObservedInboundTrack<'audio'> {
+	public createInboundAudioTrack(config: ObservedInboundAudioTrackModel): ObservedInboundAudioTrack {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = new ObservedInboundTrack<'audio'>({
-			kind: 'audio',
-			...config,
-		}, this);
+		const result = new ObservedInboundAudioTrack(config, this);
 
 		result.on('close', () => {
 			this._inboundAudioTracks.delete(result.trackId);
@@ -398,13 +314,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		return result;
 	}
 
-	public createInboundVideoTrack(config: Omit<ObservedInboundTrackModel<'video'>, 'kind'>): ObservedInboundTrack<'video'> {
+	public createInboundVideoTrack(config: ObservedInboundVideoTrackModel): ObservedInboundVideoTrack {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = new ObservedInboundTrack<'video'>({
-			kind: 'video',
-			...config,
-		}, this);
+		const result = new ObservedInboundVideoTrack(config, this);
 
 		result.on('close', () => {
 			this._inboundVideoTracks.delete(result.trackId);
@@ -416,13 +329,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		return result;
 	}
 
-	public createOutboundAudioTrack(config: Omit<ObservedOutboundTrackModel<'audio'>, 'kind'>): ObservedOutboundTrack<'audio'> {
+	public createOutboundAudioTrack(config: ObservedOutboundAudioTrackModel): ObservedOutboundAudioTrack {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = new ObservedOutboundTrack<'audio'>({
-			kind: 'audio',
-			...config,
-		}, this);
+		const result = new ObservedOutboundAudioTrack(config, this);
 
 		result.on('close', () => {
 			this._outboundAudioTracks.delete(result.trackId);
@@ -434,13 +344,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		return result;
 	}
 
-	public createOutboundVideoTrack(config: Omit<ObservedOutboundTrackModel<'video'>, 'kind'>): ObservedOutboundTrack<'video'> {
+	public createOutboundVideoTrack(config: ObservedOutboundVideoTrackModel): ObservedOutboundVideoTrack {
 		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
 		
-		const result = new ObservedOutboundTrack<'video'>({
-			kind: 'video',
-			...config,
-		}, this);
+		const result = new ObservedOutboundVideoTrack(config, this);
 
 		result.on('close', () => {
 			this._outboundVideoTracks.delete(result.trackId);
@@ -467,5 +374,172 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.emit('newdatachannel', result);
 
 		return result;
+	}
+
+	public updateMetrics() {
+		let sumRttInMs = 0;
+		let sumJitter = 0;
+		const trackScores: CalculatedScore[] = [];
+
+		this._inboundAudioTracks.forEach((track) => {
+			track.updateMetrics();
+
+			this.deltaInboundPacketsLost += track.deltaLostPackets;
+			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
+			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
+			
+			this.deltaReceivedAudioBytes += track.deltaBytesReceived;
+			this.deltaReceivedAudioPackets += track.deltaReceivedPackets;
+			
+			this.receivingAudioBitrate += track.bitrate;
+
+			sumRttInMs += (track.rttInMs ?? 0);
+			sumJitter += (track.jitter ?? 0);
+
+			track.score && trackScores.push(track.score);
+		});
+
+		this._inboundVideoTracks.forEach((track) => {
+			track.updateMetrics();
+
+			this.deltaInboundPacketsLost += track.deltaLostPackets;
+			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
+			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
+			
+			this.deltaReceivedVideoBytes += track.deltaBytesReceived;
+			this.deltaReceivedVideoPackets += track.deltaReceivedPackets;
+			
+			this.receivingVideoBitrate += track.bitrate;
+
+			sumRttInMs += (track.rttInMs ?? 0);
+			sumJitter += (track.jitter ?? 0);
+
+			track.score && trackScores.push(track.score);
+		});
+
+		this._outboundAudioTracks.forEach((track) => {
+			track.updateMetrics();
+
+			this.deltaOutboundPacketsSent += track.deltaSentPackets;
+			this.deltaOutboundSentBytes += track.deltaSentBytes;
+			
+			this.deltaSentAudioBytes += track.deltaSentBytes;
+			this.deltaSentAudioBytes += track.deltaSentPackets;
+			
+			this.sendingAudioBitrate += track.bitrate;
+
+			sumRttInMs += (track.rttInMs ?? 0);
+			sumJitter += (track.jitter ?? 0);
+
+			track.score && trackScores.push(track.score);
+		});
+
+		this._outboundVideoTracks.forEach((track) => {
+			track.updateMetrics();
+
+			this.deltaOutboundPacketsSent += track.deltaSentPackets;
+			this.deltaOutboundSentBytes += track.deltaSentBytes;
+			
+			this.deltaSentVideoBytes += track.deltaSentBytes;
+			this.deltaSentVideoBytes += track.deltaSentPackets;
+			
+			this.sendingVideoBitrate += track.bitrate;
+
+			sumRttInMs += (track.rttInMs ?? 0);
+			sumJitter += (track.jitter ?? 0);
+
+			track.score && trackScores.push(track.score);
+		});
+
+		this._dataChannels.forEach((channel) => {
+			this.deltaDataChannelBytesSent += channel.deltaBytesSent;
+			this.deltaDataChannelBytesReceived += channel.deltaBytesReceived;
+		});
+
+		const iceRttInMs = this.ICE.stats?.currentRoundTripTime;
+		let nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
+
+		this.avgJitter = 0 < nrOfBelongings ? sumJitter / nrOfBelongings : undefined;
+
+		if (iceRttInMs) {
+			sumRttInMs += iceRttInMs;
+			nrOfBelongings += 1;
+		}
+
+		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
+		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
+		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
+		this.totalSentAudioBytes += this.deltaSentAudioBytes;
+		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
+		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
+		this.totalReceivedAudioPacktes += this.deltaReceivedAudioPackets;
+		this.totalReceivedVideoPackets += this.deltaReceivedVideoPackets;
+		this.totalSentAudioPackets += this.deltaSentAudioBytes;
+		this.totalSentVideoPackets += this.deltaSentVideoBytes;
+
+		if (this._elapsedTimeSinceLastUpdate && 0 < this._elapsedTimeSinceLastUpdate) {
+			this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / (this._elapsedTimeSinceLastUpdate / 1000);
+			this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / (this._elapsedTimeSinceLastUpdate / 1000);
+		} else {
+			this.sendingPacketsPerSecond = 0;
+			this.receivingPacketsPerSecond = 0;
+		}
+
+		// calculate quality score
+		this._updateQualityScore(trackScores);
+	}
+
+	private _updateQualityScore(trackScores: CalculatedScore[]) {
+		const mosScore = calculateLatencyMOS({
+			avgJitter: this.avgJitter ?? 0,
+			rttInMs: this.avgRttInMs ?? 0,
+			packetsLoss: this.deltaInboundPacketsLost,
+		});
+		const score: CalculatedScore = {
+			remarks: [ {
+				severity: 'none',
+				text: `MOS score: ${mosScore}`,
+			} ],
+			score: mosScore / 10.0, // normalize between 0 and 2
+			timestamp: this._statsTimestamp ?? Date.now(),
+		};
+		
+		let sumTrackScores = 0;
+
+		for (const trackScore of trackScores) {
+			sumTrackScores += trackScore.score;
+		}
+
+		score.score += sumTrackScores / trackScores.length;
+		score.remarks.push({
+			severity: 'none',
+			text: `Track scores: ${sumTrackScores / trackScores.length}`,
+		});
+
+		for (const pendingScore of this.ωpendingIssuesForScores) {
+			switch (pendingScore.severity) {
+				case 'critical':
+					score.score = 0.0;
+					break;
+				case 'major':
+					score.score *= 0.5;
+					break;
+				case 'minor':
+					score.score *= 0.8;
+					break;
+			}
+			score.remarks.push({
+				severity: pendingScore.severity,
+				text: pendingScore.description ?? 'Issue occurred',
+			});
+		}
+		this.ωpendingIssuesForScores = [];
+		this.score = score;
+
+		this.emit('score', score);
 	}
 }

@@ -11,6 +11,7 @@ import { CallEventType } from './common/CallEventType';
 import { ObservedSfu } from './ObservedSfu';
 import { ClientIssue } from './monitors/CallSummary';
 import { CallEventReport } from '@observertc/report-schemas-js';
+import { CalculatedScore } from './common/CalculatedScore';
 
 const logger = createLogger('ObservedClient');
 
@@ -59,6 +60,7 @@ export type ObservedClientEvents = {
 	rejoined: [{
 		lastJoined: number,
 	}],
+	score: [CalculatedScore],
 };
 
 export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
@@ -84,6 +86,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _timeZoneOffsetInHours?: number;
 	private _left?: number;
 	
+	public score?: CalculatedScore;
 	public usingTURN = false;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
@@ -238,7 +241,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (!this._left) {
 			this._addClientLeftReport();
 		}
-
 		Array.from(this._peerConnections.values()).forEach((peerConnection) => peerConnection.close());
 
 		this.emit('close');
@@ -302,8 +304,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			logger.warn(`Error adding client issue: ${(err as Error)?.message}`);
 		}
 
-		this.issues.push(issue);
-		this.emit('issue', issue);
+		this._addAndEmitIssue(issue);
 	}
 
 	public accept(sample: ClientSample): void {
@@ -515,9 +516,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 							trackId: callEvent.mediaTrackId,
 							attachments: callEvent.attachments ? JSON.parse(callEvent.attachments) : undefined,
 						};
-	
-						this.issues.push(issue);
-						this.emit('issue', issue);
+
+						this._addAndEmitIssue(issue);
 					} catch (err) {
 						logger.warn(`Error parsing client issue: ${(err as Error)?.message}`);
 					}
@@ -619,7 +619,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					type: CallMetaType.MEDIA_DEVICE,
 					payload: mediaDevice,
 				}, this.userId);
-
+				
 			this.reports.addCallMetaReport(callMetaReport);
 			mediaDevice.label && this.mediaDevices.push(mediaDevice.label);
 		}
@@ -634,7 +634,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					type: CallMetaType.MEDIA_SOURCE,
 					payload: mediaSource,
 				}, this.userId);
-
+				
 			this.reports.addCallMetaReport(callMetaReport);
 		}
 
@@ -670,10 +670,17 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 				inboundAudioTrack.update(track, sample.timestamp);
 	
-				const remoteOutboundTrack = this.call.sfuStreamIdToOutboundAudioTrack.get(track.sfuStreamId ?? '');
-	
-				if (remoteOutboundTrack && inboundAudioTrack.sfuStreamId && !remoteOutboundTrack.remoteInboundTracks.has(inboundAudioTrack.sfuStreamId)) {
-					remoteOutboundTrack.connectInboundTrack(inboundAudioTrack);
+				if (!inboundAudioTrack.remoteOutboundTrack) {
+					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundAudioTrack.get(inboundAudioTrack.sfuStreamId ?? '');
+
+					if (remoteOutboundTrack) {
+						inboundAudioTrack.remoteOutboundTrack = remoteOutboundTrack;
+						
+						inboundAudioTrack.once('close', () => {
+							remoteOutboundTrack?.remoteInboundTracks.delete(inboundAudioTrack.trackId ?? '');
+						});
+						remoteOutboundTrack.remoteInboundTracks.set(inboundAudioTrack.trackId ?? '', inboundAudioTrack);
+					}
 				}
 			} catch (err) {
 				logger.error(`Error creating inbound audio track: ${(err as Error)?.message}`);
@@ -705,11 +712,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				});
 	
 				inboundVideoTrack.update(track, sample.timestamp);
-					
-				const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(inboundVideoTrack.sfuStreamId ?? '');
-	
-				if (remoteOutboundTrack && inboundVideoTrack.sfuStreamId && !remoteOutboundTrack.remoteInboundTracks.has(inboundVideoTrack.sfuStreamId)) {
-					remoteOutboundTrack.connectInboundTrack(inboundVideoTrack);
+
+				if (!inboundVideoTrack.remoteOutboundTrack) {
+					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(inboundVideoTrack.sfuStreamId ?? '');
+
+					if (remoteOutboundTrack) {
+						inboundVideoTrack.remoteOutboundTrack = remoteOutboundTrack;
+						
+						inboundVideoTrack.once('close', () => {
+							remoteOutboundTrack?.remoteInboundTracks.delete(inboundVideoTrack.trackId ?? '');
+						});
+						remoteOutboundTrack.remoteInboundTracks.set(inboundVideoTrack.trackId ?? '', inboundVideoTrack);
+					}
 				}
 			} catch (err) {
 				logger.error(`Error creating inbound video track: ${(err as Error)?.message}`);
@@ -734,6 +748,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				});
 
 				outboundAudioTrack.update(track, sample.timestamp);
+
+				if (outboundAudioTrack.sfuStreamId && !this.call.sfuStreamIdToOutboundAudioTrack.has(outboundAudioTrack.sfuStreamId)) {
+					this.call.sfuStreamIdToOutboundAudioTrack.set(outboundAudioTrack.sfuStreamId, outboundAudioTrack);
+				}
+
 			} catch (err) {
 				logger.error(`Error creating outbound audio track: ${(err as Error)?.message}`);
 			}
@@ -758,6 +777,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				});
 	
 				outboundVideoTrack.update(track, sample.timestamp);
+
+				if (outboundVideoTrack.sfuStreamId && !this.call.sfuStreamIdToOutboundVideoTrack.has(outboundVideoTrack.sfuStreamId)) {
+					this.call.sfuStreamIdToOutboundVideoTrack.set(outboundVideoTrack.sfuStreamId, outboundVideoTrack);
+				}
 
 			} catch (err) {
 				logger.error(`Error creating outbound video track: ${(err as Error)?.message}`);
@@ -897,6 +920,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		let sumRttInMs = 0;
 		let anyPeerConnectionUsingTurn = false;
 
+		let minPcScore = Number.MAX_SAFE_INTEGER;
+		let maxPcScore = Number.MIN_SAFE_INTEGER;
+
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
 			peerConnection.updateMetrics();
@@ -916,7 +942,20 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			sumRttInMs += peerConnection.avgRttInMs ?? 0;
 
 			anyPeerConnectionUsingTurn ||= peerConnection.usingTURN;
+
+			minPcScore = Math.min(minPcScore, peerConnection.score?.score ?? Number.MAX_SAFE_INTEGER);
+			maxPcScore = Math.max(maxPcScore, peerConnection.score?.score ?? Number.MIN_SAFE_INTEGER);
 		}
+
+		this.score = {
+			score: minPcScore,
+			remarks: [ {
+				severity: 'none',
+				text: `Min and max score of all peer connections: ${minPcScore}, ${maxPcScore}`,
+			} ],
+			timestamp: sample.timestamp,
+		};
+		this.emit('score', this.score);
 
 		this.usingTURN = anyPeerConnectionUsingTurn === true;
 		
@@ -949,6 +988,27 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			sample,
 			elapsedTimeInMs,
 		});
+	}
+
+	private _addAndEmitIssue(issue: ClientIssue) {
+		this.issues.push(issue);
+
+		if (issue.peerConnectionId) {
+			const peerConnection = this._peerConnections.get(issue.peerConnectionId);
+
+			if (peerConnection) {
+				
+				if (issue.trackId) {
+					const track = peerConnection.inboundAudioTracks.get(issue.trackId) ?? peerConnection.inboundVideoTracks.get(issue.trackId);
+
+					if (track) track.ωpendingIssuesForScores.push(issue);
+				} else {
+					peerConnection.ωpendingIssuesForScores.push(issue);
+				}
+			}
+		}
+		
+		this.emit('issue', issue);
 	}
 
 	private _createPeerConnection(peerConnectionId: string, label?: string): ObservedPeerConnection {

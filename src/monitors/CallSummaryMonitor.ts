@@ -2,8 +2,8 @@ import { EventEmitter } from 'events';
 import { CallSummary, ClientSummary } from './CallSummary';
 import { ObservedCall } from '../ObservedCall';
 import { ObservedClient } from '../ObservedClient';
-import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
 import { ObservedPeerConnection } from '../ObservedPeerConnection';
+import { ObservedOutboundVideoTrack } from '../ObservedOutboundVideoTrack';
 
 export type CallSummaryMonitorEvents = {
 	close: [],
@@ -141,7 +141,7 @@ export class CallSummaryMonitor extends EventEmitter {
 	}
 
 	private _addPeerConnection(clientSummary: ClientSummary, peerConnection: ObservedPeerConnection) {
-		const onOutboundVideoTrack = (track: ObservedOutboundTrack<'video'>) => this._addOutboundVideoTrack(clientSummary, track);
+		const onOutboundVideoTrack = (track: ObservedOutboundVideoTrack) => this._addOutboundVideoTrack(clientSummary, track);
 
 		peerConnection.on('newoutboundvideotrack', onOutboundVideoTrack);
 		peerConnection.once('close', () => {
@@ -149,7 +149,7 @@ export class CallSummaryMonitor extends EventEmitter {
 		});
 	}
 
-	private _addOutboundVideoTrack(clientSummary: ClientSummary, track: ObservedOutboundTrack<'video'>) {
+	private _addOutboundVideoTrack(clientSummary: ClientSummary, track: ObservedOutboundVideoTrack) {
 		const onQualityLimitationChanged = (reason: string) => {
 			if (!this.config.detectMediaTrackQualityLimitationIssues) return;
 

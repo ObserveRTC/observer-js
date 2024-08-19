@@ -29,3 +29,19 @@ export function isValidUuid(str: string): boolean {
 
 	return regexp.test(str);
 }
+
+export function getMedian(arr: number[]): number {
+	// Sort the array in ascending order
+	const sortedArr = arr.slice().sort((a, b) => a - b);
+
+	// Calculate the middle index
+	const mid = Math.floor(sortedArr.length / 2);
+
+	// If the array length is odd, return the middle element
+	if (sortedArr.length % 2 !== 0) {
+		return sortedArr[mid];
+	}
+
+	// If the array length is even, return the average of the two middle elements
+	return (sortedArr[mid - 1] + sortedArr[mid]) / 2;
+}

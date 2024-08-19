@@ -59,8 +59,10 @@ export type {
 export type { ObservedCall, ObservedCallModel } from './ObservedCall';
 export type { ObservedClient, ObservedClientModel } from './ObservedClient';
 export type { ObservedPeerConnection, ObservedPeerConnectionModel, ObservedPeerConnectionEvents } from './ObservedPeerConnection';
-export type { ObservedInboundTrack, ObservedInboundTrackModel, ObservedInboundTrackEvents } from './ObservedInboundTrack';
-export type { ObservedOutboundTrack, ObservedOutboundTrackModel, ObservedOutboundTrackEvents } from './ObservedOutboundTrack';
+export type { ObservedInboundAudioTrack, ObservedInboundAudioTrackModel, ObservedInboundAudioTrackEvents } from './ObservedInboundAudioTrack';
+export type { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackModel, ObservedOutboundAudioTrackEvents } from './ObservedOutboundAudioTrack';
+export type { ObservedInboundVideoTrack, ObservedInboundVideoTrackModel, ObservedInboundVideoTrackEvents } from './ObservedInboundVideoTrack';
+export type { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackModel, ObservedOutboundVideoTrackEvents } from './ObservedOutboundVideoTrack';
 export type { CallSummary, ClientSummary, ClientIssue } from './monitors/CallSummary';
 export type { ObserverSinkContext } from './common/types';
 export type { SfuServerMonitorMetricsRecord } from './monitors/SfuServerMonitor';

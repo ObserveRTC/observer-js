@@ -1,27 +1,26 @@
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { OutboundAudioTrack, OutboundVideoTrack } from '@observertc/sample-schemas-js';
-import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { OutboundAudioTrackReport, OutboundVideoTrackReport } from '@observertc/report-schemas-js';
-import { MediaKind } from './common/types';
+import { ObservedInboundAudioTrack } from './ObservedInboundAudioTrack';
+import { calculateBaseAudioScore, CalculatedScore } from './common/CalculatedScore';
+import { ClientIssue } from './monitors/CallSummary';
 
-export type ObservedOutboundTrackModel<K extends MediaKind> = {
+export type ObservedOutboundAudioTrackModel = {
 	trackId: string;
-	kind: K;
 	sfuStreamId?: string;
 }
 
-export type ObservedOutboundTrackEvents = {
+export type ObservedOutboundAudioTrackEvents = {
 	qualitylimitationchanged: [string];
 	update: [{
 		elapsedTimeInMs: number;
 	}],
+	score: [CalculatedScore],
 	close: [],
 };
 
-export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = K extends 'audio' ? OutboundAudioTrack : OutboundVideoTrack;
-
-export type ObservedOutboundTrackStats<K extends MediaKind> = ObservedOutboundTrackStatsUpdate<K> & {
+export type ObservedOutboundAudioTrackStats = OutboundAudioTrack & {
 	ssrc: number;
 	bitrate: number;
 	rttInMs?: number;
@@ -35,24 +34,25 @@ export type ObservedOutboundTrackStats<K extends MediaKind> = ObservedOutboundTr
 	statsTimestamp: number;
 };
 
-// export type ObservedOutboundTrackStatsUpdate<K extends MediaKind> = {
+// export type ObservedOutboundTrackStatsUpdate = {
 // 	[Property in keyof ObservedOutboundTrackStats<K>]: ObservedOutboundTrackStats<K>[Property];
 // }
 
-export declare interface ObservedOutboundTrack<Kind extends MediaKind> {
-	on<U extends keyof ObservedOutboundTrackEvents>(event: U, listener: (...args: ObservedOutboundTrackEvents[U]) => void): this;
-	off<U extends keyof ObservedOutboundTrackEvents>(event: U, listener: (...args: ObservedOutboundTrackEvents[U]) => void): this;
-	once<U extends keyof ObservedOutboundTrackEvents>(event: U, listener: (...args: ObservedOutboundTrackEvents[U]) => void): this;
-	emit<U extends keyof ObservedOutboundTrackEvents>(event: U, ...args: ObservedOutboundTrackEvents[U]): boolean;
-	update(sample: ObservedOutboundTrackStatsUpdate<Kind>, timestamp: number): void;
+export declare interface ObservedOutboundAudioTrack {
+	on<U extends keyof ObservedOutboundAudioTrackEvents>(event: U, listener: (...args: ObservedOutboundAudioTrackEvents[U]) => void): this;
+	off<U extends keyof ObservedOutboundAudioTrackEvents>(event: U, listener: (...args: ObservedOutboundAudioTrackEvents[U]) => void): this;
+	once<U extends keyof ObservedOutboundAudioTrackEvents>(event: U, listener: (...args: ObservedOutboundAudioTrackEvents[U]) => void): this;
+	emit<U extends keyof ObservedOutboundAudioTrackEvents>(event: U, ...args: ObservedOutboundAudioTrackEvents[U]): boolean;
+	update(sample: OutboundAudioTrack, timestamp: number): void;
 }
 
-export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	{
+export class ObservedOutboundAudioTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
 	public bitrate = 0;
 	public rttInMs?: number;
+	public jitter?: number;
 	public marker?: string;
 
 	public totalLostPackets = 0;
@@ -68,21 +68,24 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 
 	public sendingBitrate = 0;
 
-	private readonly _stats = new Map<number, ObservedOutboundTrackStats<Kind>>();
+	private readonly _stats = new Map<number, ObservedOutboundAudioTrackStats>();
 	private _lastMaxStatsTimestamp = 0;
 	
 	private _closed = false;
 	private _updated = Date.now();
-	private _remoteInboundTracks = new Map<string, ObservedInboundTrack<Kind>>();
+	private _lastUpdateMetrics?: number;
+
+	public score?: CalculatedScore;
+	public ωpendingIssuesForScores: ClientIssue[] = [];
+
+	public readonly remoteInboundTracks = new Map<string, ObservedInboundAudioTrack>();
 
 	public constructor(
-		private readonly _model: ObservedOutboundTrackModel<Kind>,
+		private readonly _model: ObservedOutboundAudioTrackModel,
 		public readonly peerConnection: ObservedPeerConnection,
 	) {
 		super();
 		this.setMaxListeners(Infinity);
-		
-		if (this._model.sfuStreamId) this._assignSfuStreamId(this._model.sfuStreamId);
 	}
 
 	public get serviceId() {
@@ -109,10 +112,6 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		return this.peerConnection.peerConnectionId;
 	}
 
-	public get kind(): Kind {
-		return this._model.kind as Kind;
-	}
-	
 	public get trackId() {
 		return this._model.trackId;
 	}
@@ -121,19 +120,19 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		return this._model.sfuStreamId;
 	}
 
-	public get remoteInboundTracks(): ReadonlyMap<string, ObservedInboundTrack<Kind>> {
-		return this._remoteInboundTracks;
-	}
-
 	public get reports() {
 		return this.peerConnection.reports;
+	}
+
+	public get statsTimestamp() {
+		return this._lastMaxStatsTimestamp;
 	}
 
 	public get updated() {
 		return this._updated;
 	}
 	
-	public get stats(): ReadonlyMap<number, ObservedOutboundTrackStats<Kind>> {
+	public get stats(): ReadonlyMap<number, ObservedOutboundAudioTrackStats> {
 		return this._stats;
 	}
 
@@ -148,7 +147,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.emit('close');
 	}
 
-	public update(sample: ObservedOutboundTrackStatsUpdate<Kind>, statsTimestamp: number): void {
+	public update(sample: OutboundAudioTrack, statsTimestamp: number): void {
 		if (this._closed) return;
 		
 		const now = Date.now();
@@ -166,8 +165,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			marker: this.marker,
 		};
 
-		if (this.kind === 'audio') this.reports.addOutboundAudioTrackReport(report);
-		else if (this.kind === 'video') this.reports.addOutboundVideoTrackReport(report);
+		this.reports.addOutboundAudioTrackReport(report);
 
 		const elapsedTimeInMs = Math.max(1, now - this._updated);
 		const lastStat = this._stats.get(sample.ssrc);
@@ -193,26 +191,21 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		let deltaEncodedFrames: number | undefined;
 		let deltaSentFrames: number | undefined;
 
-		if (this.kind === 'video') {
-			const videoSample = sample as OutboundVideoTrack;
-			const lastVideoStats = lastStat as OutboundVideoTrack | undefined;
+		const videoSample = sample as OutboundVideoTrack;
+		const lastVideoStats = lastStat as OutboundVideoTrack | undefined;
 
-			if (videoSample?.framesEncoded && lastVideoStats?.framesEncoded && lastVideoStats.framesEncoded < videoSample.framesEncoded) {
-				deltaEncodedFrames = videoSample.framesEncoded - lastVideoStats.framesEncoded;
-			}
-			if (videoSample?.framesSent && lastVideoStats?.framesSent && lastVideoStats.framesSent < videoSample.framesSent) {
-				deltaSentFrames = videoSample.framesSent - lastVideoStats.framesSent;
-			}
-
-			if (videoSample.qualityLimitationReason && lastVideoStats?.qualityLimitationReason !== videoSample.qualityLimitationReason) {
-				this.emit('qualitylimitationchanged', videoSample.qualityLimitationReason);
-			}
-		} else if (this.kind === 'audio') {
-			// const audioSample = sample as OutboundAudioTrack;
-			// const lastAudioStats = lastStat as OutboundAudioTrack | undefined;
-
+		if (videoSample?.framesEncoded && lastVideoStats?.framesEncoded && lastVideoStats.framesEncoded < videoSample.framesEncoded) {
+			deltaEncodedFrames = videoSample.framesEncoded - lastVideoStats.framesEncoded;
 		}
-		const stats: ObservedOutboundTrackStats<Kind> = {
+		if (videoSample?.framesSent && lastVideoStats?.framesSent && lastVideoStats.framesSent < videoSample.framesSent) {
+			deltaSentFrames = videoSample.framesSent - lastVideoStats.framesSent;
+		}
+
+		if (videoSample.qualityLimitationReason && lastVideoStats?.qualityLimitationReason !== videoSample.qualityLimitationReason) {
+			this.emit('qualitylimitationchanged', videoSample.qualityLimitationReason);
+		}
+
+		const stats: ObservedOutboundAudioTrackStats = {
 			...sample,
 			rttInMs,
 			bitrate,
@@ -244,9 +237,6 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		// this.deltaSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentBytes, 0);
 
 		// setting up sfu connection as it is not always available at the first sample
-		if (sample.sfuStreamId && !this._model.sfuStreamId) {
-			this._assignSfuStreamId(sample.sfuStreamId);
-		}
 
 		this.visited = true;
 		this._updated = now;
@@ -255,21 +245,10 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		});
 	}
 
-	public connectInboundTrack(track: ObservedInboundTrack<Kind>) {
-		if (this._closed) return;
-
-		track.remoteOutboundTrack = this;
-		track.once('close', () => {
-			this._remoteInboundTracks.delete(track.trackId);
-		});
-
-		this._remoteInboundTracks.set(track.trackId, track);
-	}
-	private _lastUpdateMetrics?: number;
-
 	public updateMetrics() {
 		let maxStatsTimestamp = 0;
 		let rttInMsSum = 0;
+		let jitterSum = 0;
 		let size = 0;
 
 		this.bitrate = 0;
@@ -295,6 +274,7 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 			maxStatsTimestamp = Math.max(maxStatsTimestamp, stats.statsTimestamp);
 			
 			rttInMsSum += stats.rttInMs ?? 0;
+			jitterSum += stats.jitter ?? 0;
 			++size;
 		}
 		
@@ -311,20 +291,25 @@ export class ObservedOutboundTrack<Kind extends MediaKind> extends EventEmitter	
 		this.totalSentFrames += this.deltaSentFrames;
 
 		this.rttInMs = rttInMsSum / Math.max(size, 1);
+		this.jitter = jitterSum / Math.max(size, 1);
 
 		this._lastMaxStatsTimestamp = maxStatsTimestamp;
+		this._updateQualityScore(maxStatsTimestamp);
 	}
 
-	private _assignSfuStreamId(sfuStreamId: string) {
-		this._model.sfuStreamId = sfuStreamId;
-		
-		this.once('close', () => {
-			if (!this._model.sfuStreamId) return;
-			if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.delete(this._model.sfuStreamId);
-			else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.delete(this._model.sfuStreamId);
-		});
+	private _updateQualityScore(timestamp: number) {
+		const newIssues = this.ωpendingIssuesForScores;
+		const score = calculateBaseAudioScore(this, newIssues);
 
-		if (this.kind === 'audio') this.peerConnection.client.call.sfuStreamIdToOutboundAudioTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'audio'>);
-		else if (this.kind === 'video') this.peerConnection.client.call.sfuStreamIdToOutboundVideoTrack.set(this._model.sfuStreamId, this as ObservedOutboundTrack<'video'>);
+		if (0 < newIssues.length) {
+			this.ωpendingIssuesForScores = [];
+		}
+
+		if (!score) return (this.score = undefined);
+		
+		score.timestamp = timestamp;
+		this.score = score;
+
+		this.emit('score', this.score);
 	}
 }

@@ -1,13 +1,15 @@
 import { EventEmitter } from 'events';
 import { ObservedClient, ObservedClientEvents, ObservedClientModel } from './ObservedClient';
-import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { Observer } from './Observer';
 import { createClientJoinedEventReport } from './common/callEventReports';
-import { PartialBy } from './common/utils';
+import { getMedian, PartialBy } from './common/utils';
 import { CallEventReport } from '@observertc/report-schemas-js';
 import { createProcessor } from './common/Middleware';
 import { ClientSample } from '@observertc/sample-schemas-js';
 import { ClientIssue } from './monitors/CallSummary';
+import { ObservedOutboundAudioTrack } from './ObservedOutboundAudioTrack';
+import { ObservedOutboundVideoTrack } from './ObservedOutboundVideoTrack';
+import { CalculatedScore } from './common/CalculatedScore';
 
 type ClientIssueDetectionConfig = Pick<ClientIssue, 'severity'>;
 
@@ -38,8 +40,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	private readonly _clients = new Map<string, ObservedClient>();
 	
-	public readonly sfuStreamIdToOutboundAudioTrack = new Map<string | number, ObservedOutboundTrack<'audio'>>();
-	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundTrack<'video'>>();
+	public _scoreData?: {
+		score: CalculatedScore,
+		calculated: number,
+	};
+
+	public readonly sfuStreamIdToOutboundAudioTrack = new Map<string | number, ObservedOutboundAudioTrack>();
+	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundVideoTrack>();
 	private _closed = false;
 	private _updated = Date.now();
 	private _ended?: number;
@@ -82,6 +89,35 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public get clients(): ReadonlyMap<string, ObservedClient> {
 		return this._clients;
+	}
+
+	public get score(): CalculatedScore | undefined {
+		const now = Date.now();
+
+		if (now - 15000 < (this._scoreData?.calculated ?? 0)) {
+			return this._scoreData?.score;
+		} else if (this.clients.size < 1) {
+			return {
+				remarks: [ {
+					severity: 'none',
+					text: 'No clients',
+				} ],
+				score: 5.0,
+				timestamp: now,
+			};
+		}
+		const scores = [ ...this.clients.values() ].map((client) => client.score?.score ?? 5.0);
+
+		this._scoreData = {
+			score: {
+				remarks: [],
+				score: getMedian(scores),
+				timestamp: now,
+			},
+			calculated: now,
+		};
+
+		return this._scoreData.score;
 	}
 
 	public get closed() {

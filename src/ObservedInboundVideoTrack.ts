@@ -1,28 +1,29 @@
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { InboundAudioTrack, InboundVideoTrack } from '@observertc/sample-schemas-js';
-import { ObservedOutboundTrack } from './ObservedOutboundTrack';
+import { InboundVideoTrack } from '@observertc/sample-schemas-js';
 import { InboundAudioTrackReport, InboundVideoTrackReport } from '@observertc/report-schemas-js';
-import { MediaKind } from './common/types';
+import { CalculatedScore, calculateBaseVideoScore } from './common/CalculatedScore';
+import { ClientIssue } from './monitors/CallSummary';
+import { ObservedOutboundVideoTrack } from './ObservedOutboundVideoTrack';
 
-export type ObservedInboundTrackModel<K extends MediaKind> = {
+export type ObservedInboundVideoTrackModel = {
 	trackId: string;
-	kind: K;
 	sfuStreamId?: string;
 	sfuSinkId?: string;
 }
 
-export type ObservedInboundTrackEvents<K extends MediaKind> = {
+export type ObservedInboundVideoTrackEvents = {
 	update: [{
 		elapsedTimeInMs: number;
 	}],
+	score: [CalculatedScore],
 	close: [],
-	remoteoutboundtrack: [ObservedOutboundTrack<K>],
+	remoteoutboundtrack: [ObservedOutboundVideoTrack | undefined],
 };
 
-export type ObservedInboundTrackStatsUpdate<K extends MediaKind> = K extends 'audio' ? InboundAudioTrack : InboundVideoTrack;
+export type ObservedInboundVideoTrackStatsUpdate = InboundVideoTrack;
 
-export type ObservedInboundTrackStats<K extends MediaKind> = ObservedInboundTrackStatsUpdate<K> & {
+export type ObservedInboundVideoTrackStats = InboundVideoTrack & {
 	ssrc: number;
 	bitrate: number;
 	fractionLost: number;
@@ -33,8 +34,6 @@ export type ObservedInboundTrackStats<K extends MediaKind> = ObservedInboundTrac
 	deltaReceivedFrames?: number;
 	deltaDecodedFrames?: number;
 	deltaDroppedFrames?: number;
-	deltaReceivedSamples?: number;
-	deltaSilentConcealedSamples?: number;
 	fractionLoss?: number;
 	statsTimestamp: number;
 };
@@ -43,27 +42,31 @@ export type ObservedInboundTrackStats<K extends MediaKind> = ObservedInboundTrac
 // 	[Property in keyof ObservedInboundTrackStats<K>]: ObservedInboundTrackStats<K>[Property];
 // }
 
-export declare interface ObservedInboundTrack<Kind extends MediaKind> {
-	on<U extends keyof ObservedInboundTrackEvents<Kind>>(event: U, listener: (...args: ObservedInboundTrackEvents<Kind>[U]) => void): this;
-	off<U extends keyof ObservedInboundTrackEvents<Kind>>(event: U, listener: (...args: ObservedInboundTrackEvents<Kind>[U]) => void): this;
-	once<U extends keyof ObservedInboundTrackEvents<Kind>>(event: U, listener: (...args: ObservedInboundTrackEvents<Kind>[U]) => void): this;
-	emit<U extends keyof ObservedInboundTrackEvents<Kind>>(event: U, ...args: ObservedInboundTrackEvents<Kind>[U]): boolean;
-	update(sample: ObservedInboundTrackStatsUpdate<Kind>, timestamp: number): void;
+export declare interface ObservedInboundVideoTrack {
+	on<U extends keyof ObservedInboundVideoTrackEvents>(event: U, listener: (...args: ObservedInboundVideoTrackEvents[U]) => void): this;
+	off<U extends keyof ObservedInboundVideoTrackEvents>(event: U, listener: (...args: ObservedInboundVideoTrackEvents[U]) => void): this;
+	once<U extends keyof ObservedInboundVideoTrackEvents>(event: U, listener: (...args: ObservedInboundVideoTrackEvents[U]) => void): this;
+	emit<U extends keyof ObservedInboundVideoTrackEvents>(event: U, ...args: ObservedInboundVideoTrackEvents[U]): boolean;
+	update(sample: InboundVideoTrack, timestamp: number): void;
 }
 
-export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
+export class ObservedInboundVideoTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
-	private readonly _stats = new Map<number, ObservedInboundTrackStats<Kind>>();
+	public contentType: 'lowmotion' | 'standard' | 'highmotion' = 'standard';
+	public codec: 'vp8' | 'vp9' | 'h264' = 'vp8';
+
+	private readonly _stats = new Map<number, ObservedInboundVideoTrackStats>();
 	
 	private _closed = false;
 	private _updated = Date.now();
-	private _remoteOutboundTrack?: ObservedOutboundTrack<Kind>;
+	private _remoteOutboundTrack?: ObservedOutboundVideoTrack;
 	private _lastMaxStatsTimestamp = 0;
 
 	public bitrate = 0;
 	public rttInMs?: number;
+	public jitter?: number;
 	public fractionLoss = 0;
 	public marker?: string;
 
@@ -73,8 +76,6 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public totalReceivedFrames = 0;
 	public totalDecodedFrames = 0;
 	public totalDroppedFrames = 0;
-	public totalReceivedSamples = 0;
-	public totalSilentConcealedSamples = 0;
 	
 	public deltaLostPackets = 0;
 	public deltaReceivedPackets = 0;
@@ -82,11 +83,13 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public deltaReceivedFrames = 0;
 	public deltaDecodedFrames = 0;
 	public deltaDroppedFrames = 0;
-	public deltaReceivedSamples = 0;
-	public deltaSilentConcealedSamples = 0;
+	public highestLayer?: ObservedInboundVideoTrackStats;
+	public score?: CalculatedScore;
 	
+	public ωpendingIssuesForScores: ClientIssue[] = [];
+
 	public constructor(
-		private readonly _model: ObservedInboundTrackModel<Kind>,
+		private readonly _model: ObservedInboundVideoTrackModel,
 		public readonly peerConnection: ObservedPeerConnection,
 	) {
 		super();
@@ -121,10 +124,6 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		return this._model.trackId;
 	}
 
-	public get kind(): Kind {
-		return this._model.kind as Kind;
-	}
-
 	public get sfuStreamId() {
 		return this._model.sfuStreamId;
 	}
@@ -137,7 +136,11 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		return this._updated;
 	}
 
-	public get stats(): ReadonlyMap<number, ObservedInboundTrackStats<Kind>> {
+	public get statsTimestamp() {
+		return this._lastMaxStatsTimestamp;
+	}
+
+	public get stats(): ReadonlyMap<number, ObservedInboundVideoTrackStats> {
 		return this._stats;
 	}
 
@@ -145,12 +148,14 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		return this.peerConnection.reports;
 	}
 
-	public set remoteOutboundTrack(track: ObservedOutboundTrack<Kind> | undefined) {
+	public set remoteOutboundTrack(track: ObservedOutboundVideoTrack | undefined) {
 		if (this._closed) return;
 		if (this._remoteOutboundTrack) return;
 		if (!track) return;
-		track?.once('close', () => {
+		
+		track.once('close', () => {
 			this._remoteOutboundTrack = undefined;
+			this.emit('remoteoutboundtrack', undefined);
 		});
 		this._remoteOutboundTrack = track;
 		this.emit('remoteoutboundtrack', track);
@@ -172,7 +177,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.emit('close');
 	}
 
-	public update(sample: ObservedInboundTrackStatsUpdate<Kind>, statsTimestamp: number) {
+	public update(sample: ObservedInboundVideoTrackStatsUpdate, statsTimestamp: number) {
 		if (this._closed) return;
 		
 		const now = Date.now();
@@ -195,8 +200,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			marker: this.marker,
 		};
 
-		if (this.kind === 'audio') this.reports.addInboundAudioTrackReport(report);
-		else if (this.kind === 'video') this.reports.addInboundVideoTrackReport(report);
+		this.reports.addInboundVideoTrackReport(report);
 		
 		if (!this._model.sfuStreamId && sample.sfuStreamId) {
 			this._model.sfuStreamId = sample.sfuStreamId;
@@ -232,31 +236,20 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		let deltaDecodedFrames: number | undefined;
 		let deltaDroppedFrames: number | undefined;
 		let deltaReceivedFrames: number | undefined;
-		let deltaSilentConcealedSamples: number | undefined;
+		const videoSample = sample as InboundVideoTrack;
+		const lastVideoStat = lastStat as InboundVideoTrack | undefined;
 
-		if (this.kind === 'video') {
-			const videoSample = sample as InboundVideoTrack;
-			const lastVideoStat = lastStat as InboundVideoTrack | undefined;
-
-			if (videoSample.framesDecoded && lastVideoStat?.framesDecoded && lastVideoStat.framesDecoded < videoSample.framesDecoded) {
-				deltaDecodedFrames = videoSample.framesDecoded - lastVideoStat.framesDecoded;
-			}
-			if (videoSample.framesDropped && lastVideoStat?.framesDropped && lastVideoStat.framesDropped < videoSample.framesDropped) {
-				deltaDroppedFrames = videoSample.framesDropped - lastVideoStat.framesDropped;
-			}
-			if (videoSample.framesReceived && lastVideoStat?.framesReceived && lastVideoStat.framesReceived < videoSample.framesReceived) {
-				deltaReceivedFrames = videoSample.framesReceived - lastVideoStat.framesReceived;
-			}
-		} else if (this.kind === 'audio') {
-			const audioSample = sample as InboundAudioTrack;
-			const lastAudioStat = lastStat as InboundAudioTrack | undefined;
-			
-			if (audioSample.silentConcealedSamples && lastAudioStat?.silentConcealedSamples && lastAudioStat.silentConcealedSamples < audioSample.silentConcealedSamples) {
-				deltaSilentConcealedSamples = audioSample.silentConcealedSamples - lastAudioStat.silentConcealedSamples;
-			}
+		if (videoSample.framesDecoded && lastVideoStat?.framesDecoded && lastVideoStat.framesDecoded < videoSample.framesDecoded) {
+			deltaDecodedFrames = videoSample.framesDecoded - lastVideoStat.framesDecoded;
+		}
+		if (videoSample.framesDropped && lastVideoStat?.framesDropped && lastVideoStat.framesDropped < videoSample.framesDropped) {
+			deltaDroppedFrames = videoSample.framesDropped - lastVideoStat.framesDropped;
+		}
+		if (videoSample.framesReceived && lastVideoStat?.framesReceived && lastVideoStat.framesReceived < videoSample.framesReceived) {
+			deltaReceivedFrames = videoSample.framesReceived - lastVideoStat.framesReceived;
 		}
 
-		const stats: ObservedInboundTrackStats<Kind> = {
+		const stats: ObservedInboundVideoTrackStats = {
 			...sample,
 			fractionLost,
 			rttInMs,
@@ -268,7 +261,6 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			deltaReceivedFrames,
 			deltaDecodedFrames,
 			deltaDroppedFrames,
-			deltaSilentConcealedSamples,
 			statsTimestamp,
 		};
 
@@ -284,6 +276,7 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 	public updateMetrics() {
 		let maxStatsTimestamp = 0;
 		let rttInMsSum = 0;
+		let jitterSum = 0;
 		let size = 0;
 
 		this.bitrate = 0;
@@ -293,11 +286,11 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 		this.deltaReceivedFrames = 0;
 		this.deltaDecodedFrames = 0;
 		this.deltaDroppedFrames = 0;
-		this.deltaReceivedSamples = 0;
-		this.deltaSilentConcealedSamples = 0;
 		this.fractionLoss = 0;
 
-		for (const [ , stats ] of this._stats) {
+		const highestLayer = { ssrc: -1, bitrate: -1 };
+
+		for (const [ ssrc, stats ] of this._stats) {
 			if (stats.statsTimestamp <= this._lastMaxStatsTimestamp) continue;
 
 			this.deltaBytesReceived += stats.deltaReceivedBytes ?? 0;
@@ -306,28 +299,54 @@ export class ObservedInboundTrack<Kind extends MediaKind> extends EventEmitter	{
 			this.deltaReceivedFrames += stats.deltaReceivedFrames ?? 0;
 			this.deltaDecodedFrames += stats.deltaDecodedFrames ?? 0;
 			this.deltaDroppedFrames += stats.deltaDroppedFrames ?? 0;
-			this.deltaReceivedSamples += stats.deltaReceivedSamples ?? 0;
-			this.deltaSilentConcealedSamples += stats.deltaSilentConcealedSamples ?? 0;
 			this.bitrate += stats.bitrate;
 
 			maxStatsTimestamp = Math.max(maxStatsTimestamp, stats.statsTimestamp);
 			
+			if (highestLayer.bitrate < stats.bitrate) {
+				highestLayer.ssrc = ssrc;
+			}
 			rttInMsSum += stats.rttInMs ?? 0;
+			jitterSum += stats.jitter ?? 0;
 			++size;
 		}
-
+		this.highestLayer = this.stats.get(highestLayer.ssrc);
 		this.totalBytesReceived += this.deltaBytesReceived;
 		this.totalLostPackets += this.deltaLostPackets;
 		this.totalReceivedPackets += this.deltaReceivedPackets;
 		this.totalReceivedFrames += this.deltaReceivedFrames;
 		this.totalDecodedFrames += this.deltaDecodedFrames;
 		this.totalDroppedFrames += this.deltaDroppedFrames;
-		this.totalReceivedSamples += this.deltaReceivedSamples;
-		this.totalSilentConcealedSamples += this.deltaSilentConcealedSamples;
 
 		this.rttInMs = rttInMsSum / Math.max(size, 1);
+		this.jitter = jitterSum / Math.max(size, 1);
 		this.fractionLoss = 0 < this.deltaReceivedPackets && 0 < this.deltaLostPackets ? (this.deltaLostPackets / (this.deltaReceivedPackets + this.deltaLostPackets)) : 0;
 
 		this._lastMaxStatsTimestamp = maxStatsTimestamp;
+		this._updateQualityScore(maxStatsTimestamp);
+	}
+
+	private _updateQualityScore(timestamp: number) {
+		const newIssues = this.ωpendingIssuesForScores;
+		const score = calculateBaseVideoScore(this, newIssues);
+
+		if (0 < this.ωpendingIssuesForScores.length) {
+			this.ωpendingIssuesForScores = [];
+		}
+
+		if (!score) return (this.score = undefined);
+
+		if (0.05 < this.fractionLoss) {
+			score.score *= 0.5;
+			score.remarks.push({
+				severity: 'major',
+				text: 'Fraction loss is too high',
+			});
+		}
+		
+		score.timestamp = timestamp;
+		this.score = score;
+
+		this.emit('score', this.score);
 	}
 }
