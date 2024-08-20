@@ -117,6 +117,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public outboundVideoBitrate?: number;
 	public inboundAudioBitrate?: number;
 	public inboundVideoBitrate?: number;
+	public mediaConstraints: string[] = [];
 
 	public readonly mediaDevices: string[] = [];
 	public readonly codecs: string[] = [];
@@ -453,6 +454,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			);
 
 			this.reports.addCallMetaReport(callMetaReport);
+			this.mediaConstraints.push(mediaConstraint);
 		}
 
 		for (const localSDP of sample.localSDPs ?? []) {
@@ -1007,7 +1009,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 			}
 		}
-		
+
 		this.emit('issue', issue);
 	}
 
