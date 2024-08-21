@@ -5,6 +5,7 @@ import { InboundAudioTrackReport, InboundVideoTrackReport } from '@observertc/re
 import { CalculatedScore, calculateBaseVideoScore } from './common/CalculatedScore';
 import { ClientIssue } from './monitors/CallSummary';
 import { ObservedOutboundVideoTrack } from './ObservedOutboundVideoTrack';
+import { SupportedVideoCodecType } from './common/types';
 
 export type ObservedInboundVideoTrackModel = {
 	trackId: string;
@@ -54,8 +55,13 @@ export class ObservedInboundVideoTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
+	// timestamp of the MEDIA_TRACK_ADDED event
+	public added?: number;
+	// timestamp of the MEDIA_TRACK_REMOVED event
+	public removed?: number;
+
 	public contentType: 'lowmotion' | 'standard' | 'highmotion' = 'standard';
-	public codec: 'vp8' | 'vp9' | 'h264' = 'vp8';
+	public codec?: SupportedVideoCodecType;
 
 	private readonly _stats = new Map<number, ObservedInboundVideoTrackStats>();
 	
@@ -267,6 +273,9 @@ export class ObservedInboundVideoTrack extends EventEmitter	{
 		this._stats.set(sample.ssrc, stats);
 
 		this.visited = true;
+		// a peer connection is active if it has at least one active track
+		this.peerConnection.visited = true;
+		
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

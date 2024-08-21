@@ -50,6 +50,11 @@ export class ObservedOutboundAudioTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
+	// timestamp of the MEDIA_TRACK_ADDED event
+	public added?: number;
+	// timestamp of the MEDIA_TRACK_REMOVED event
+	public removed?: number;
+
 	public bitrate = 0;
 	public rttInMs?: number;
 	public jitter?: number;
@@ -222,23 +227,10 @@ export class ObservedOutboundAudioTrack extends EventEmitter	{
 
 		this._stats.set(sample.ssrc, stats);
 
-		// this.bitrate = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.bitrate, 0);
-		// this.rttInMs = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.rttInMs ?? 0), 0) / (this._stats.size || 1);
-
-		// this.totalLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsLost ?? 0), 0);
-		// this.totalSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.packetsSent ?? 0), 0);
-		// this.totalSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.bytesSent ?? 0), 0);
-		// this.totalSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentPackets ?? 0), 0);
-
-		// this.deltaEncodedFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaEncodedFrames ?? 0), 0);
-		// this.deltaSentFrames = [ ...this._stats.values() ].reduce((acc, stat) => acc + (stat.deltaSentFrames ?? 0), 0);
-		// this.deltaLostPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaLostPackets, 0);
-		// this.deltaSentPackets = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentPackets, 0);
-		// this.deltaSentBytes = [ ...this._stats.values() ].reduce((acc, stat) => acc + stat.deltaSentBytes, 0);
-
-		// setting up sfu connection as it is not always available at the first sample
-
 		this.visited = true;
+		// a peer connection is active if it has at least one active track
+		this.peerConnection.visited = true;
+		
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

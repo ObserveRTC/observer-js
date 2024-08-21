@@ -42,7 +42,12 @@ export declare interface ObservedPeerConnection {
 export class ObservedPeerConnection extends EventEmitter {
 	public readonly created = Date.now();
 	public visited = true;
-	
+
+	// timestamp of the PEER_CONNECTION_OPENED event
+	public opened?: number;
+	// timestamp of the PEER_CONNECTION_CLOSED event
+	public closedTimestamp?: number;
+
 	private _elapsedTimeSinceLastUpdate?: number;
 	private _statsTimestamp?: number;
 	

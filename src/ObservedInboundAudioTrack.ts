@@ -54,6 +54,11 @@ export class ObservedInboundAudioTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
+	// timestamp of the MEDIA_TRACK_ADDED event
+	public added?: number;
+	// timestamp of the MEDIA_TRACK_REMOVED event
+	public removed?: number;
+
 	private readonly _stats = new Map<number, ObservedInboundAudioTrackStats>();
 	
 	private _closed = false;
@@ -257,6 +262,9 @@ export class ObservedInboundAudioTrack extends EventEmitter	{
 		this._stats.set(sample.ssrc, stats);
 
 		this.visited = true;
+		// a peer connection is active if it has at least one active track
+		this.peerConnection.visited = true;
+		
 		this._updated = now;
 		
 		this.emit('update', {

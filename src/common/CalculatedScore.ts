@@ -82,7 +82,7 @@ export function calculateBaseVideoScore(track: ObservedInboundVideoTrack | Obser
 	
 	const bpp = bitrate / (frameHeight * frameWidth * framesPerSecond);
 	// let's assume vp8 for now
-	const bppRange = BPP_RANGES[track.contentType][track.codec];
+	const bppRange = BPP_RANGES[track.contentType][track.codec ?? 'vp8'];
 
 	if (bpp / 2 < bppRange.low) {
 		score.score = 1.0;

@@ -1,4 +1,4 @@
-import { Browser, ClientSample, Engine, IceLocalCandidate, IceRemoteCandidate, OperationSystem, Platform } from '@observertc/sample-schemas-js';
+import { Browser, ClientSample, Engine, IceLocalCandidate, IceRemoteCandidate, MediaCodecStats, MediaDevice, OperationSystem, Platform } from '@observertc/sample-schemas-js';
 import { ObservedCall } from './ObservedCall';
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
@@ -6,7 +6,6 @@ import { createLogger } from './common/logger';
 import { CallMetaType, createCallMetaReport } from './common/CallMetaReports';
 // eslint-disable-next-line camelcase
 import { PartialBy, isValidUuid } from './common/utils';
-import { createClientLeftEventReport } from './common/callEventReports';
 import { CallEventType } from './common/CallEventType';
 import { ObservedSfu } from './ObservedSfu';
 import { ClientIssue } from './monitors/CallSummary';
@@ -71,6 +70,19 @@ export declare interface ObservedClient<AppData extends Record<string, unknown> 
 	readonly appData: AppData;
 }
 
+type PendingPeerConnectionTimestamp = {
+	type: 'opened' | 'closed'
+	peerConnectionId: string;
+	timestamp: number;
+}
+
+type PendingMediaTrackTimestamp = {
+	type: 'added' | 'removed'
+	peerConnectionId: string;
+	mediaTrackId: string;
+	timestamp: number;
+}
+
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	
 	public readonly created = Date.now();
@@ -81,10 +93,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	
 	private _closed = false;
 	
-	private _joinedEventAt?: number;
 	private _acceptedSamples = 0;
 	private _timeZoneOffsetInHours?: number;
-	private _left?: number;
+
+	// the timestamp of the CLIENT_JOINED event
+	public joined?: number;
+	public left?: number;
 	
 	public score?: CalculatedScore;
 	public usingTURN = false;
@@ -119,13 +133,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public inboundVideoBitrate?: number;
 	public mediaConstraints: string[] = [];
 
-	public readonly mediaDevices: string[] = [];
-	public readonly codecs: string[] = [];
+	public readonly mediaDevices: MediaDevice[] = [];
+	public readonly mediaCodecs: MediaCodecStats[] = [];
 	public readonly userMediaErrors: string[] = [];
 	public readonly issues: ClientIssue[] = [];
 
-	public readonly ωpendingCreatedTracksTimestamp = new Map<string, number>();
-	public readonly ωpendingCreatedPeerConnectionTimestamp = new Map<string, number>();
+	public ωpendingPeerConnectionTimestamps: PendingPeerConnectionTimestamp[] = [];
+	public ωpendingMediaTrackTimestamps: PendingMediaTrackTimestamp[] = [];
 	
 	public constructor(
 		private readonly _model: ObservedClientModel,
@@ -239,9 +253,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this._closed) return;
 		this._closed = true;
 
-		if (!this._left) {
-			this._addClientLeftReport();
-		}
 		Array.from(this._peerConnections.values()).forEach((peerConnection) => peerConnection.close());
 
 		this.emit('close');
@@ -493,17 +504,56 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		for (const { timestamp, ...callEvent } of sample.customCallEvents ?? []) {
 			switch (callEvent.name) {
 				case CallEventType.CLIENT_JOINED: {
-					const lastJoined = this._joinedEventAt;
+					const lastJoined = this.joined;
 
-					this._joinedEventAt = timestamp ?? sample.timestamp;
+					this.joined = timestamp;
 
-					if (lastJoined && this._joinedEventAt && lastJoined !== this._joinedEventAt) {
+					// if it is joined before and it is joined again
+					if (lastJoined && this.joined && lastJoined !== this.joined) {
 						this.emit('rejoined', { lastJoined });
+					}
+					// in case we have a left event before the joined event
+					if (this.left && this.joined && this.left < this.joined) {
+						this.left = undefined;
 					}
 					break;
 				}
 				case CallEventType.CLIENT_LEFT: {
-					this._left = timestamp;
+					this.left = timestamp;
+					break;
+				}
+				case CallEventType.PEER_CONNECTION_OPENED: {
+					callEvent.peerConnectionId && this.ωpendingPeerConnectionTimestamps.push({
+						type: 'opened',
+						peerConnectionId: callEvent.peerConnectionId,
+						timestamp: timestamp ?? sample.timestamp,
+					});
+					break;
+				}
+				case CallEventType.PEER_CONNECTION_CLOSED: {
+					callEvent.peerConnectionId && this.ωpendingPeerConnectionTimestamps.push({
+						type: 'closed',
+						peerConnectionId: callEvent.peerConnectionId,
+						timestamp: timestamp ?? sample.timestamp,
+					});
+					break;
+				}
+				case CallEventType.MEDIA_TRACK_ADDED: {
+					callEvent.peerConnectionId && callEvent.mediaTrackId && this.ωpendingMediaTrackTimestamps.push({
+						type: 'added',
+						peerConnectionId: callEvent.peerConnectionId,
+						mediaTrackId: callEvent.mediaTrackId,
+						timestamp: timestamp ?? sample.timestamp,
+					});
+					break;
+				}
+				case CallEventType.MEDIA_TRACK_REMOVED: {
+					callEvent.peerConnectionId && callEvent.mediaTrackId && this.ωpendingMediaTrackTimestamps.push({
+						type: 'removed',
+						peerConnectionId: callEvent.peerConnectionId,
+						mediaTrackId: callEvent.mediaTrackId,
+						timestamp: timestamp ?? sample.timestamp,
+					});
 					break;
 				}
 				case CallEventType.CLIENT_ISSUE: {
@@ -594,7 +644,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}, this.userId);
 
 			this.reports.addCallMetaReport(callMetaReport);
-			codec.mimeType && this.codecs.push(codec.mimeType);
+			if (codec.mimeType && !this.mediaCodecs.find((c) => c.mimeType === codec.mimeType)) {
+				this.mediaCodecs.push(codec);
+			}
 		}
 	
 		for (const iceServer of sample.iceServers ?? []) {
@@ -621,9 +673,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					type: CallMetaType.MEDIA_DEVICE,
 					payload: mediaDevice,
 				}, this.userId);
-				
+			
 			this.reports.addCallMetaReport(callMetaReport);
-			mediaDevice.label && this.mediaDevices.push(mediaDevice.label);
+			if (mediaDevice.id && !this.mediaDevices.find((d) => d.id === mediaDevice.id)) {
+				this.mediaDevices.push(mediaDevice);
+			}
 		}
 			
 		for (const mediaSource of sample.mediaSources ?? []) {
@@ -851,6 +905,48 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
+		// try to set the timestamps of the peer connections
+		if (0 < this.ωpendingPeerConnectionTimestamps.length) {
+			const newPendingTimestamps: PendingPeerConnectionTimestamp[] = [];
+
+			for (const pendingTimestamp of this.ωpendingPeerConnectionTimestamps) {
+				const peerConnection = this._peerConnections.get(pendingTimestamp.peerConnectionId);
+
+				if (!peerConnection) {
+					newPendingTimestamps.push(pendingTimestamp);
+					continue;
+				}
+				if (pendingTimestamp.type === 'opened') peerConnection.opened = pendingTimestamp.timestamp;
+				else if (pendingTimestamp.type === 'closed') peerConnection.closedTimestamp = pendingTimestamp.timestamp;
+			}
+
+			this.ωpendingPeerConnectionTimestamps = newPendingTimestamps;
+		}
+		
+		// try to set the timestamps of the media tracks
+		if (0 < this.ωpendingMediaTrackTimestamps.length) {
+			const newPendingTimestamps: PendingMediaTrackTimestamp[] = [];
+
+			for (const pendingTimestamp of this.ωpendingMediaTrackTimestamps) {
+				const peerConnection = this._peerConnections.get(pendingTimestamp.peerConnectionId);
+				const mediaTrack = peerConnection?.inboundAudioTracks.get(pendingTimestamp.mediaTrackId) ??
+					peerConnection?.inboundVideoTracks.get(pendingTimestamp.mediaTrackId) ??
+					peerConnection?.outboundAudioTracks.get(pendingTimestamp.mediaTrackId) ??
+					peerConnection?.outboundVideoTracks.get(pendingTimestamp.mediaTrackId);
+
+				if (!mediaTrack) {
+					newPendingTimestamps.push(pendingTimestamp);
+					continue;
+				}
+
+				if (pendingTimestamp.type === 'added') mediaTrack.added = pendingTimestamp.timestamp;
+				else if (pendingTimestamp.type === 'removed') mediaTrack.removed = pendingTimestamp.timestamp;
+			}
+
+			this.ωpendingMediaTrackTimestamps = newPendingTimestamps;
+		}
+
+		// close resources that are not visited
 		for (const peerConnection of this._peerConnections.values()) {
 			if (!peerConnection.visited) {
 				peerConnection.close();
@@ -1037,21 +1133,5 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.emit('newpeerconnection', result);
 
 		return result;
-	}
-
-	private _addClientLeftReport() {
-		if (this._left) return;
-		this._left = Date.now();
-
-		this.reports.addCallEventReport(createClientLeftEventReport(
-			this.serviceId,
-			this.mediaUnitId,
-			this.roomId,
-			this.callId,
-			this.clientId,
-			this._left,
-			this.userId,
-			this.marker,
-		));
 	}
 }

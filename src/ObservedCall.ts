@@ -1,17 +1,14 @@
 import { EventEmitter } from 'events';
-import { ObservedClient, ObservedClientEvents, ObservedClientModel } from './ObservedClient';
+import { ObservedClient, ObservedClientModel } from './ObservedClient';
 import { Observer } from './Observer';
-import { createClientJoinedEventReport } from './common/callEventReports';
+import { createClientJoinedEventReport, createClientLeftEventReport } from './common/callEventReports';
 import { getMedian, PartialBy } from './common/utils';
 import { CallEventReport } from '@observertc/report-schemas-js';
 import { createProcessor } from './common/Middleware';
 import { ClientSample } from '@observertc/sample-schemas-js';
-import { ClientIssue } from './monitors/CallSummary';
 import { ObservedOutboundAudioTrack } from './ObservedOutboundAudioTrack';
 import { ObservedOutboundVideoTrack } from './ObservedOutboundVideoTrack';
 import { CalculatedScore } from './common/CalculatedScore';
-
-type ClientIssueDetectionConfig = Pick<ClientIssue, 'severity'>;
 
 export type ObservedCallModel = {
 	serviceId: string;
@@ -49,7 +46,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundVideoTrack>();
 	private _closed = false;
 	private _updated = Date.now();
-	private _ended?: number;
+	public ended?: number;
+	public started?: number = Date.now();
 
 	public constructor(
 		private readonly _model: ObservedCallModel,
@@ -81,10 +79,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public get updated() {
 		return this._updated;
-	}
-
-	public get ended() {
-		return this._ended;
 	}
 
 	public get clients(): ReadonlyMap<string, ObservedClient> {
@@ -127,7 +121,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public close(timestamp?: number) {
 		if (this._closed) return;
 		this._closed = true;
-		this._ended = timestamp ?? Date.now();
+
+		if (timestamp) {
+			this.ended = timestamp;
+		} else if (!this.ended) {
+			this.ended = Date.now();
+		}
 
 		Array.from(this._clients.values()).forEach((client) => client.close());
 		
@@ -146,21 +145,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public createClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(config: ObservedClientModel & { 
 		appData: ClientAppData, 
-		generateClientJoinedReport?: boolean, 
-		joined?: number,
-		detectIssues?: {
-			rejoin: ClientIssue['severity'] | ClientIssueDetectionConfig,
-		},
+		// in case we generate the CLIENT_JOINED report we can set the timestamp of the event
+		// in that case we should set the client.left to the timestamp of the leaving.
+		// by default the timestamp is set to the current time
+		joinedTimestamp?: number,
+		createClientJoinedReport?: boolean, 
+		createClientLeftReport?: boolean,
 	}) {
 		if (this._closed) throw new Error(`Call ${this.callId} is closed`);
 
 		const { 
 			appData, 
-			generateClientJoinedReport, 
-			joined = Date.now(), 
-			detectIssues = {
-				rejoin: 'minor'
-			}, 
+			createClientJoinedReport, 
+			createClientLeftReport,
+			joinedTimestamp = Date.now(), 
 			...model 
 		} = config;
 		
@@ -180,37 +178,33 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		result.on('update', onUpdate);
 		this._clients.set(result.clientId, result);
 
-		if (generateClientJoinedReport) {
+		if (createClientJoinedReport) {
 			this.reports.addCallEventReport(createClientJoinedEventReport(
 				this.serviceId,
 				result.mediaUnitId,
 				this.roomId,
 				this.callId,
 				result.clientId,
-				joined,
+				result.joined ?? joinedTimestamp,
 				result.userId,
 				result.marker,
 			));
 		}
 
-		if (detectIssues?.rejoin) {
-			const issueBaseConfig = typeof detectIssues.rejoin === 'object' ? detectIssues.rejoin : { 
-				severity: detectIssues.rejoin 
-			};
-			
-			const rejoinedClientIssueListener = (event: ObservedClientEvents['rejoined'][0]) => {
-				event.lastJoined;
-				result.addIssue({
-					timestamp: Date.now(),
-					...issueBaseConfig,
-				});
-			};
-
-			result.once('close', () => {
-				result.off('rejoined', rejoinedClientIssueListener);
-			});
-			result.on('rejoined', rejoinedClientIssueListener);
-		}
+		result.once('close', () => {
+			if (createClientLeftReport) {
+				this.reports.addCallEventReport(createClientLeftEventReport(
+					this.serviceId,
+					result.mediaUnitId,
+					this.roomId,
+					this.callId,
+					result.clientId,
+					result.left ?? Date.now(),
+					result.userId,
+					result.marker,
+				));
+			}
+		});
 
 		this.emit('newclient', result);
 		

@@ -5,6 +5,7 @@ import { OutboundAudioTrackReport, OutboundVideoTrackReport } from '@observertc/
 import { ObservedInboundVideoTrack } from './ObservedInboundVideoTrack';
 import { calculateBaseVideoScore, CalculatedScore } from './common/CalculatedScore';
 import { ClientIssue } from './monitors/CallSummary';
+import { SupportedVideoCodecType } from './common/types';
 
 export type ObservedOutboundVideoTrackModel = {
 	trackId: string;
@@ -50,8 +51,13 @@ export class ObservedOutboundVideoTrack extends EventEmitter	{
 	public readonly created = Date.now();
 	public visited = false;
 
+	// timestamp of the MEDIA_TRACK_ADDED event
+	public added?: number;
+	// timestamp of the MEDIA_TRACK_REMOVED event
+	public removed?: number;
+
 	public contentType: 'lowmotion' | 'standard' | 'highmotion' = 'standard';
-	public codec: 'vp8' | 'vp9' | 'h264' = 'vp8';
+	public codec?: SupportedVideoCodecType;
 	public highestLayer?: ObservedOutboundVideoTrackStats;
 
 	public bitrate = 0;
@@ -241,6 +247,9 @@ export class ObservedOutboundVideoTrack extends EventEmitter	{
 		// setting up sfu connection as it is not always available at the first sample
 
 		this.visited = true;
+		// a peer connection is active if it has at least one active track
+		this.peerConnection.visited = true;
+
 		this._updated = now;
 		this.emit('update', {
 			elapsedTimeInMs,

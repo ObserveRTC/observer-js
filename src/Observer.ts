@@ -104,7 +104,7 @@ export class Observer extends EventEmitter {
 	}
 
 	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		config: PartialBy<ObservedCallModel, 'serviceId'> & { appData: T, started?: number, reportCallStarted?: boolean, reportCallEnded?: boolean, ended?: number }
+		config: PartialBy<ObservedCallModel, 'serviceId'> & { appData: T, reportCallStarted?: boolean, reportCallEnded?: boolean }
 	): ObservedCall<T> {
 		if (this._closed) {
 			throw new Error('Attempted to create a call source on a closed observer');
@@ -112,8 +112,6 @@ export class Observer extends EventEmitter {
 
 		const { 
 			appData, 
-			started = Date.now(), 
-			ended,
 			reportCallEnded = true,
 			reportCallStarted = true,
 			...model 
@@ -132,7 +130,7 @@ export class Observer extends EventEmitter {
 				call.serviceId,
 				call.roomId,
 				call.callId,
-				ended ?? Date.now(),
+				call.ended ?? Date.now(),
 			));
 		});
 
@@ -141,7 +139,7 @@ export class Observer extends EventEmitter {
 			call.serviceId,
 			call.roomId,
 			call.callId,
-			started,
+			call.started ?? Date.now(),
 		));
 
 		this.emit('newcall', call);
