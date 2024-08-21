@@ -86,7 +86,7 @@ type PendingMediaTrackTimestamp = {
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	
 	public readonly created = Date.now();
-	public _updated = Date.now();
+	public updated = Date.now();
 	public sfuId?: string;
 	
 	private readonly _peerConnections = new Map<string, ObservedPeerConnection>();
@@ -99,7 +99,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	// the timestamp of the CLIENT_JOINED event
 	public joined?: number;
 	public left?: number;
-	
+	public lastStatsTimestamp?: number;
+
 	public score?: CalculatedScore;
 	public usingTURN = false;
 	public availableOutgoingBitrate = 0;
@@ -235,10 +236,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get acceptedSamples() {
 		return this._acceptedSamples;
-	}
-
-	public get updated() {
-		return this._updated;
 	}
 
 	public get closed() {
@@ -996,7 +993,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		// update metrics
 		const wasUsingTURN = this.usingTURN;
-		const elapsedTimeInMs = now - this._updated;
+		const elapsedTimeInMs = now - this.updated;
 
 		this.usingTURN = false;
 		this.availableIncomingBitrate = 0;
@@ -1081,7 +1078,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// to make sure when sample is emitted it can be associated to this client
 		sample.clientId = this.clientId;
 
-		this._updated = now;
+		this.updated = now;
+		this.lastStatsTimestamp = sample.timestamp;
 		this.emit('update', {
 			sample,
 			elapsedTimeInMs,

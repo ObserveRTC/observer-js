@@ -29,6 +29,7 @@ export type {
 	SfuSctpChannel,
 	SfuExtensionStats,
 	DataChannel,
+	MediaDevice,
 } from '@observertc/sample-schemas-js';
 
 export type {
