@@ -121,7 +121,8 @@ export class CallSummaryMonitor extends EventEmitter {
 			clientSummary.totalDataChannelBytesReceived = client.totalDataChannelBytesReceived;
 			clientSummary.durationInMs = now - client.created;
 			clientSummary.left = now;
-			clientSummary.issues.push(...client.issues);
+			// client does not store issues after update emitted
+			// clientSummary.issues.push(...client.issues);
 
 			client.off('update', updateClient);
 			client.off('usingturn', onUsingTurn);

@@ -137,7 +137,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public readonly mediaDevices: MediaDevice[] = [];
 	public readonly mediaCodecs: MediaCodecStats[] = [];
 	public readonly userMediaErrors: string[] = [];
-	public readonly issues: ClientIssue[] = [];
+	public issues: ClientIssue[] = [];
 
 	public ωpendingPeerConnectionTimestamps: PendingPeerConnectionTimestamp[] = [];
 	public ωpendingMediaTrackTimestamps: PendingMediaTrackTimestamp[] = [];
@@ -324,7 +324,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const now = Date.now();
 
 		++this._acceptedSamples;
-		
+		if (0 < this.issues.length) {
+			// we reset the issues every time we accept a new sample
+			this.issues = [];
+		}
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
 			peerConnection.resetMetrics();
