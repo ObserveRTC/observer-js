@@ -20,6 +20,7 @@ export type ObservedCallEvents = {
 	update: [],
 	newclient: [ObservedClient],
 	callevent: [Omit<CallEventReport, 'callId' | 'serviceId' | 'roomId'>],
+	empty: [],
 	close: [],
 }
 
@@ -173,6 +174,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		result.once('close', () => {
 			result.off('update', onUpdate);
 			this._clients.delete(result.clientId);
+			
+			if (this._clients.size === 0) {
+				this.emit('empty');
+			}
 		});
 
 		result.on('update', onUpdate);
