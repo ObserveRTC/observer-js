@@ -46,9 +46,14 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public readonly sfuStreamIdToOutboundAudioTrack = new Map<string | number, ObservedOutboundAudioTrack>();
 	public readonly sfuStreamIdToOutboundVideoTrack = new Map<string | number, ObservedOutboundVideoTrack>();
 	private _closed = false;
-	private _updated = Date.now();
+	// this changes as clients emitting their joined event, as the call starts when the first client joins
+	public started?: number;
+	// this changes as clients emitting their left event, as the call ends when the last client leaves
 	public ended?: number;
-	public started?: number = Date.now();
+
+	public observationUpdated = Date.now();
+	public observationEnded?: number;
+	public readonly observationStarted = Date.now();
 
 	public constructor(
 		private readonly _model: ObservedCallModel,
@@ -76,10 +81,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public get callId() {
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		return this._model.callId!;
-	}
-
-	public get updated() {
-		return this._updated;
 	}
 
 	public get clients(): ReadonlyMap<string, ObservedClient> {
@@ -119,17 +120,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this._closed;
 	}
 
-	public close(timestamp?: number) {
+	public close() {
 		if (this._closed) return;
 		this._closed = true;
 
-		if (timestamp) {
-			this.ended = timestamp;
-		} else if (!this.ended) {
-			this.ended = Date.now();
-		}
-
 		Array.from(this._clients.values()).forEach((client) => client.close());
+
+		this.observationEnded = Date.now();
 		
 		this.emit('close');
 	}
@@ -165,7 +162,18 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		
 		const result = new ObservedClient(model, this, appData);
 		const onUpdate = ({ sample }: { sample: ClientSample }) => {
-			this._updated = Date.now();
+			this.observationUpdated = Date.now();
+			if (result.joined) {
+				if (this.started === undefined || result.joined < this.started) {
+					this.started = result.joined;
+				}
+			}
+			if (result.left) {
+				if (this.ended === undefined || result.left > this.ended) {
+					this.ended = result.left;
+				}
+			}
+
 			this.emit('update');
 
 			this.processor.process(sample);

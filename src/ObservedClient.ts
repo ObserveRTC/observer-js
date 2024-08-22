@@ -35,6 +35,8 @@ export type ObservedClientEvents = {
 		elapsedTimeInMs: number,
 	}],
 	close: [],
+	joined: [],
+	left: [],
 	newpeerconnection: [ObservedPeerConnection],
 	iceconnectionstatechange: [{
 		peerConnection: ObservedPeerConnection,
@@ -97,8 +99,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _timeZoneOffsetInHours?: number;
 
 	// the timestamp of the CLIENT_JOINED event
-	public joined?: number;
-	public left?: number;
+	private _joined?: number;
+	private _left?: number;
 	public lastStatsTimestamp?: number;
 
 	public score?: CalculatedScore;
@@ -157,6 +159,30 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (!sfu) return;
 		
 		return sfu as ObservedSfu<T>;
+	}
+
+	public get joined() {
+		return this._joined;
+	}
+
+	public set joined(value: number | undefined) {
+		this._joined = value;
+		
+		if (this._joined) {
+			this.emit('joined');
+		}
+	}
+
+	public get left() {
+		return this._left;
+	}
+
+	public set left(value: number | undefined) {
+		this._left = value;
+		
+		if (this._left) {
+			this.emit('left');
+		}
 	}
 
 	public get sfu(): ObservedSfu | undefined {

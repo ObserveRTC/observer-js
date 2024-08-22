@@ -130,7 +130,7 @@ export class Observer extends EventEmitter {
 				call.serviceId,
 				call.roomId,
 				call.callId,
-				call.ended ?? Date.now(),
+				call.observationEnded ?? Date.now(),
 			));
 		});
 
@@ -139,7 +139,7 @@ export class Observer extends EventEmitter {
 			call.serviceId,
 			call.roomId,
 			call.callId,
-			call.started ?? Date.now(),
+			call.observationStarted,
 		));
 
 		this.emit('newcall', call);
