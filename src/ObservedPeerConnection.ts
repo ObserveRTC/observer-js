@@ -9,7 +9,7 @@ import { ObservedInboundAudioTrack, ObservedInboundAudioTrackModel } from './Obs
 import { ObservedInboundVideoTrack, ObservedInboundVideoTrackModel } from './ObservedInboundVideoTrack';
 import { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackModel } from './ObservedOutboundAudioTrack';
 import { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackModel } from './ObservedOutboundVideoTrack';
-import { CalculatedScore, calculateLatencyMOS } from './common/CalculatedScore';
+import { CalculatedScore, getRttScore } from './common/CalculatedScore';
 import { ClientIssue } from './monitors/CallSummary';
 
 export type ObservedPeerConnectionEvents = {
@@ -50,7 +50,8 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	private _elapsedTimeSinceLastUpdate?: number;
 	private _statsTimestamp?: number;
-	
+	private _stabilityScores: number[] = [];
+
 	public ωpendingIssuesForScores: ClientIssue[] = [];
 
 	public score?: CalculatedScore;
@@ -499,34 +500,55 @@ export class ObservedPeerConnection extends EventEmitter {
 	}
 
 	private _updateQualityScore(trackScores: CalculatedScore[]) {
-		const mosScore = calculateLatencyMOS({
-			avgJitter: this.avgJitter ?? 0,
-			rttInMs: this.avgRttInMs ?? 0,
-			packetsLoss: this.deltaInboundPacketsLost,
-		});
-		const score: CalculatedScore = {
-			remarks: [ {
-				severity: 'none',
-				text: `MOS score: ${mosScore}`,
-			} ],
-			score: mosScore / 10.0, // normalize between 0 and 2
-			timestamp: this._statsTimestamp ?? Date.now(),
-		};
-		
+		// Packet Jitter measured in seconds
+		// we use RTT and lost packets to calculate the base score for the connection
+		const rttInMs = this.avgRttInMs ?? 0;
+		const latencyFactor = rttInMs < 150 ? 1.0 : getRttScore(rttInMs);
+		const totalPackets = Math.max(1, (this.totalInboundPacketsReceived ?? 0) + (this.totalOutboundPacketsSent ?? 0));
+		const lostPackets = (this.totalInboundPacketsLost ?? 0) + (this.deltaOutboundPacketsSent ?? 0);
+		const deliveryFactor = 1.0 - ((lostPackets) / (lostPackets + totalPackets));
+		// let's push the actual stability score
+		const stabilityScore = ((latencyFactor * 0.5) + (deliveryFactor * 0.5)) ** 2;
+
+		this._stabilityScores.push(stabilityScore);
+		if (10 < this._stabilityScores.length) {
+			this._stabilityScores.shift();
+		} else if (this._stabilityScores.length < 5) {
+			return;
+		}
+		let counter = 0;
+		let weight = 0;
+		let totalScore = 0;
+
+		for (const score of this._stabilityScores) {
+			weight += 1;
+			counter += weight;
+			totalScore += weight * score;
+		}
+		const weightedStabilityScore = totalScore / counter;
 		let sumTrackScores = 0;
 
 		for (const trackScore of trackScores) {
 			sumTrackScores += trackScore.score;
 		}
 
-		score.score += sumTrackScores / trackScores.length;
-		score.remarks.push({
-			severity: 'none',
-			text: `Track scores: ${sumTrackScores / trackScores.length}`,
-		});
+		const avgTrackScores = sumTrackScores / trackScores.length;
 
-		for (const pendingScore of this.ωpendingIssuesForScores) {
-			switch (pendingScore.severity) {
+		const score: CalculatedScore = {
+			remarks: [ {
+				severity: 'none',
+				text: `Peer Connection stability score: ${weightedStabilityScore}`,
+			},
+			{
+				severity: 'none',
+				text: `Avg. Track score: ${avgTrackScores}`,
+			} ],
+			score: Math.floor((weightedStabilityScore + avgTrackScores) * 5),
+			timestamp: this._statsTimestamp ?? Date.now(),
+		};
+
+		for (const pendingIssue of this.ωpendingIssuesForScores) {
+			switch (pendingIssue.severity) {
 				case 'critical':
 					score.score = 0.0;
 					break;
@@ -538,10 +560,11 @@ export class ObservedPeerConnection extends EventEmitter {
 					break;
 			}
 			score.remarks.push({
-				severity: pendingScore.severity,
-				text: pendingScore.description ?? 'Issue occurred',
+				severity: pendingIssue.severity,
+				text: pendingIssue.description ?? 'Issue occurred',
 			});
 		}
+
 		this.ωpendingIssuesForScores = [];
 		this.score = score;
 

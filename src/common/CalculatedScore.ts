@@ -132,7 +132,7 @@ export function calculateBaseAudioScore(track: ObservedInboundAudioTrack | Obser
 		score.score = 1.0;
 		score.remarks.push({
 			severity: 'none',
-			text: 'Bitrate is too low for audio',
+			text: 'Bitrate is too low for good quality audio',
 		});
 	} else if (track.bitrate < 16000) {
 		score.score = 2.8;
@@ -177,4 +177,12 @@ export function calculateLatencyMOS(
 	rFactor -= (packetsLoss * 2.5);
 	
 	return 1 + ((0.035) * rFactor) + ((0.000007) * rFactor * (rFactor - 60) * (100 - rFactor));
+}
+
+export function getRttScore(x: number): number {
+	// logarithmic version: 1.0 at 150 and 0.1 at 300
+	return (-1.2984 * Math.log(x)) + 7.5059;
+
+	// exponential version: 1.0 at 150 and 0.1 at 300
+	// return Math.exp(-0.01536 * x);
 }

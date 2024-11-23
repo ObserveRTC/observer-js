@@ -1044,8 +1044,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		let sumRttInMs = 0;
 		let anyPeerConnectionUsingTurn = false;
 
-		let minPcScore = Number.MAX_SAFE_INTEGER;
-		let maxPcScore = Number.MIN_SAFE_INTEGER;
+		let minPcScore: number | undefined;
+		let maxPcScore: number | undefined;
 
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
@@ -1067,12 +1067,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			anyPeerConnectionUsingTurn ||= peerConnection.usingTURN;
 
-			minPcScore = Math.min(minPcScore, peerConnection.score?.score ?? Number.MAX_SAFE_INTEGER);
-			maxPcScore = Math.max(maxPcScore, peerConnection.score?.score ?? Number.MIN_SAFE_INTEGER);
+			if (peerConnection.score) {
+				if (minPcScore === undefined || peerConnection.score.score < minPcScore) minPcScore = peerConnection.score.score;
+				if (maxPcScore === undefined || peerConnection.score.score > maxPcScore) maxPcScore = peerConnection.score.score;
+			}
 		}
 
 		this.score = {
-			score: minPcScore,
+			score: minPcScore ?? -1,
 			remarks: [ {
 				severity: 'none',
 				text: `Min and max score of all peer connections: ${minPcScore}, ${maxPcScore}`,
