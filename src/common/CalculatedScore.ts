@@ -85,19 +85,19 @@ export function calculateBaseVideoScore(track: ObservedInboundVideoTrack | Obser
 	const bppRange = BPP_RANGES[track.contentType][track.codec ?? 'vp8'];
 
 	if (bpp / 2 < bppRange.low) {
-		score.score = 1.0;
+		score.score = 0.5;
 		score.remarks.push({
 			severity: 'major',
 			text: `Bitrate per pixel is too low for ${track.contentType} content`,
 		});
 	} else if (bppRange.low < bpp) {
-		score.score = 1.0;
+		score.score = 0.8;
 		score.remarks.push({
 			severity: 'minor',
 			text: `Bitrate per pixel is good for ${track.contentType} content`,
 		});
 	} else {
-		score.score = Math.min(3.0, 2.0 + ((bpp - bppRange.low) / (bppRange.high - bppRange.low)));
+		score.score = Math.min(1.0, ((bpp - bppRange.low) / (bppRange.high - bppRange.low)));
 		score.remarks.push({
 			severity: 'none',
 			text: `Bitrate per pixel is good for ${track.contentType} content`,
@@ -129,19 +129,19 @@ export function calculateBaseAudioScore(track: ObservedInboundAudioTrack | Obser
 	};
 
 	if (track.bitrate < 8000) {
-		score.score = 1.0;
+		score.score = 0.2;
 		score.remarks.push({
 			severity: 'none',
 			text: 'Bitrate is too low for good quality audio',
 		});
 	} else if (track.bitrate < 16000) {
-		score.score = 2.8;
+		score.score = 0.5;
 		score.remarks.push({
 			severity: 'none',
 			text: 'Bitrate is low for audio',
 		});
 	} else {
-		score.score = 3.0;
+		score.score = 1.0;
 		score.remarks.push({
 			severity: 'none',
 			text: 'Bitrate is good for audio',

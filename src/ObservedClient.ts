@@ -1046,6 +1046,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		let minPcScore: number | undefined;
 		let maxPcScore: number | undefined;
+		let numberOfScoredPeerConnections = 0;
 
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
@@ -1070,6 +1071,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			if (peerConnection.score) {
 				if (minPcScore === undefined || peerConnection.score.score < minPcScore) minPcScore = peerConnection.score.score;
 				if (maxPcScore === undefined || peerConnection.score.score > maxPcScore) maxPcScore = peerConnection.score.score;
+
+				++numberOfScoredPeerConnections;
 			}
 		}
 
@@ -1077,7 +1080,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			score: minPcScore ?? -1,
 			remarks: [ {
 				severity: 'none',
-				text: `Min and max score of all peer connections: ${minPcScore}, ${maxPcScore}`,
+				text: `Min and max score of all peer connections: ${minPcScore}, ${maxPcScore}, number of PeerConnections with scores: ${numberOfScoredPeerConnections}`,
 			} ],
 			timestamp: sample.timestamp,
 		};
