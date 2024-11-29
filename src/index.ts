@@ -57,6 +57,9 @@ export type {
 	ClientIssueMonitorEmittedIssueEvent, 
 	ClientIssueMonitor 
 } from './monitors/ClientIssueMonitor';
+export type {
+	CalculatedScore
+} from './common/CalculatedScore';
 export type { ObservedCall, ObservedCallModel } from './ObservedCall';
 export type { ObservedClient, ObservedClientModel } from './ObservedClient';
 export type { ObservedPeerConnection, ObservedPeerConnectionModel, ObservedPeerConnectionEvents } from './ObservedPeerConnection';

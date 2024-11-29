@@ -543,7 +543,7 @@ export class ObservedPeerConnection extends EventEmitter {
 				severity: 'none',
 				text: `Avg. Track score: ${avgTrackScores}`,
 			} ],
-			score: Math.floor((weightedStabilityScore + avgTrackScores) * 5),
+			score: Math.round(((weightedStabilityScore + avgTrackScores) * 5 * 100)) / 100.0,
 			timestamp: this._statsTimestamp ?? Date.now(),
 		};
 

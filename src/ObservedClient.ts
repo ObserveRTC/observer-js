@@ -1050,7 +1050,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		for (const peerConnection of this._peerConnections.values()) {
 			if (peerConnection.closed) continue;
+
 			peerConnection.updateMetrics();
+			
 			this.deltaInboundPacketsLost += peerConnection.deltaInboundPacketsLost;
 			this.deltaInboundPacketsReceived += peerConnection.deltaInboundPacketsReceived;
 			this.deltaOutboundPacketsSent += peerConnection.deltaOutboundPacketsSent;
