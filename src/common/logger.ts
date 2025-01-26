@@ -1,5 +1,3 @@
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
-
 export interface Logger {
 	/* eslint-disable @typescript-eslint/no-explicit-any */
 	trace(...args: any[]): void;
@@ -13,79 +11,72 @@ export interface Logger {
 	error(...args: any[]): void;
 }
 
-let logLevel: LogLevel = 'error';
-const loggers = new Map<string, Logger>();
-let target: Logger | null = {
-	// eslint-disable-next-line no-console
-	trace: (...args: any[]) => console.log(...args),
-	// eslint-disable-next-line no-console
-	debug: (...args: any[]) => console.log(...args),
-	// eslint-disable-next-line no-console
-	info: (...args: any[]) => console.log(...args),
-	// eslint-disable-next-line no-console
-	warn: (...args: any[]) => console.warn(...args),
-	// eslint-disable-next-line no-console
-	error: (...args: any[]) => console.error(...args),
-};
-
-export function setLogLevel(level: LogLevel) {
-	logLevel = level;
-	const moduleNames = Array.from(loggers.keys());
-
-	loggers.clear();
-
-	moduleNames.forEach((moduleName) => createLogger(moduleName));
+export interface ObserverLogger {
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	trace(module: string, ...args: any[]): void;
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	debug(module: string, ...args: any[]): void;
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	info(module: string, ...args: any[]): void;
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	warn(module: string, ...args: any[]): void;
+	/* eslint-disable @typescript-eslint/no-explicit-any */
+	error(module: string, ...args: any[]): void;
 }
 
-export const getLogLevel = () => {
-	return logLevel;
-};
+let mainLogger: ObserverLogger = new class implements ObserverLogger {
+	trace = () => void 0;
+	// trace(module: string, ...args: any[]) {
+	// 	// eslint-disable-next-line no-console
+	// 	console.log(`[TRACE] ${module}`, ...args);
+	// }
 
-export function forwardLogsTo(logger: Logger | null) {
-	target = logger;
-}
+	debug(module: string, ...args: any[]) {
+		// eslint-disable-next-line no-console
+		console.log(`[DEBUG] ${module}`, ...args);
+	}
 
-const COLORS = {
-	black: '\x1b[30m',
-	red: '\x1b[31m',
-	green: '\x1b[32m',
-	yellow: '\x1b[33m',
-	blue: '\x1b[34m',
-	magenta: '\x1b[35m',
-	cyan: '\x1b[36m',
-	white: '\x1b[37m',
-	default: '\x1b[39m',
-};
+	info(module: string, ...args: any[]) {
+		// eslint-disable-next-line no-console
+		console.info(`[INFO] ${module}`, ...args);
+	}
+
+	warn(module: string, ...args: any[]) {
+		// eslint-disable-next-line no-console
+		console.warn(`[WARN] ${module}`, ...args);
+	}
+
+	error(module: string, ...args: any[]) {
+		// eslint-disable-next-line no-console
+		console.error(`[ERROR] ${module}`, ...args);
+	}
+}();
 
 export function createLogger(moduleName: string): Logger {
-	if (loggers.has(moduleName)) {
-		// eslint-disable-next-line no-console
-		console.warn(`Logger for module ${moduleName} already exists`);
-	}
-	const trace = logLevel === 'trace' ? (message: string, ...args: any[]) => {
-		target?.trace(`${COLORS.magenta}[TRACE]${COLORS.default} ${moduleName} ${message}`, ...args);
-	} : () => void 0;
-	const debug = logLevel === 'trace' || logLevel === 'debug' ? (message: string, ...args: any[]) => {
-		target?.debug(`${COLORS.cyan}[DEBUG]${COLORS.default} ${moduleName} ${message}`, ...args);
-	} : () => void 0;
-	const info = logLevel === 'trace' || logLevel === 'debug' || logLevel === 'info' ? (message: string, ...args: any[]) => {
-		target?.info(`${COLORS.green}[INFO]${COLORS.default} ${moduleName} ${message}`, ...args);
-	} : () => void 0;
-	const warn = logLevel === 'trace' || logLevel === 'debug' || logLevel === 'info' || logLevel === 'warn' ? (message: string, ...args: any[]) => {
-		target?.warn(`${COLORS.yellow}[WARN]${COLORS.default} ${moduleName} ${message}`, ...args);
-	} : () => void 0;
-	const error = logLevel === 'trace' || logLevel === 'debug' || logLevel === 'info' || logLevel === 'warn' || logLevel === 'error' ? (message: string, ...args: any[]) => {
-		target?.error(`${COLORS.red}[ERROR]${COLORS.default} ${moduleName} ${message}`, ...args);
-	} : () => void 0;
-	const logger = {
-		trace,
-		debug,
-		info,
-		warn,
-		error,
-	};
+	return new class implements Logger {
+		trace(...args: any[]) {
+			mainLogger.trace(moduleName, ...args);
+		}
 
-	loggers.set(moduleName, logger);
-	
-	return logger;
+		debug(...args: any[]) {
+			mainLogger.debug(moduleName, ...args);
+		}
+
+		info(...args: any[]) {
+			mainLogger.info(moduleName, ...args);
+		}
+
+		warn(...args: any[]) {
+			mainLogger.warn(moduleName, ...args);
+		}
+
+		error(...args: any[]) {
+			mainLogger.error(moduleName, ...args);
+		}
+
+	}();
+}
+
+export function setObserverLogger(logger: ObserverLogger) {
+	mainLogger = logger;
 }
