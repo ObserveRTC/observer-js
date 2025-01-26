@@ -131,10 +131,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const now = Date.now();
 
 		sample.clientEvents?.forEach(this._processClientEvent.bind(this));
-		sample.clientMetaItems?.forEach(this._processMetaData.bind(this));
-		sample.clientIssues?.forEach(this._processIssue.bind(this));
+		sample.clientMetaItems?.forEach(this.processMetadata.bind(this));
+		sample.clientIssues?.forEach(this.processIssue.bind(this));
 		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
-		sample.extensionStats?.forEach(this._processExtensionStats.bind(this));
+		sample.extensionStats?.forEach(this.processExtensionStats.bind(this));
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
@@ -192,7 +192,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		});
 	}
 
-	private _processMetaData(metadata: ClientMetaData) {
+	public processMetadata(metadata: ClientMetaData) {
 		switch (metadata.type) {
 			case ClientMetaType.BROWSER: {
 				this.browser = parseJsonAs(metadata.payload);
@@ -219,7 +219,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		});
 	}
 
-	private _processIssue(issue: ClientIssue) {
+	public processIssue(issue: ClientIssue) {
 		this.call.observer.processors.issues.process({
 			call: this.call,
 			client: this,
@@ -227,7 +227,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		});
 	}
 
-	private _processExtensionStats(stats: ExtensionStat) {
+	public processExtensionStats(stats: ExtensionStat) {
 		this.call.observer.processors.extensionStats.process({
 			call: this.call,
 			client: this,

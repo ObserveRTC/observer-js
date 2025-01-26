@@ -26,6 +26,10 @@ export class ObservedCertificate implements CertificateStats {
 		return visited;
 	}
 
+	public getPeerConnection() {
+		return this._peerConnection;
+	}
+
 	public update(stats: CertificateStats) {
 		this._visited = true;
 

@@ -2,9 +2,9 @@
 	"compileOnSave": true,
 	"compilerOptions":
 	{
-		"lib": [ "ES2022" ],
-		"target": "ES2022",
-		"module": "ES2022",
+		"lib": [ "ES2020" ],
+		"target": "ESNext",
+		"module": "CommonJS",
 		"moduleResolution": "node",
 		"esModuleInterop": true,
 		"strict": true,

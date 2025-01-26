@@ -21,6 +21,7 @@ export type ObservedCallEvents = {
 	update: [],
 	newclient: [ObservedClient],
 	empty: [],
+	'not-empty': [],
 	close: [],
 }
 
@@ -99,7 +100,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.observedClients.has(settings.clientId)) throw new Error(`Client with id ${settings.clientId} already exists`);
 
 		const result = new ObservedClient<ClientAppData>(settings, this);
-
+		const wasEmpty = this.observedClients.size === 0;
 		const onUpdate = () => this.callUpdater?.onClientUpdate(result);
 
 		result.once('close', () => {
@@ -111,10 +112,15 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			}
 		});
 		result.on('update', onUpdate);
+
 		this.observedClients.set(settings.clientId, result);
 
 		this.emit('newclient', result);
 
+		if (wasEmpty) {
+			this.emit('not-empty');
+		}
+		
 		return result;
 	}
 
