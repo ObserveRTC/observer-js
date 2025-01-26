@@ -45,3 +45,15 @@ export function getMedian(arr: number[]): number {
 	// If the array length is even, return the average of the two middle elements
 	return (sortedArr[mid - 1] + sortedArr[mid]) / 2;
 }
+
+export function parseJsonAs<T>(json?: string): T | undefined {
+	if (!json) {
+		return undefined;
+	}
+	
+	try {
+		return JSON.parse(json) as T;
+	} catch (error) {
+		return undefined;
+	}
+}

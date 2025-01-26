@@ -1,48 +1,22 @@
 import { createLogger } from './common/logger';
-import { ObservedCall, ObservedCallModel } from './ObservedCall';
-import { ReportsCollector } from './ReportsCollector';
+import { Middleware, MiddlewareProcessor } from './common/Middleware';
+import { ObservedCall, ObservedCallSettings } from './ObservedCall';
 import { EventEmitter } from 'events';
-import { PartialBy } from './common/utils';
-import { createCallEndedEventReport, createCallStartedEventReport } from './common/callEventReports';
-import { ObserverSinkContext } from './common/types';
-import { ObservedSfu, ObservedSfuModel } from './ObservedSfu';
-import { CallSummaryMonitor, CallSummaryMonitorConfig } from './monitors/CallSummaryMonitor';
-import { TurnUsageMonitor } from './monitors/TurnUsageMonitor';
+import { ClientEvent, ClientMetaData, ClientIssue, ExtensionStat } from './schema/ClientSample';
 import { ObservedClient } from './ObservedClient';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { ClientIssueMonitor } from './monitors/ClientIssueMonitor';
-import { SfuServerMonitor } from './monitors/SfuServerMonitor';
 
 const logger = createLogger('Observer');
 
 export type ObserverEvents = {
 	'newcall': [ObservedCall],
-	'newsfu': [ObservedSfu],
-	'reports': [ObserverSinkContext],
 	'close': [],
 }
 
-export type ObserverConfig = {
-
-	/**
-	 *
-	 * Sets the default serviceId for samples.
-	 *
-	 * For more information about a serviceId please visit https://observertc.org
-	 *
-	 */
-	defaultServiceId: string;
-
-	/**
-	 * Sets the default mediaUnitId for samples.
-	 *
-	 * For more information about a mediaUnitId please visit https://observertc.org
-	 */
-	defaultMediaUnitId: string;
-
-	maxReports?: number | undefined;
-	maxCollectingTimeInMs?: number | undefined;
-};
+export type ProcessorInputContext<T> = {
+	call: ObservedCall;
+	client: ObservedClient;
+	data: T;
+}
 
 export declare interface Observer {
 	on<U extends keyof ObserverEvents>(event: U, listener: (...args: ObserverEvents[U]) => void): this;
@@ -52,312 +26,114 @@ export declare interface Observer {
 }
 
 export class Observer extends EventEmitter {
-	public static create(providedConfig: Partial<ObserverConfig>): Observer {
-		const config: ObserverConfig = Object.assign(
-			{
-				defaultServiceId: 'default-service-id',
-				defaultMediaUnitId: 'default-media-unit-id',
-				evaluator: {
-					fetchSamples: true,
-					maxIdleTimeInMs: 300 * 1000,
-				},
-				sink: {},
-				logLevel: 'info',
-			},
-			providedConfig
-		);
+	public readonly processors = {
+		events: new MiddlewareProcessor<ProcessorInputContext<ClientEvent>>(),
+		metaData: new MiddlewareProcessor<ProcessorInputContext<ClientMetaData>>(),
+		issues: new MiddlewareProcessor<ProcessorInputContext<ClientIssue>>(),
+		extensionStats: new MiddlewareProcessor<ProcessorInputContext<ExtensionStat>>(),
+	};
 
-		return new Observer(config);
-	}
+	public readonly observedCalls = new Map<string, ObservedCall>();
+	public closed = false;
 
-	public readonly reports = new ReportsCollector();
-	private readonly _observedCalls = new Map<string, ObservedCall>();
-	private readonly _observedSfus = new Map<string, ObservedSfu>();
-	private readonly _monitors = new Map<string, { close:() => void, once: (e: 'close', l: () => void) => void }>();
-
-	private _reportTimer?: ReturnType<typeof setTimeout>;
-	private _closed = false;
 	public constructor(
-		public readonly config: ObserverConfig,
 	) {
 		super();
 		this.setMaxListeners(Infinity);
+	}
 
-		logger.debug('Observer is created with config', this.config);
-
-		const onReports = (context: ObserverSinkContext) => this.emit('reports', context);
-		const onNewReport = (collectedReports: number) => {
-			if (!this.config.maxReports || this._closed) return;
-			if (this.config.maxReports < collectedReports) {
-				this._emitReports();
-			}
-		};
-
-		this._emitReports();
-
-		this.once('close', () => { 
-			this.reports.off('newreport', onNewReport); 
-			this.reports.off('reports', onReports);
-		});
-		this.reports.on('newreport', onNewReport);
-		this.reports.on('reports', onReports);
+	public getObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCall<T> | undefined {
+		if (this.closed || !this.observedCalls.has(callId)) return;
+		
+		return this.observedCalls.get(callId) as ObservedCall<T>;
 	}
 
 	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		config: PartialBy<ObservedCallModel, 'serviceId'> & { appData: T, reportCallStarted?: boolean, reportCallEnded?: boolean }
+		settings: ObservedCallSettings<T>
 	): ObservedCall<T> {
-		if (this._closed) {
+		if (this.closed) {
 			throw new Error('Attempted to create a call source on a closed observer');
 		}
 
-		const { 
-			appData, 
-			reportCallEnded = true,
-			reportCallStarted = true,
-			...model 
-		} = config;
-		const call = new ObservedCall({
-			...model,
-			serviceId: this.config.defaultServiceId,
-		}, this, appData);
+		const observedCall = new ObservedCall(settings, this);
 
-		if (this._closed) throw new Error('Cannot create an observed call on a closed observer');
-		if (this._observedCalls.has(call.callId)) throw new Error(`Observed Call with id ${call.callId} already exists`);
+		if (this.observedCalls.has(observedCall.callId)) throw new Error(`Observed Call with id ${observedCall.callId} already exists`);
 
-		call.once('close', () => {
-			this._observedCalls.delete(call.callId);
-			reportCallEnded && this.reports.addCallEventReport(createCallEndedEventReport(
-				call.serviceId,
-				call.roomId,
-				call.callId,
-				call.observationEnded ?? Date.now(),
-			));
+		observedCall.once('close', () => {
+			this.observedCalls.delete(observedCall.callId);
 		});
 
-		this._observedCalls.set(call.callId, call);
-		reportCallStarted && this.reports.addCallEventReport(createCallStartedEventReport(
-			call.serviceId,
-			call.roomId,
-			call.callId,
-			call.observationStarted,
-		));
+		this.observedCalls.set(observedCall.callId, observedCall);
 
-		this.emit('newcall', call);
+		this.emit('newcall', observedCall);
 		
-		return call;
+		return observedCall;
 	}
 
-	public createObservedSfu<AppData extends Record<string, unknown> = Record<string, unknown>>(
-		model: ObservedSfuModel,
-		appData: AppData,
-	): ObservedSfu<AppData> {
-		if (this._closed) {
-			throw new Error('Attempted to create an sfu source on a closed observer');
-		}
+	public addClientEventMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientEvent>>[]): Observer {
 
-		const sfu = new ObservedSfu<AppData>(model, this, appData);
+		this.processors.events.addMiddleware(...middlewares);
 
-		if (this._closed) throw new Error('Cannot create an observed sfu on a closed observer');
-		if (this._observedSfus.has(sfu.sfuId)) throw new Error(`Observed SFU with id ${sfu.sfuId} already exists`);
-
-		sfu.once('close', () => {
-			this._observedSfus.delete(sfu.sfuId);
-		});
-
-		this._observedSfus.set(sfu.sfuId, sfu);
-		this.emit('newsfu', sfu);
-		
-		return sfu;
+		return this;
 	}
 
-	public createCallSummaryMonitor(options?: CallSummaryMonitorConfig & { timeoutAfterCallClose?: number }): CallSummaryMonitor {
-		if (this._closed) throw new Error('Cannot create a call summary monitor on a closed observer');
+	public removeClientEventMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientEvent>>[]): Observer {
 
-		const existingMonitor = this._monitors.get(CallSummaryMonitor.name);
-		
-		if (existingMonitor) return existingMonitor as CallSummaryMonitor;
+		this.processors.events.removeMiddleware(...middlewares);
 
-		const monitor = new CallSummaryMonitor(options);
-		const onNewCall = (call: ObservedCall) => {
-			monitor.addCall(call);
-
-			call.once('close', () => setTimeout(() => {
-				const summary = monitor.takeSummary(call.callId);
-
-				summary && monitor.emit('summary', summary);
-				
-			}, options?.timeoutAfterCallClose ?? 1000));
-		};
-
-		monitor.once('close', () => {
-			this._monitors.delete(CallSummaryMonitor.name);
-			this.off('newcall', onNewCall);
-		});
-
-		this._monitors.set(CallSummaryMonitor.name, monitor);
-		this.on('newcall', onNewCall);
-		
-		this.once('close', () => {
-			monitor.close();
-		});
-
-		return monitor;
+		return this;
 	}
 
-	public createTurnUsageMonitor() {
-		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+	public addClientMetaDataMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientMetaData>>[]): Observer {
 
-		const existingMonitor = this._monitors.get(TurnUsageMonitor.name);
-		
-		if (existingMonitor) return existingMonitor as TurnUsageMonitor;
+		this.processors.metaData.addMiddleware(...middlewares);
 
-		const monitor = new TurnUsageMonitor();
-
-		const onNewCall = (call: ObservedCall) => {
-			const onNewClient = (client: ObservedClient) => {
-				const onNewPeerConnection = (pc: ObservedPeerConnection) => {
-					const onUsingTurnChanged = (usingTurn: boolean) => {
-						if (usingTurn) monitor.addPeerConnection(pc);
-						else monitor.removePeerConnection(pc);
-					};
-
-					pc.once('close', () => {
-						pc.ICE.off('usingturnchanged', onUsingTurnChanged);
-						monitor.removePeerConnection(pc);
-					});
-					pc.ICE.on('usingturnchanged', onUsingTurnChanged);
-				};
-
-				client.once('close', () => client.off('newpeerconnection', onNewPeerConnection));
-				client.on('newpeerconnection', onNewPeerConnection);
-			};
-
-			call.once('close', () => call.off('newclient', onNewClient));
-			call.on('newclient', onNewClient);
-		};
-
-		monitor.once('close', () => {
-			this._monitors.delete(TurnUsageMonitor.name);
-			this.off('newcall', onNewCall);
-		});
-
-		this._monitors.set(TurnUsageMonitor.name, monitor);
-		this.on('newcall', onNewCall);
-		
-		this.once('close', () => {
-			monitor.close();
-		});
-
-		return monitor;
+		return this;
 	}
 
-	public createSfuServerMonitor() {
-		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+	public removeClientMetaDataMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientMetaData>>[]): Observer {
 
-		const existingMonitor = this._monitors.get(SfuServerMonitor.name);
-		
-		if (existingMonitor) return existingMonitor as SfuServerMonitor;
+		this.processors.metaData.removeMiddleware(...middlewares);
 
-		const monitor = new SfuServerMonitor({
-			tooHighRttAlertSettings: {
-				minNumberOfPeerConnections: 10,
-				percentageOfPeerConnectionsHighWatermark: 0.5,
-				percentageOfPeerConnectionsLowWatermark: 0.2,
-				threshold: 'rtt-gt-300',
-			}
-		});
-
-		const onNewCall = (call: ObservedCall) => {
-			const onNewClient = (client: ObservedClient) => {
-				const onNewPeerConnection = (pc: ObservedPeerConnection) => {
-					monitor.addPeerConnection(pc);
-				};
-
-				client.once('close', () => client.off('newpeerconnection', onNewPeerConnection));
-				client.on('newpeerconnection', onNewPeerConnection);
-			};
-
-			call.once('close', () => call.off('newclient', onNewClient));
-			call.on('newclient', onNewClient);
-		};
-
-		monitor.once('close', () => {
-			this._monitors.delete(SfuServerMonitor.name);
-			this.off('newcall', onNewCall);
-		});
-
-		this._monitors.set(SfuServerMonitor.name, monitor);
-		this.on('newcall', onNewCall);
-		
-		this.once('close', () => {
-			monitor.close();
-		});
-
-		return monitor;
+		return this;
 	}
 
-	public createClientIssueMonitor() {
-		if (this._closed) throw new Error('Cannot create a turn usage monitor on a closed observer');
+	public addClientIssueMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientIssue>>[]): Observer {
 
-		const existingMonitor = this._monitors.get(ClientIssueMonitor.name);
-		
-		if (existingMonitor) return existingMonitor as ClientIssueMonitor;
+		this.processors.issues.addMiddleware(...middlewares);
 
-		const monitor = new ClientIssueMonitor();
-
-		const onNewCall = (call: ObservedCall) => monitor.addCall(call);
-
-		monitor.once('close', () => {
-			this._monitors.delete(ClientIssueMonitor.name);
-			this.off('newcall', onNewCall);
-		});
-
-		this._monitors.set(ClientIssueMonitor.name, monitor);
-		this.on('newcall', onNewCall);
-		
-		this.once('close', () => {
-			monitor.close();
-		});
-
-		return monitor;
+		return this;
 	}
 
-	public get observedCalls(): ReadonlyMap<string, ObservedCall> {
-		return this._observedCalls;
+	public removeClientIssueMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientIssue>>[]): Observer {
+
+		this.processors.issues.removeMiddleware(...middlewares);
+
+		return this;
 	}
 
-	public get observedSfus(): ReadonlyMap<string, ObservedSfu> {
-		return this._observedSfus;
+	public addExtensionStatMiddleware(...middlewares: Middleware<ProcessorInputContext<ExtensionStat>>[]): Observer {
+
+		this.processors.extensionStats.addMiddleware(...middlewares);
+
+		return this;
 	}
 
-	public get closed() {
-		return this._closed;
+	public removeExtensionStatMiddleware(...middlewares: Middleware<ProcessorInputContext<ExtensionStat>>[]): Observer {
+
+		this.processors.extensionStats.removeMiddleware(...middlewares);
+
+		return this;
 	}
 
 	public close() {
-		if (this._closed) {
+		if (this.closed) {
 			return logger.debug('Attempted to close twice');
 		}
-		this._closed = true;
+		this.closed = true;
 
-		this._observedCalls.forEach((call) => call.close());
+		this.observedCalls.forEach((call) => call.close());
 		
 		this.emit('close');
-	}
-
-	private _emitReports() {
-		if (this._reportTimer) {
-			clearTimeout(this._reportTimer);
-			this._reportTimer = undefined;
-		}
-
-		this.reports.emit();
-
-		if (this.config.maxCollectingTimeInMs) {
-			this._reportTimer = setTimeout(() => {
-				this._reportTimer = undefined;
-				this._emitReports();
-			}, this.config.maxCollectingTimeInMs);
-		}
 	}
 }

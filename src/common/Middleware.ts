@@ -1,56 +1,84 @@
 export type Middleware<T> = (
 	input: T,
-	next: (nextInput: T) => void,
+	next: (nextInput: T) => void
 ) => void;
 
 export interface Processor<T> {
+	finalCallback?: Callback<T>;
 	process(value: T): void;
 	addMiddleware(...middlewares: Middleware<T>[]): Processor<T>;
 	removeMiddleware(...middlewares: Middleware<T>[]): Processor<T>;
 }
 
-export function createProcessor<T>(
-): Processor<T> {
-	const stack: Middleware<T>[] = [];
-	const result: Processor<T> = {
-		addMiddleware: (...middlewares: Middleware<T>[]) => {
-			if (middlewares && 0 < middlewares.length) {
-				stack.push(...middlewares);
-			}
-			
-			return result;
-		},
+type Callback<T> = (input: T) => void;
 
-		removeMiddleware: (...middlewares: Middleware<T>[]) => {
-			if (middlewares && 0 < middlewares.length) {
-				for (const process of middlewares) {
-					const index = stack.indexOf(process);
+class Executor<T> {
+	public done = false;
+	private index = 0;
+	private prevIndex = -1;
 
-					if (0 < index) stack.splice(index, 1);
+	constructor(
+		private readonly stack: Middleware<T>[], 
+		private readonly finalCallback?: Callback<T>
+	) {
+	}
+
+	// Executes the middleware stack
+	public execute(input: T): void {
+		if (this.index <= this.prevIndex) {
+			throw new Error('Middleware must call next() only once!');
+		} else if (this.done) {
+			throw new Error('Middleware stack has already been executed!');
+		}
+
+		this.prevIndex = this.index;
+
+		const middleware = this.stack[this.index];
+
+		this.index++;
+
+		if (middleware) {
+			return middleware(input, (nextInput: T) => this.execute(nextInput));
+		}
+
+		this.done = true;
+		this.finalCallback?.(input);
+	}
+}
+
+export class MiddlewareProcessor<T> implements Processor<T> {
+	private stack: Middleware<T>[] = [];
+	public finalCallback?: Callback<T>;
+
+	public addMiddleware(...middlewares: Middleware<T>[]): Processor<T> {
+		if (middlewares && middlewares.length > 0) {
+			this.stack.push(...middlewares);
+		}
+		
+		return this;
+	}
+
+	public removeMiddleware(...middlewares: Middleware<T>[]): Processor<T> {
+		if (middlewares && middlewares.length > 0) {
+			for (const middleware of middlewares) {
+				const index = this.stack.indexOf(middleware);
+
+				if (index >= 0) {
+					this.stack.splice(index, 1);
 				}
 			}
-			
-			return result;
-		},
-		process: (value: T) => {
-			let prevIndex = -1;
-			const execute = (index: number, input: T): void => {
-				if (index <= prevIndex) {
-					throw new Error('middleware must call next() only once!');
-				}
-				prevIndex = index;
-				const middleware = stack[index];
+		}
 
-				if (!middleware) return;
+		return this;
+	}
 
-				const next = (nextInput: T) => execute(index + 1, nextInput);
-							
-				return middleware(input, next);
-			};
-					
-			return execute(0, value);
-		},
-	};
+	public process(value: T): void {
+		if (this.stack.length === 0) {
+			return this.finalCallback?.(value);
+		}
 
-	return result;
+		const executor = new Executor(this.stack, this.finalCallback);
+
+		executor.execute(value);
+	}
 }
