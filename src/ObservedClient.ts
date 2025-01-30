@@ -3,10 +3,10 @@ import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { createLogger } from './common/logger';
 // eslint-disable-next-line camelcase
 import { ClientEvent, ClientMetaData, ClientSample, PeerConnectionSample, ClientIssue, ExtensionStat } from './schema/ClientSample';
-import * as MetaData from './schema/metaTypes';
-import { ClientEventType } from './schema/eventTypes';
+import * as MetaData from './schema/ClientMetaTypes';
+import { ClientEventTypes } from './schema/ClientEventTypes';
 import { ObservedCall } from './ObservedCall';
-import { ClientMetaType } from './schema/metaTypes';
+import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
@@ -152,15 +152,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	private _processClientEvent(event: ClientEvent) {
 		switch (event.type) {
-			case ClientEventType.CALL_STARTED: {
+			case ClientEventTypes.CALL_STARTED: {
 				// update call timestamp if it's the first time
 				break;
 			}
-			case ClientEventType.CALL_ENDED: {
+			case ClientEventTypes.CALL_ENDED: {
 				// update call timestamp if it's the first time
 				break;
 			}
-			case ClientEventType.CLIENT_JOINED: {
+			case ClientEventTypes.CLIENT_JOINED: {
 				if (event.timestamp) {
 					if (!this.joinedAt) {
 						this.joinedAt = event.timestamp;
@@ -174,7 +174,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				break;
 			}
-			case ClientEventType.CLIENT_LEFT: {
+			case ClientEventTypes.CLIENT_LEFT: {
 				if (event.timestamp) {
 					if (!this.leftAt) {
 						this.leftAt = event.timestamp;
@@ -194,19 +194,19 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public processMetadata(metadata: ClientMetaData) {
 		switch (metadata.type) {
-			case ClientMetaType.BROWSER: {
+			case ClientMetaTypes.BROWSER: {
 				this.browser = parseJsonAs(metadata.payload);
 				break;
 			}
-			case ClientMetaType.ENGINE: {
+			case ClientMetaTypes.ENGINE: {
 				this.engine = parseJsonAs(metadata.payload);
 				break;
 			}
-			case ClientMetaType.PLATFORM: {
+			case ClientMetaTypes.PLATFORM: {
 				this.platform = parseJsonAs(metadata.payload);
 				break;
 			}
-			case ClientMetaType.OPERATION_SYSTEM: {
+			case ClientMetaTypes.OPERATION_SYSTEM: {
 				this.operationSystem = parseJsonAs(metadata.payload);
 				break;
 			}

@@ -19,5 +19,8 @@ export { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
 export { ObservedIceCandidate } from './ObservedIceCandidate';
 export { ObservedIceTransport } from './ObservedIceTransport';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
+export { ClientSample } from './schema/ClientSample';
+export { ClientEventTypes as ClientEventType } from './schema/ClientEventTypes';
+export { ClientMetaTypes as ClientMetaType } from './schema/ClientMetaTypes';
 
 export { Middleware } from './common/Middleware';

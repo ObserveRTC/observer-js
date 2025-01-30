@@ -25,6 +25,10 @@ export declare interface Observer {
 	emit<U extends keyof ObserverEvents>(event: U, ...args: ObserverEvents[U]): boolean;
 }
 
+export type ObserverSummary = {
+	rttlt50: number;
+}
+
 export class Observer extends EventEmitter {
 	public readonly processors = {
 		events: new MiddlewareProcessor<ProcessorInputContext<ClientEvent>>(),
