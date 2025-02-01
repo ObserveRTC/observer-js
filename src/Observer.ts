@@ -1,5 +1,4 @@
 import { createLogger } from './common/logger';
-import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedCall, ObservedCallSettings } from './ObservedCall';
 import { EventEmitter } from 'events';
 import { ClientEvent, ClientMetaData, ClientIssue, ExtensionStat } from './schema/ClientSample';
@@ -8,6 +7,11 @@ import { ObservedClient } from './ObservedClient';
 const logger = createLogger('Observer');
 
 export type ObserverEvents = {
+	'client-event': [ObservedClient, ClientEvent];
+	'call-updated': [ObservedCall],
+	'issue-received': [ObservedClient, ClientIssue],
+	'metadata-received': [ObservedClient, ClientMetaData],
+	'extension-stats-received': [ObservedClient, ExtensionStat],
 	'newcall': [ObservedCall],
 	'close': [],
 }
@@ -30,13 +34,6 @@ export type ObserverSummary = {
 }
 
 export class Observer extends EventEmitter {
-	public readonly processors = {
-		events: new MiddlewareProcessor<ProcessorInputContext<ClientEvent>>(),
-		metaData: new MiddlewareProcessor<ProcessorInputContext<ClientMetaData>>(),
-		issues: new MiddlewareProcessor<ProcessorInputContext<ClientIssue>>(),
-		extensionStats: new MiddlewareProcessor<ProcessorInputContext<ExtensionStat>>(),
-	};
-
 	public readonly observedCalls = new Map<string, ObservedCall>();
 	public closed = false;
 
@@ -72,62 +69,6 @@ export class Observer extends EventEmitter {
 		this.emit('newcall', observedCall);
 		
 		return observedCall;
-	}
-
-	public addClientEventMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientEvent>>[]): Observer {
-
-		this.processors.events.addMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public removeClientEventMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientEvent>>[]): Observer {
-
-		this.processors.events.removeMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public addClientMetaDataMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientMetaData>>[]): Observer {
-
-		this.processors.metaData.addMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public removeClientMetaDataMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientMetaData>>[]): Observer {
-
-		this.processors.metaData.removeMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public addClientIssueMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientIssue>>[]): Observer {
-
-		this.processors.issues.addMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public removeClientIssueMiddleware(...middlewares: Middleware<ProcessorInputContext<ClientIssue>>[]): Observer {
-
-		this.processors.issues.removeMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public addExtensionStatMiddleware(...middlewares: Middleware<ProcessorInputContext<ExtensionStat>>[]): Observer {
-
-		this.processors.extensionStats.addMiddleware(...middlewares);
-
-		return this;
-	}
-
-	public removeExtensionStatMiddleware(...middlewares: Middleware<ProcessorInputContext<ExtensionStat>>[]): Observer {
-
-		this.processors.extensionStats.removeMiddleware(...middlewares);
-
-		return this;
 	}
 
 	public close() {

@@ -27,6 +27,8 @@ export type ObservedClientEvents = {
 	];
 	close: [];
 	joined: [];
+	issue: [ClientIssue];
+	metaData: [ClientMetaData];
 	rejoined: [timestamp: number];
 	left: [];
 	usingturn: [boolean];
@@ -132,9 +134,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		sample.clientEvents?.forEach(this._processClientEvent.bind(this));
 		sample.clientMetaItems?.forEach(this.processMetadata.bind(this));
-		sample.clientIssues?.forEach(this.processIssue.bind(this));
+		sample.clientIssues?.forEach(this.addIssue.bind(this));
 		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
-		sample.extensionStats?.forEach(this.processExtensionStats.bind(this));
+		sample.extensionStats?.forEach(this.addExtensionStats.bind(this));
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
@@ -185,11 +187,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		this.call.observer.processors.events.process({
-			call: this.call,
-			client: this,
-			data: event,
-		});
+		this.call.observer.emit('client-event', this, event);
 	}
 
 	public processMetadata(metadata: ClientMetaData) {
@@ -212,27 +210,16 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		this.call.observer.processors.metaData.process({
-			call: this.call,
-			client: this,
-			data: metadata,
-		});
+		this.call.observer.emit('metadata-received', this, metadata);
 	}
 
-	public processIssue(issue: ClientIssue) {
-		this.call.observer.processors.issues.process({
-			call: this.call,
-			client: this,
-			data: issue,
-		});
+	public addIssue(issue: ClientIssue) {
+		this.emit('issue', issue);
+		this.call.observer.emit('issue-received', this, issue);
 	}
 
-	public processExtensionStats(stats: ExtensionStat) {
-		this.call.observer.processors.extensionStats.process({
-			call: this.call,
-			client: this,
-			data: stats,
-		});
+	public addExtensionStats(stats: ExtensionStat) {
+		this.call.observer.emit('extension-stats-received', this, stats);
 	}
 
 	private _updatePeerConnection(sample: PeerConnectionSample) {
