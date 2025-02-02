@@ -74,33 +74,43 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public usingTURN = false;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
-	// public totalInboundPacketsLost = 0;
-	// public totalInboundPacketsReceived = 0;
-	// public totalOutboundPacketsSent = 0;
-	// public totalDataChannelBytesSent = 0;
-	// public totalDataChannelBytesReceived = 0;
-	// public totalSentBytes = 0;
-	// public totalReceivedBytes = 0;
-	// public totalReceivedAudioBytes = 0;
-	// public totalReceivedVideoBytes = 0;
-	// public totalSentAudioBytes = 0;
-	// public totalSentVideoBytes = 0;
+	public totalInboundPacketsLost = 0;
+	public totalInboundPacketsReceived = 0;
+	public totalOutboundPacketsSent = 0;
+	public totalDataChannelBytesSent = 0;
+	public totalDataChannelBytesReceived = 0;
+	public totalDataChannelMessagesSent = 0;
+	public totalDataChannelMessagesReceived = 0;
+	public totalSentBytes = 0;
+	public totalReceivedBytes = 0;
+	public totalReceivedAudioBytes = 0;
+	public totalReceivedVideoBytes = 0;
+	public totalSentAudioBytes = 0;
+	public totalSentVideoBytes = 0;
 
-	// public deltaReceivedAudioBytes = 0;
-	// public deltaReceivedVideoBytes = 0;
-	// public deltaSentAudioBytes = 0;
-	// public deltaSentVideoBytes = 0;
-	// public deltaDataChannelBytesSent = 0;
-	// public deltaDataChannelBytesReceived = 0;
-	// public deltaInboundPacketsLost = 0;
-	// public deltaInboundPacketsReceived = 0;
-	// public deltaOutboundPacketsSent = 0;
+	public deltaReceivedAudioBytes = 0;
+	public deltaReceivedVideoBytes = 0;
+	public deltaSentAudioBytes = 0;
+	public deltaSentVideoBytes = 0;
+	public deltaDataChannelBytesSent = 0;
+	public deltaDataChannelBytesReceived = 0;
+	public deltaDataChannelMessagesSent = 0;
+	public deltaDataChannelMessagesReceived = 0;
+	public deltaInboundPacketsLost = 0;
+	public deltaInboundPacketsReceived = 0;
+	public deltaOutboundPacketsSent = 0;
 
 	public avgRttInMs?: number;
-	public outboundAudioBitrate?: number;
-	public outboundVideoBitrate?: number;
-	public inboundAudioBitrate?: number;
-	public inboundVideoBitrate?: number;
+	public sendingAudioBitrate = 0;
+	public sendingVideoBitrate = 0;
+	public receivingAudioBitrate = 0;
+	public receivingVideoBitrate = 0;
+
+	public numberOfInboundRtpStreams = 0;
+	public numberOfInbundTracks = 0;
+	public numberOfOutboundRtpStreams = 0;
+	public numberOfOutboundTracks = 0;
+	public numberOfDataChannels = 0;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
@@ -112,6 +122,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.clientId = settings.clientId;
 		this.appData = settings.appData;
 		this.detectors = new Detectors();
+	}
+
+	public get numberOfPeerConnections() {
+		return this.observedPeerConnections.size;
 	}
 
 	public get score() { 
@@ -131,6 +145,30 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this.closed) throw new Error(`Client ${this.clientId} is closed`);
 
 		const now = Date.now();
+		const elapsedInMs = now - this.updated;
+		const elapsedInSeconds = elapsedInMs / 1000;
+
+		++this.acceptedSamples;
+		
+		this.availableIncomingBitrate = 0;
+		this.availableOutgoingBitrate = 0;
+		this.deltaDataChannelBytesReceived = 0;
+		this.deltaDataChannelBytesSent = 0;
+		this.deltaDataChannelMessagesReceived = 0;
+		this.deltaDataChannelMessagesSent = 0;
+		this.deltaInboundPacketsLost = 0;
+		this.deltaInboundPacketsReceived = 0;
+		this.deltaOutboundPacketsSent = 0;
+		this.deltaReceivedAudioBytes = 0;
+		this.deltaReceivedVideoBytes = 0;
+		this.deltaSentAudioBytes = 0;
+		this.deltaSentVideoBytes = 0;
+
+		this.numberOfDataChannels = 0;
+		this.numberOfInboundRtpStreams = 0;
+		this.numberOfInbundTracks = 0;
+		this.numberOfOutboundRtpStreams = 0;
+		this.numberOfOutboundTracks = 0;
 
 		sample.clientEvents?.forEach(this._processClientEvent.bind(this));
 		sample.clientMetaItems?.forEach(this.processMetadata.bind(this));
@@ -140,6 +178,23 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
+
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
+		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
+		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
+		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
+		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
+		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
+		this.totalSentAudioBytes += this.deltaSentAudioBytes;
+		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+
+		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
+		this.receivingVideoBitrate = (this.totalReceivedVideoBytes * 8) / (elapsedInSeconds);
+		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
+		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / (elapsedInSeconds);
 
 		this.calculatedScore.value = sample.score;
 		this.detectors.update();
@@ -210,16 +265,16 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		this.call.observer.emit('metadata-received', this, metadata);
+		this.call.observer.emit('client-metadata', this, metadata);
 	}
 
 	public addIssue(issue: ClientIssue) {
 		this.emit('issue', issue);
-		this.call.observer.emit('issue-received', this, issue);
+		this.call.observer.emit('client-issue', this, issue);
 	}
 
 	public addExtensionStats(stats: ExtensionStat) {
-		this.call.observer.emit('extension-stats-received', this, stats);
+		this.call.observer.emit('client-extension-stats', this, stats);
 	}
 
 	private _updatePeerConnection(sample: PeerConnectionSample) {
@@ -239,8 +294,31 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.observedPeerConnections.delete(sample.peerConnectionId);
 			});
 			this.observedPeerConnections.set(sample.peerConnectionId, observedPeerConnection);
+			
+			this.emit('newpeerconnection', observedPeerConnection);
 		}
 
 		observedPeerConnection.accept(sample);
+
+		this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
+		this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
+		this.deltaDataChannelMessagesReceived += observedPeerConnection.deltaDataChannelMessagesReceived;
+		this.deltaDataChannelMessagesSent += observedPeerConnection.deltaDataChannelMessagesSent;
+		this.deltaInboundPacketsLost += observedPeerConnection.deltaInboundPacketsLost;
+		this.deltaInboundPacketsReceived += observedPeerConnection.deltaInboundPacketsReceived;
+		this.deltaOutboundPacketsSent += observedPeerConnection.deltaOutboundPacketsSent;
+		this.deltaReceivedAudioBytes += observedPeerConnection.deltaReceivedAudioBytes;
+		this.deltaReceivedVideoBytes += observedPeerConnection.deltaReceivedVideoBytes;
+		this.deltaSentAudioBytes += observedPeerConnection.deltaSentAudioBytes;
+		this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
+
+		this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
+		this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
+
+		this.numberOfDataChannels += observedPeerConnection.observedDataChannels.size;
+		this.numberOfInbundTracks += observedPeerConnection.observedInboundTracks.size;
+		this.numberOfOutboundRtpStreams += observedPeerConnection.observedOutboundRtps.size;
+		this.numberOfOutboundTracks += observedPeerConnection.observedOutboundTracks.size;
+		this.numberOfInboundRtpStreams += observedPeerConnection.observedInboundRtps.size;
 	}
 }

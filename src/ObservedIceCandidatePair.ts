@@ -29,6 +29,11 @@ export class ObservedIceCandidatePair implements IceCandidatePairStats {
 	bytesDiscardedOnSend?: number | undefined;
 	attachments?: Record<string, unknown> | undefined;
 
+	public deltaBytesSent = 0;
+	public deltaBytesReceived = 0;
+	public deltaPacketsSent = 0;
+	public deltaPacketsReceived = 0;
+
 	public constructor(
 		public timestamp: number,
 		public id: string,
@@ -62,6 +67,27 @@ export class ObservedIceCandidatePair implements IceCandidatePairStats {
 
 	public update(stats: IceCandidatePairStats) {
 		this._visited = true;
+
+		if (this.packetsSent && stats.packetsSent && stats.packetsSent >= this.packetsSent) {
+			this.deltaPacketsSent = stats.packetsSent - this.packetsSent;
+		} else {
+			this.deltaPacketsSent = 0;
+		}
+		if (this.packetsReceived && stats.packetsReceived && stats.packetsReceived >= this.packetsReceived) {
+			this.deltaPacketsReceived = stats.packetsReceived - this.packetsReceived;
+		} else {
+			this.deltaPacketsReceived = 0;
+		}
+		if (this.bytesSent && stats.bytesSent && stats.bytesSent >= this.bytesSent) {
+			this.deltaBytesSent = stats.bytesSent - this.bytesSent;
+		} else {
+			this.deltaBytesSent = 0;
+		}
+		if (this.bytesReceived && stats.bytesReceived && stats.bytesReceived >= this.bytesReceived) {
+			this.deltaBytesReceived = stats.bytesReceived - this.bytesReceived;
+		} else {
+			this.deltaBytesReceived = 0;
+		}
 
 		this.timestamp = stats.timestamp;
 		this.transportId = stats.transportId;

@@ -19,6 +19,7 @@ import { ObservedRemoteOutboundRtp } from './ObservedRemoteOutboundRtp';
 import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { CalculatedScore } from './scores/CalculatedScore';
+import { ObservedTurnServer } from './ObservedTurnServer';
 
 const logger = createLogger('ObservedPeerConnection');
 
@@ -70,7 +71,7 @@ export type ObservedPeerConnectionEvents = {
 	'removed-peer-connection-transport': [ObservedPeerConnectionTransport];
 	'removed-remote-inbound-rtp': [ObservedRemoteInboundRtp];
 	'removed-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
-
+	'update': [],
 	close: [];
 };
 
@@ -106,11 +107,15 @@ export class ObservedPeerConnection extends EventEmitter {
 	public closedAt?: number;
 	public updated = Date.now();
 
+	public availableIncomingBitrate = 0;
+	public availableOutgoingBitrate = 0;
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
 	public totalDataChannelBytesSent = 0;
 	public totalDataChannelBytesReceived = 0;
+	public totalDataChannelMessagesSent = 0;
+	public totalDataChannelMessagesReceived = 0;
 
 	public totalSentAudioBytes = 0;
 	public totalSentVideoBytes = 0;
@@ -126,6 +131,8 @@ export class ObservedPeerConnection extends EventEmitter {
 	public deltaOutboundPacketsSent = 0;
 	public deltaDataChannelBytesSent = 0;
 	public deltaDataChannelBytesReceived = 0;
+	public deltaDataChannelMessagesSent = 0;
+	public deltaDataChannelMessagesReceived = 0;
 	public deltaInboundReceivedBytes = 0;
 	public deltaOutboundSentBytes = 0;
 
@@ -149,6 +156,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	public usingTCP = false;
 	public usingTURN = false;
 
+	public observedTurnServer?: ObservedTurnServer;
 	public readonly observedCertificates = new Map<string, ObservedCertificate>();
 	public readonly observedCodecs = new Map<string, ObservedCodec>();
 	public readonly observedDataChannels = new Map<string, ObservedDataChannel>();
@@ -239,6 +247,14 @@ export class ObservedPeerConnection extends EventEmitter {
 			.filter((pair) => pair !== undefined) as ObservedIceCandidatePair[];
 	}
 
+	public get selectedIceCandiadtePairForTurn() {
+		return this.selectedIceCandidatePairs
+			.filter((pair) => 
+				pair.getLocalCandidate()?.candidateType === 'relay' && 
+				pair.getRemoteCandidate()?.url?.startsWith('turn:')
+			);
+	}
+
 	public close() {
 		if (this.closed) return;
 		this.closed = true;
@@ -259,6 +275,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.observedRemoteInboundRtps.clear();
 		this.observedRemoteOutboundRtps.clear();
 
+		this.client.call.observer.observedTURN.removePeerConnection(this);
+		
 		this.emit('close');
 	}
 
@@ -266,6 +284,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (this.closed) return;
 		this._visited = true;
 
+		this.availableIncomingBitrate = 0;
+		this.availableOutgoingBitrate = 0;
 		this.deltaInboundPacketsLost = 0;
 		this.deltaInboundPacketsReceived = 0;
 		this.deltaOutboundPacketsSent = 0;
@@ -287,6 +307,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		const now = Date.now();
 		const elapsedTimeInMs = now - this.updated;
 		const elapsedTimeInSec = elapsedTimeInMs / 1000;
+		const rttMeasurementsInSec: number[] = [];
+		const jitterMeasurements: number[] = [];
 
 		if (sample.certificates) {
 			for (const certificate of sample.certificates) {
@@ -300,7 +322,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		}
 		if (sample.dataChannels) {
 			for (const dataChannel of sample.dataChannels) {
-				this._updateDataChannelStats(dataChannel);
+				const observedDataChannel = this._updateDataChannelStats(dataChannel);
+
+				if (!observedDataChannel) continue;
+
+				this.deltaDataChannelBytesSent += observedDataChannel.deltaBytesSent;
+				this.deltaDataChannelBytesReceived += observedDataChannel.deltaBytesReceived;
+				this.deltaDataChannelMessagesSent += observedDataChannel.deltaMessagesSent;
+				this.deltaDataChannelMessagesReceived += observedDataChannel.deltaMessagesReceived;
 			}
 		}
 		if (sample.iceCandidates) {
@@ -310,7 +339,19 @@ export class ObservedPeerConnection extends EventEmitter {
 		}
 		if (sample.iceCandidatePairs) {
 			for (const iceCandidatePair of sample.iceCandidatePairs) {
-				this._updateIceCandidatePairStats(iceCandidatePair);
+				const observedCandidatePair = this._updateIceCandidatePairStats(iceCandidatePair);
+
+				if (!observedCandidatePair) continue;
+
+				if (observedCandidatePair.currentRoundTripTime) {
+					rttMeasurementsInSec.push(observedCandidatePair.currentRoundTripTime);
+				}
+				if (observedCandidatePair.availableIncomingBitrate) {
+					this.availableIncomingBitrate += observedCandidatePair.availableIncomingBitrate;
+				}
+				if (observedCandidatePair.availableOutgoingBitrate) {
+					this.availableOutgoingBitrate += observedCandidatePair.availableOutgoingBitrate;
+				}
 			}
 		}
 		if (sample.iceTransports) {
@@ -337,6 +378,10 @@ export class ObservedPeerConnection extends EventEmitter {
 						this.deltaReceivedVideoBytes += observedInboundRtp.deltaBytesReceived;
 						this.deltaReceivedVideoPackets += observedInboundRtp.deltaReceivedPackets;
 						break;
+				}
+
+				if (observedInboundRtp.jitter) {
+					jitterMeasurements.push(observedInboundRtp.jitter);
 				}
 			}
 		}
@@ -379,7 +424,13 @@ export class ObservedPeerConnection extends EventEmitter {
 		}
 		if (sample.remoteInboundRtps) {
 			for (const remoteInboundRtp of sample.remoteInboundRtps) {
-				this._updateRemoteInboundRtpStats(remoteInboundRtp);
+				const observedRemoteInboundRtp = this._updateRemoteInboundRtpStats(remoteInboundRtp);
+
+				if (!observedRemoteInboundRtp) continue;
+
+				if (observedRemoteInboundRtp.roundTripTime) {
+					rttMeasurementsInSec.push(observedRemoteInboundRtp.roundTripTime);
+				}
 			}
 		}
 		if (sample.remoteOutboundRtps) {
@@ -408,6 +459,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
 		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
 		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
 		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
 		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
 		this.totalSentAudioBytes += this.deltaSentAudioBytes;
@@ -419,20 +472,47 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / elapsedTimeInSec;
 		this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / elapsedTimeInSec;
-		this.sendingAudioBitrate = this.deltaSentAudioBytes * 8 / elapsedTimeInSec;
-		this.sendingVideoBitrate = this.deltaSentVideoBytes * 8 / elapsedTimeInSec;
-		this.receivingAudioBitrate = this.deltaReceivedAudioBytes * 8 / elapsedTimeInSec;
-		this.receivingVideoBitrate = this.deltaReceivedVideoBytes * 8 / elapsedTimeInSec;
+		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / elapsedTimeInSec;
+		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / elapsedTimeInSec;
+		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / elapsedTimeInSec;
+		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedTimeInSec;
+
+		if (rttMeasurementsInSec.length > 0) {
+			this.avgRttInMs = rttMeasurementsInSec.reduce((acc, val) => acc + val, 0) / rttMeasurementsInSec.length;
+		} else {
+			this.avgRttInMs = undefined;
+		}
+		if (jitterMeasurements.length > 0) {
+			this.avgJitter = jitterMeasurements.reduce((acc, val) => acc + val, 0) / jitterMeasurements.length;
+		} else {
+			this.avgJitter = undefined;
+		}
 
 		const selectedIceCandidatePairs = this.selectedIceCandidatePairs;
+		const selectedCandidatePairForTurn = selectedIceCandidatePairs.filter((pair) =>
+			pair.getLocalCandidate()?.candidateType === 'relay' &&
+			pair.getRemoteCandidate()?.url?.startsWith('turn:')
+		);
+		const wasUsingTURN = this.usingTURN;
 
 		this.usingTCP = selectedIceCandidatePairs.some((pair) => pair.getLocalCandidate()?.protocol === 'tcp');
-		this.usingTURN = selectedIceCandidatePairs.some((pair) => pair.getLocalCandidate()?.candidateType === 'relay') &&
-			selectedIceCandidatePairs.some((pair) => pair.getRemoteCandidate()?.url?.startsWith('turn:'));
+		this.usingTURN = 0 < selectedCandidatePairForTurn.length;
 
+		if (this.usingTURN) {
+			if (!this.observedTurnServer) {
+				this.observedTurnServer = this.client.call.observer.observedTURN.addPeerConnection(this);
+			}
+			this.observedTurnServer?.updateTurnUsage(...selectedCandidatePairForTurn);
+		} else if (wasUsingTURN) {
+			if (!this.usingTURN) {
+				this.client.call.observer.observedTURN.removePeerConnection(this);
+			}
+		}
 		this.calculatedScore.value = sample.score;
 		this.updated = now;
 		this._checkVisited();
+
+		this.emit('update');
 	}
 
 	private _checkVisited() {

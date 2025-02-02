@@ -43,6 +43,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public remoteTrackResolver?: RemoteTrackResolver;
 	public callUpdater?: CallUpdater;
 	
+	public totalAudioBytesSent = 0;
+	public totalAudioBytesReceived = 0;
+	public totalVideoBytesSent = 0;
+	public totalVideoBytesReceived = 0;
+	public totalDataChannelBytesSent = 0;
+	public totalDataChannelBytesReceived = 0;
+
+	public numberOfPeerConnections = 0;
+	public numberOfInboundRtpStreams = 0;
+	public numberOfOutboundRtpStreams = 0;
+	public numberOfDataChannels = 0;
+
+	public maxNumberOfClients = 0;
+
 	public appData?: AppData;
 	public closed = false;
 	public started?: number;
@@ -76,6 +90,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		}
 	}
 
+	public get numberOfClients() {
+		return this.observedClients.size;
+	}
+
 	public get score() { 
 		return this.calculatedScore.value; 
 	}
@@ -101,7 +119,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		const result = new ObservedClient<ClientAppData>(settings, this);
 		const wasEmpty = this.observedClients.size === 0;
-		const onUpdate = () => this.callUpdater?.onClientUpdate(result);
+		const onUpdate = () => this._onClientUpdate(result);
 
 		result.once('close', () => {
 			result.off('update', onUpdate);
@@ -114,6 +132,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		result.on('update', onUpdate);
 
 		this.observedClients.set(settings.clientId, result);
+		this.maxNumberOfClients = Math.max(this.maxNumberOfClients, this.observedClients.size);
 
 		this.emit('newclient', result);
 
@@ -125,9 +144,33 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	}
 
 	public update() {
+		if (this.closed) return;
+		
+		this.numberOfInboundRtpStreams = 0;
+		this.numberOfOutboundRtpStreams = 0;
+		this.numberOfPeerConnections = 0;
+		this.numberOfDataChannels = 0;
+
+		for (const client of this.observedClients.values()) {
+			this.numberOfInboundRtpStreams += client.numberOfInboundRtpStreams;
+			this.numberOfOutboundRtpStreams += client.numberOfOutboundRtpStreams;
+			this.numberOfPeerConnections += client.numberOfPeerConnections;
+			this.numberOfDataChannels += client.numberOfDataChannels;
+		}
 		this.detectors.update();
 		this.scoreCalculator.update();
 
 		this.emit('update');
+	}
+
+	private _onClientUpdate(client: ObservedClient) {
+		this.callUpdater?.onClientUpdate(client);
+
+		this.totalAudioBytesReceived = client.deltaReceivedAudioBytes;
+		this.totalAudioBytesSent = client.deltaSentAudioBytes;
+		this.totalVideoBytesReceived = client.deltaReceivedVideoBytes;
+		this.totalVideoBytesSent = client.deltaSentVideoBytes;
+		this.totalDataChannelBytesReceived = client.deltaDataChannelBytesReceived;
+		this.totalDataChannelBytesSent = client.deltaDataChannelBytesSent;
 	}
 }
