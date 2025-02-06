@@ -27,6 +27,7 @@ export class ObservedTURN extends EventEmitter {
 	public packetsReceivedPerSecond = 0;
 	public outboundBitrate = 0;
 	public inboundBitrate = 0;
+	public numberOfClients = 0;
     
 	public readonly servers = new Map<string, ObservedTurnServer>();
 
@@ -36,14 +37,19 @@ export class ObservedTURN extends EventEmitter {
 	}
 
 	public update() {
+		const clientIds = new Set<string>();
+        
 		this.packetsReceivedPerSecond = 0;
 		this.packetsSentPerSecond = 0;
 		this.outboundBitrate = 0;
 		this.inboundBitrate = 0;
-        
+
 		for (const server of this.servers.values()) {
 			server.update();
+			server.observedPeerConnections.forEach((pc) => clientIds.add(pc.client.clientId));
 		}
+
+		this.numberOfClients = clientIds.size;
 	}
 
 	public addPeerConnection(peerConnection: ObservedPeerConnection) {

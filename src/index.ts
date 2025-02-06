@@ -19,9 +19,9 @@ export { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
 export { ObservedIceCandidate } from './ObservedIceCandidate';
 export { ObservedIceTransport } from './ObservedIceTransport';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
-export type { ClientEventTypes } from './schema/ClientEventTypes';
-export type { ClientMetaTypes } from './schema/ClientMetaTypes';
-export type { ClientSample } from './schema/ClientSample';
+export { ClientEventTypes } from './schema/ClientEventTypes';
+export { ClientMetaTypes } from './schema/ClientMetaTypes';
+export { ClientSample } from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
 
 export { Middleware } from './common/Middleware';
