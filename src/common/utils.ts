@@ -30,9 +30,13 @@ export function isValidUuid(str: string): boolean {
 	return regexp.test(str);
 }
 
-export function getMedian(arr: number[]): number {
+export function getMedian(arr: number[], copyArrayForSorting = true): number {
 	// Sort the array in ascending order
-	const sortedArr = arr.slice().sort((a, b) => a - b);
+	const sortedArr = copyArrayForSorting 
+		? arr.slice().sort((a, b) => a - b)
+		: arr.sort((a, b) => a-b)
+
+	;
 
 	// Calculate the middle index
 	const mid = Math.floor(sortedArr.length / 2);

@@ -6,15 +6,18 @@ import { CalculatedScore } from './scores/CalculatedScore';
 import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator';
 import { Detectors } from './detectors/Detectors';
 import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
-import { CallUpdater } from './utils/CallUpdater';
-import { OnAllClientCallUpdater } from './utils/OnAllClientCallUpdater';
-import { OnAnyClientCallUpdater } from './utils/onAnyClientCallUpdater';
+import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
+import { Updater } from './updaters/Updater';
+import { OnAnyClientCallUpdater } from './updaters/onAnyClientCallUpdater';
+import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
+import { ObservedCallSummary } from './ObservedCallSummary';
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
 	appData?: AppData;
 	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu',
-	callUpdaterPolicy?: 'onAnyClientUpdate' | 'onAllClientsUpdate',
+	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'update-on-interval',
+	updateIntervalInMs?: number,
 };
 
 export type ObservedCallEvents = {
@@ -23,6 +26,8 @@ export type ObservedCallEvents = {
 	empty: [],
 	'not-empty': [],
 	close: [],
+	started: [],
+	ended: [],
 }
 
 export declare interface ObservedCall {
@@ -34,34 +39,61 @@ export declare interface ObservedCall {
 
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly detectors: Detectors;
+	public updater?: Updater;
+	public scoreCalculator: ScoreCalculator;
 	public readonly callId: string;
 	public readonly observedClients = new Map<string, ObservedClient>();
+	public readonly clientsUsedTurn = new Set<string>();
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
 		value: undefined,
 	};
 	public remoteTrackResolver?: RemoteTrackResolver;
-	public callUpdater?: CallUpdater;
 	
-	public totalAudioBytesSent = 0;
-	public totalAudioBytesReceived = 0;
-	public totalVideoBytesSent = 0;
-	public totalVideoBytesReceived = 0;
-	public totalDataChannelBytesSent = 0;
-	public totalDataChannelBytesReceived = 0;
+	public totalAddedClients = 0;
+	public totalRemovedClients = 0;
 
+	public totalClientsReceivedAudioBytes = 0;
+	public totalClientsReceivedVideoBytes = 0;
+	public totalClientsReceivedDataChannelBytes = 0;
+	public totalClientsReceivedBytes = 0;
+
+	public totalClientsSentAudioBytes = 0;
+	public totalClientsSentDataChannelBytes = 0;
+	public totalClientsSentVideoBytes = 0;
+	public totalClientsSentBytes = 0;
+
+	public totalRttLt50Measurements = 0;
+	public totalRttLt150Measurements = 0;
+	public totalRttLt300Measurements = 0;
+	public totalRttGtOrEq300Measurements = 0;
+
+	public numberOfIssues = 0;
 	public numberOfPeerConnections = 0;
 	public numberOfInboundRtpStreams = 0;
 	public numberOfOutboundRtpStreams = 0;
 	public numberOfDataChannels = 0;
 
 	public maxNumberOfClients = 0;
+	public deltaNumberOfIssues = 0;
 
-	public appData?: AppData;
+	public deltaRttLt50Measurements = 0;
+	public deltaRttLt150Measurements = 0;
+	public deltaRttLt300Measurements = 0;
+	public deltaRttGtOrEq300Measurements = 0;
+
+	public appData: AppData;
 	public closed = false;
-	public started?: number;
+	public startedAt?: number;
 	public ended?: number;
-	public scoreCalculator: ScoreCalculator;
+
+	private _callStartedEvent: {
+		emitted: boolean,
+		timer?: ReturnType<typeof setTimeout>,
+	};
+	private _callEndedEvent: {
+		emitted: boolean
+	};
 
 	public constructor(
 		settings: ObservedCallSettings<AppData>,
@@ -71,16 +103,30 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.setMaxListeners(Infinity);
 
 		this.callId = settings.callId;
-		this.appData = settings.appData;
+		this.appData = settings.appData ?? {} as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		this.detectors = new Detectors();
 		
-		switch (settings.callUpdaterPolicy) {
-			case 'onAllClientsUpdate':
-				this.callUpdater = new OnAllClientCallUpdater(this);	
+		if (settings.updateIntervalInMs) {
+			if (settings.updatePolicy !== 'update-on-interval') {
+				throw new Error('updatePolicy must be update-on-interval if updateIntervalInMs is set in config');
+			}
+		}
+		switch (settings.updatePolicy) {
+			case 'update-on-any-client-updated':
+				this.updater = new OnAllClientCallUpdater(this);	
 				break;
-			case 'onAnyClientUpdate':
-				this.callUpdater = new OnAnyClientCallUpdater(this);	
+			case 'update-when-all-client-updated':
+				this.updater = new OnAnyClientCallUpdater(this);	
+				break;
+			case 'update-on-interval': 
+				if (!settings.updateIntervalInMs) {
+					throw new Error('updateIntervalInMs setting in config must be set if updatePolicy is update-on-interval');
+				}
+				this.updater = new OnIntervalUpdater(
+					settings.updateIntervalInMs,
+					this.update.bind(this),
+				);
 				break;
 		}
 
@@ -88,6 +134,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			case 'mediasoup-sfu':
 				break;
 		}
+
+		this._callStartedEvent = {
+			emitted: false,
+		};
+		this._callEndedEvent = {
+			emitted: false,
+		};
 	}
 
 	public get numberOfClients() {
@@ -102,7 +155,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.closed) return;
 		this.closed = true;
 
+		this.updater?.close();
+
 		[ ...this.observedClients.values() ].forEach((client) => client.close());
+		// make sure to emit the events
+		this.emitCallStartedEvent();
+		this.emitCallEndedEvent();
 
 		this.emit('close');
 	}
@@ -120,16 +178,24 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		const result = new ObservedClient<ClientAppData>(settings, this);
 		const wasEmpty = this.observedClients.size === 0;
 		const onUpdate = () => this._onClientUpdate(result);
+		const joined = () => this._clientJoined(result);
+		const left = () => this._clientLeft(result);
 
 		result.once('close', () => {
 			result.off('update', onUpdate);
+			result.off('joined', joined);
+			result.off('left', left);
 			this.observedClients.delete(settings.clientId);
 
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
 			}
+			--this.totalRemovedClients;
 		});
 		result.on('update', onUpdate);
+		result.on('joined', joined);
+		result.on('left', left);
+		++this.totalAddedClients;
 
 		this.observedClients.set(settings.clientId, result);
 		this.maxNumberOfClients = Math.max(this.maxNumberOfClients, this.observedClients.size);
@@ -156,21 +222,132 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.numberOfOutboundRtpStreams += client.numberOfOutboundRtpStreams;
 			this.numberOfPeerConnections += client.numberOfPeerConnections;
 			this.numberOfDataChannels += client.numberOfDataChannels;
+
+			if (client.usingTURN) {
+				this.clientsUsedTurn.add(client.clientId);
+			}
 		}
+
 		this.detectors.update();
 		this.scoreCalculator.update();
 
 		this.emit('update');
+
+		this.deltaNumberOfIssues = 0;
+		this.deltaRttLt50Measurements = 0;
+		this.deltaRttLt150Measurements = 0;
+		this.deltaRttLt300Measurements = 0;
+		this.deltaRttGtOrEq300Measurements = 0;
 	}
 
 	private _onClientUpdate(client: ObservedClient) {
-		this.callUpdater?.onClientUpdate(client);
+		this.totalClientsReceivedAudioBytes += client.deltaReceivedAudioBytes;
+		this.totalClientsSentAudioBytes += client.deltaSentAudioBytes;
+		this.totalClientsReceivedVideoBytes += client.deltaReceivedVideoBytes;
+		this.totalClientsReceivedVideoBytes += client.deltaSentVideoBytes;
+		this.totalClientsReceivedDataChannelBytes += client.deltaDataChannelBytesReceived;
+		this.totalClientsSentDataChannelBytes += client.deltaDataChannelBytesSent;
+		this.totalClientsReceivedBytes += client.deltaTransportReceivedBytes;
+		this.totalClientsSentBytes += client.deltaTransportSentBytes;
+		
+		this.deltaRttLt50Measurements += client.deltaRttLt50Measurements;
+		this.deltaRttLt150Measurements += client.deltaRttLt150Measurements;
+		this.deltaRttLt300Measurements += client.deltaRttLt300Measurements;
+		this.deltaRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
 
-		this.totalAudioBytesReceived = client.deltaReceivedAudioBytes;
-		this.totalAudioBytesSent = client.deltaSentAudioBytes;
-		this.totalVideoBytesReceived = client.deltaReceivedVideoBytes;
-		this.totalVideoBytesSent = client.deltaSentVideoBytes;
-		this.totalDataChannelBytesReceived = client.deltaDataChannelBytesReceived;
-		this.totalDataChannelBytesSent = client.deltaDataChannelBytesSent;
+		this.totalRttLt50Measurements += client.deltaRttLt50Measurements;
+		this.totalRttLt150Measurements += client.deltaRttLt150Measurements;
+		this.totalRttLt300Measurements += client.deltaRttLt300Measurements;
+		this.totalRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
+
+		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
+		this.numberOfIssues += client.deltaNumberOfIssues;
+	}
+
+	private _clientJoined(client: ObservedClient) {
+		if (!client.joinedAt) return;
+
+		this.startedAt = Math.min(this.startedAt ?? client.joinedAt, client.joinedAt);
+
+		if (this._callStartedEvent.emitted) return;
+		if (this._callStartedEvent.timer) {
+			if (1 < this.observedClients.size) {
+				this.emitCallStartedEvent();
+			}
+			
+			return;
+		}
+		this._callStartedEvent.timer = setTimeout(() => {
+			this.emitCallStartedEvent();
+		}, 5000);
+	}
+
+	private _clientLeft(client: ObservedClient) {
+		if (!client.leftAt) return;
+
+		this.ended = Math.max(this.ended ?? client.leftAt, client.leftAt);
+	}
+
+	public emitCallStartedEvent() {
+		if (this._callStartedEvent.emitted) return;
+		this._callStartedEvent.emitted = true;
+		clearTimeout(this._callStartedEvent.timer);
+		this._callStartedEvent.timer = undefined;
+
+		this.emit('started');
+	}
+
+	public emitCallEndedEvent() {
+		if (this._callEndedEvent.emitted) return;
+		this._callEndedEvent.emitted = true;
+
+		this.emit('ended');
+	}
+
+	public resetSummaryMetrics() {
+		this.totalAddedClients = 0;
+		this.totalRemovedClients = 0;
+
+		this.totalClientsReceivedAudioBytes = 0;
+		this.totalClientsReceivedVideoBytes = 0;
+		this.totalClientsReceivedBytes = 0;
+
+		this.totalClientsSentAudioBytes = 0;
+		this.totalClientsSentVideoBytes = 0;
+		this.totalClientsSentBytes = 0;
+
+		this.totalRttLt50Measurements = 0;
+		this.totalRttLt150Measurements = 0;
+		this.totalRttLt300Measurements = 0;
+		this.totalRttGtOrEq300Measurements = 0;
+
+		this.numberOfIssues = 0;
+
+		this.clientsUsedTurn.clear();
+		
+	}
+
+	public createSummary(): ObservedCallSummary {
+		return {
+			currentActiveClients: this.observedClients.size,
+			totalAddedClients: this.totalAddedClients,
+			totalRemovedClients: this.totalRemovedClients,
+			
+			totalClientsReceivedAudioBytes: this.totalClientsReceivedBytes,
+			totalClientsReceivedVideoBytes: this.totalClientsReceivedVideoBytes,
+			totalClientsReceivedBytes: this.totalClientsReceivedBytes,
+
+			totalClientsSentAudioBytes: this.totalClientsSentAudioBytes,
+			totalClientsSentVideoBytes: this.totalClientsSentVideoBytes,
+			totalClientsSentBytes: this.totalClientsSentBytes,
+
+			totalRttLt50Measurements: this.totalRttLt50Measurements,
+			totalRttLt150Measurements: this.totalRttLt150Measurements,
+			totalRttLt300Measurements: this.totalRttLt300Measurements,
+			totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+
+			numberOfIssues: this.numberOfIssues,
+			numberOfClientsUsedTurn: this.clientsUsedTurn.size,
+		};
 	}
 }

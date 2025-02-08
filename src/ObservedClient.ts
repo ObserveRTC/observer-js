@@ -7,9 +7,10 @@ import * as MetaData from './schema/ClientMetaTypes';
 import { ClientEventTypes } from './schema/ClientEventTypes';
 import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
-import { parseJsonAs } from './common/utils';
+import { getMedian, parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
+import { ObservedClientSummary } from './ObservedClientSummary';
 
 const logger = createLogger('ObservedClient');
 
@@ -55,7 +56,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		value: undefined,
 	};
 
-	public appData?: AppData;
+	public appData: AppData;
 	public attachments?: Record<string, unknown>;
 
 	public updated = Date.now();
@@ -81,12 +82,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public totalDataChannelBytesReceived = 0;
 	public totalDataChannelMessagesSent = 0;
 	public totalDataChannelMessagesReceived = 0;
-	public totalSentBytes = 0;
-	public totalReceivedBytes = 0;
 	public totalReceivedAudioBytes = 0;
 	public totalReceivedVideoBytes = 0;
 	public totalSentAudioBytes = 0;
 	public totalSentVideoBytes = 0;
+	public totalSentBytes = 0;
+	public totalReceivedBytes = 0;
 
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
@@ -99,8 +100,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public deltaInboundPacketsLost = 0;
 	public deltaInboundPacketsReceived = 0;
 	public deltaOutboundPacketsSent = 0;
+	public deltaRttInMsMeasurements: number[] = [];
+	public deltaTransportSentBytes = 0;
+	public deltaTransportReceivedBytes = 0;
+	public deltaRttLt50Measurements = 0;
+	public deltaRttLt150Measurements = 0;
+	public deltaRttLt300Measurements = 0;
+	public deltaRttGtOrEq300Measurements = 0;
 
-	public avgRttInMs?: number;
+	public currentRttInMs?: number;
 	public sendingAudioBitrate = 0;
 	public sendingVideoBitrate = 0;
 	public receivingAudioBitrate = 0;
@@ -112,6 +120,16 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public numberOfOutboundTracks = 0;
 	public numberOfDataChannels = 0;
 
+	public totalRttLt50Measurements = 0;
+	public totalRttLt150Measurements = 0;
+	public totalRttLt300Measurements = 0;
+	public totalRttGtOrEq300Measurements = 0;
+	public deltaNumberOfIssues = 0;
+
+	public totalScoreSum = 0;
+	public numberOfScoreMeasurements = 0;
+	public numberOfIssues = 0;
+
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
@@ -120,10 +138,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.setMaxListeners(Infinity);
 
 		this.clientId = settings.clientId;
-		this.appData = settings.appData;
+		this.appData = settings.appData ?? {} as AppData;
+		
 		this.detectors = new Detectors();
 	}
-
+	
 	public get numberOfPeerConnections() {
 		return this.observedPeerConnections.size;
 	}
@@ -163,18 +182,28 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.deltaReceivedVideoBytes = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
+		this.deltaTransportReceivedBytes = 0;
+		this.deltaTransportSentBytes = 0;
+		this.deltaRttInMsMeasurements = [];
+		this.deltaRttLt50Measurements = 0;
+		this.deltaRttLt150Measurements = 0;
+		this.deltaRttLt300Measurements = 0;
+		this.deltaRttGtOrEq300Measurements = 0;
+		this.deltaNumberOfIssues = 0;
 
 		this.numberOfDataChannels = 0;
 		this.numberOfInboundRtpStreams = 0;
 		this.numberOfInbundTracks = 0;
 		this.numberOfOutboundRtpStreams = 0;
 		this.numberOfOutboundTracks = 0;
-
+		
 		sample.clientEvents?.forEach(this._processClientEvent.bind(this));
-		sample.clientMetaItems?.forEach(this.processMetadata.bind(this));
+		sample.clientMetaItems?.forEach(this.addMetadata.bind(this));
 		sample.clientIssues?.forEach(this.addIssue.bind(this));
 		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
 		sample.extensionStats?.forEach(this.addExtensionStats.bind(this));
+
+		this._updateRttMeasurements();
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
@@ -190,6 +219,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
 		this.totalSentAudioBytes += this.deltaSentAudioBytes;
 		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+		this.totalReceivedBytes += this.deltaTransportReceivedBytes;
+		this.totalSentBytes += this.deltaTransportSentBytes;
+		this.totalRttLt50Measurements += this.deltaRttLt50Measurements;
+		this.totalRttLt150Measurements += this.deltaRttLt150Measurements;
+		this.totalRttLt300Measurements += this.deltaRttLt300Measurements;
+		this.totalRttGtOrEq300Measurements += this.deltaRttGtOrEq300Measurements;
+		this.numberOfIssues += this.deltaNumberOfIssues;
 
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
 		this.receivingVideoBitrate = (this.totalReceivedVideoBytes * 8) / (elapsedInSeconds);
@@ -205,18 +241,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			elapsedTimeInMs: now - this.updated,
 		});
 		this.updated = now;
+
+		// if result changed after update
+		if (this.calculatedScore.value) {
+			this.totalScoreSum += this.calculatedScore.value;
+			++this.numberOfScoreMeasurements;
+		}
 	}
 
 	private _processClientEvent(event: ClientEvent) {
+		// eslint-disable-next-line no-console
+		// console.warn('ClientEvent', event);
 		switch (event.type) {
-			case ClientEventTypes.CALL_STARTED: {
-				// update call timestamp if it's the first time
-				break;
-			}
-			case ClientEventTypes.CALL_ENDED: {
-				// update call timestamp if it's the first time
-				break;
-			}
 			case ClientEventTypes.CLIENT_JOINED: {
 				if (event.timestamp) {
 					if (!this.joinedAt) {
@@ -236,6 +272,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					if (!this.leftAt) {
 						this.leftAt = event.timestamp;
 						this.emit('left');
+					} else {
+						logger.warn(`Client ${this.clientId} leftAt timestamp was already set`);
 					}
 				}
 				break;
@@ -245,7 +283,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.call.observer.emit('client-event', this, event);
 	}
 
-	public processMetadata(metadata: ClientMetaData) {
+	public addMetadata(metadata: ClientMetaData) {
+		if (this.closed) return;
+		
 		switch (metadata.type) {
 			case ClientMetaTypes.BROWSER: {
 				this.browser = parseJsonAs(metadata.payload);
@@ -269,6 +309,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	}
 
 	public addIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		++this.deltaNumberOfIssues;
 		this.emit('issue', issue);
 		this.call.observer.emit('client-issue', this, issue);
 	}
@@ -300,6 +343,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		observedPeerConnection.accept(sample);
 
+		observedPeerConnection.currentRttInMs;
+
 		this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
 		this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
 		this.deltaDataChannelMessagesReceived += observedPeerConnection.deltaDataChannelMessagesReceived;
@@ -311,6 +356,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.deltaReceivedVideoBytes += observedPeerConnection.deltaReceivedVideoBytes;
 		this.deltaSentAudioBytes += observedPeerConnection.deltaSentAudioBytes;
 		this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
+		this.deltaTransportReceivedBytes += observedPeerConnection.deltaTransportReceivedBytes;
+		this.deltaTransportSentBytes += observedPeerConnection.deltaTransportSentBytes;
 
 		this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
 		this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
@@ -320,5 +367,83 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.numberOfOutboundRtpStreams += observedPeerConnection.observedOutboundRtps.size;
 		this.numberOfOutboundTracks += observedPeerConnection.observedOutboundTracks.size;
 		this.numberOfInboundRtpStreams += observedPeerConnection.observedInboundRtps.size;
+
+		if (observedPeerConnection.currentRttInMs) {
+			this.deltaRttInMsMeasurements.push(observedPeerConnection.currentRttInMs);
+		}
+	}
+
+	public resetSummaryMetrics() {
+		this.totalDataChannelBytesReceived = 0;
+		this.totalDataChannelBytesSent = 0;
+		this.totalDataChannelMessagesReceived = 0;
+		this.totalDataChannelMessagesSent = 0;
+		this.totalInboundPacketsLost = 0;
+		this.totalInboundPacketsReceived = 0;
+		this.totalOutboundPacketsSent = 0;
+		this.totalReceivedAudioBytes = 0;
+		this.totalReceivedVideoBytes = 0;
+		this.totalSentAudioBytes = 0;
+		this.totalSentVideoBytes = 0;
+		this.totalSentBytes = 0;
+		this.totalReceivedBytes = 0;
+		
+		this.numberOfIssues = 0;
+		
+		this.totalScoreSum = 0;
+		this.numberOfScoreMeasurements = 0;
+	}
+
+	public createSummary(): ObservedClientSummary {
+		return {
+			totalRttLt50Measurements: this.totalRttLt50Measurements,
+			totalRttLt150Measurements: this.totalRttLt150Measurements,
+			totalRttLt300Measurements: this.totalRttLt300Measurements,
+			totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+			totalDataChannelBytesReceived: this.totalDataChannelBytesReceived,
+			totalDataChannelBytesSent: this.totalDataChannelBytesSent,
+			totalDataChannelMessagesReceived: this.totalDataChannelMessagesReceived,
+			totalDataChannelMessagesSent: this.totalDataChannelMessagesSent,
+			totalInboundPacketsLost: this.totalInboundPacketsLost,
+			totalInboundPacketsReceived: this.totalInboundPacketsReceived,
+			totalOutboundPacketsSent: this.totalOutboundPacketsSent,
+			totalReceivedAudioBytes: this.totalReceivedAudioBytes,
+			totalReceivedVideoBytes: this.totalReceivedVideoBytes,
+			totalSentAudioBytes: this.totalSentAudioBytes,
+			totalSentVideoBytes: this.totalSentVideoBytes,
+			totalSentBytes: this.totalSentBytes,
+			totalReceivedBytes: this.totalReceivedBytes,
+			
+			numberOfIssues: this.numberOfIssues,
+
+			totalScoreSum: this.totalScoreSum,
+			numberOfScoreMeasurements: this.numberOfScoreMeasurements,
+		};
+	}
+
+	private _updateRttMeasurements() {
+		if (this.deltaRttInMsMeasurements.length < 1) {
+			this.currentRttInMs = undefined;
+
+			return;
+		}
+		this.currentRttInMs = getMedian(this.deltaRttInMsMeasurements, false);
+
+		if (this.currentRttInMs < 0) {
+			logger.warn(`Current Rtt for client ${this.clientId} is smaller than 0`);
+			this.currentRttInMs = undefined;
+
+			return;
+		}
+		
+		if (this.currentRttInMs < 50) {
+			this.deltaRttLt50Measurements += 1;
+		} else if (this.currentRttInMs < 150) {
+			this.deltaRttLt150Measurements += 1;
+		} else if (this.currentRttInMs < 300) {
+			this.deltaRttLt300Measurements += 1;
+		} else if (300 <= this.currentRttInMs) {
+			this.deltaRttGtOrEq300Measurements += 1;
+		}
 	}
 }

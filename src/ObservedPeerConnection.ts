@@ -20,6 +20,7 @@ import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { ObservedTurnServer } from './ObservedTurnServer';
+import { getMedian } from './common/utils';
 
 const logger = createLogger('ObservedPeerConnection');
 
@@ -142,6 +143,8 @@ export class ObservedPeerConnection extends EventEmitter {
 	public deltaReceivedVideoPackets = 0;
 	public deltaSentAudioBytes = 0;
 	public deltaSentVideoBytes = 0;
+	public deltaTransportSentBytes = 0;
+	public deltaTransportReceivedBytes = 0;
 
 	public receivingPacketsPerSecond = 0;
 	public sendingPacketsPerSecond = 0;
@@ -150,8 +153,8 @@ export class ObservedPeerConnection extends EventEmitter {
 	public receivingAudioBitrate = 0;
 	public receivingVideoBitrate = 0;
 
-	public avgRttInMs?: number;
-	public avgJitter?: number;
+	public currentRttInMs?: number;
+	public currentJitter?: number;
 
 	public usingTCP = false;
 	public usingTURN = false;
@@ -299,6 +302,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaReceivedVideoPackets = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
+		
 		this.sendingAudioBitrate = 0;
 		this.sendingVideoBitrate = 0;
 		this.receivingAudioBitrate = 0;
@@ -356,7 +360,12 @@ export class ObservedPeerConnection extends EventEmitter {
 		}
 		if (sample.iceTransports) {
 			for (const iceTransport of sample.iceTransports) {
-				this._updateIceTransportStats(iceTransport);
+				const observedIceTransport = this._updateIceTransportStats(iceTransport);
+
+				if (!observedIceTransport) return;
+
+				observedIceTransport.bytesReceived;
+
 			}
 		}
 		if (sample.inboundRtps) {
@@ -478,14 +487,14 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedTimeInSec;
 
 		if (rttMeasurementsInSec.length > 0) {
-			this.avgRttInMs = rttMeasurementsInSec.reduce((acc, val) => acc + val, 0) / rttMeasurementsInSec.length;
+			this.currentRttInMs = getMedian(rttMeasurementsInSec, false) * 1000;
 		} else {
-			this.avgRttInMs = undefined;
+			this.currentRttInMs = undefined;
 		}
 		if (jitterMeasurements.length > 0) {
-			this.avgJitter = jitterMeasurements.reduce((acc, val) => acc + val, 0) / jitterMeasurements.length;
+			this.currentJitter = getMedian(jitterMeasurements, false);
 		} else {
-			this.avgJitter = undefined;
+			this.currentJitter = undefined;
 		}
 
 		const selectedIceCandidatePairs = this.selectedIceCandidatePairs;
