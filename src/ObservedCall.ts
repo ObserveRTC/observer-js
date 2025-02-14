@@ -8,9 +8,9 @@ import { Detectors } from './detectors/Detectors';
 import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
 import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
 import { Updater } from './updaters/Updater';
-import { OnAnyClientCallUpdater } from './updaters/onAnyClientCallUpdater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { ObservedCallSummary } from './ObservedCallSummary';
+import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
