@@ -1,7 +1,7 @@
 import { ObservedCall } from '../ObservedCall';
 import { Observer } from '../Observer';
 import { Updater } from './Updater';
-
+ 
 export class OnAnyCallObserverUpdater implements Updater {
 	public readonly name = 'OnAnyCallObserverUpdater';
 	public readonly description = 'Call Observer\'s update() method on any of the ObservedCall is updated';

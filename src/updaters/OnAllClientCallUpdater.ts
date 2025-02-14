@@ -1,7 +1,7 @@
 import { ObservedCall } from '../ObservedCall';
 import { ObservedClient } from '../ObservedClient';
 import { Updater } from './Updater';
-
+ 
 export class OnAllClientCallUpdater implements Updater {
 	readonly name = 'OnAllClientCallUpdater';
 	readonly description = 'Call the update() method of the ObservedCall once all client has been updated';
