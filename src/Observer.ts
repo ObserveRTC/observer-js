@@ -7,8 +7,8 @@ import { ObservedTURN } from './ObservedTURN';
 import { Detectors } from './detectors/Detectors';
 import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
-import { OnAllCallObserverUpdater } from './updaters/onAllCallObserverUpdater';
-import { OnAnyCallObserverUpdater } from './updaters/onAnyCallObserverUpdater';
+import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater_';
+import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater_';
 import { ObserverSummary } from './ObserverSummary';
 
 const logger = createLogger('Observer');
