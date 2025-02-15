@@ -302,7 +302,9 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaReceivedVideoPackets = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
-		
+		this.deltaTransportReceivedBytes = 0;
+		this.deltaTransportSentBytes = 0;
+
 		this.sendingAudioBitrate = 0;
 		this.sendingVideoBitrate = 0;
 		this.receivingAudioBitrate = 0;
@@ -428,7 +430,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		}
 		if (sample.peerConnectionTransports) {
 			for (const peerConnectionTransport of sample.peerConnectionTransports) {
-				this._updatePeerConnectionTransportStats(peerConnectionTransport);
+				const observedTransport = this._updatePeerConnectionTransportStats(peerConnectionTransport);
+				
+				if (!observedTransport) continue;
+
 			}
 		}
 		if (sample.remoteInboundRtps) {
@@ -496,16 +501,24 @@ export class ObservedPeerConnection extends EventEmitter {
 		} else {
 			this.currentJitter = undefined;
 		}
-
-		const selectedIceCandidatePairs = this.selectedIceCandidatePairs;
-		const selectedCandidatePairForTurn = selectedIceCandidatePairs.filter((pair) =>
-			pair.getLocalCandidate()?.candidateType === 'relay' &&
-			pair.getRemoteCandidate()?.url?.startsWith('turn:')
-		);
 		const wasUsingTURN = this.usingTURN;
+		const selectedIceCandidatePairs = this.selectedIceCandidatePairs;
+		const selectedCandidatePairForTurn: ObservedIceCandidatePair[] = [];
 
-		this.usingTCP = selectedIceCandidatePairs.some((pair) => pair.getLocalCandidate()?.protocol === 'tcp');
-		this.usingTURN = 0 < selectedCandidatePairForTurn.length;
+		this.usingTCP = false;
+		this.usingTURN = false;
+
+		for (const selectedCandidatePair of selectedIceCandidatePairs) {
+			if (selectedCandidatePair.getLocalCandidate()?.protocol === 'tcp') {
+				this.usingTCP = true;
+			}
+			if (selectedCandidatePair.getLocalCandidate()?.candidateType === 'relay' && selectedCandidatePair.getRemoteCandidate()?.url?.startsWith('turn:')) {
+				selectedCandidatePairForTurn.push(selectedCandidatePair);
+				this.usingTURN = true;
+			}
+			this.deltaTransportReceivedBytes += selectedCandidatePair.deltaBytesReceived;
+			this.deltaTransportSentBytes += selectedCandidatePair.deltaBytesSent;
+		}
 
 		if (this.usingTURN) {
 			if (!this.observedTurnServer) {

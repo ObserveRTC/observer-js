@@ -9,7 +9,6 @@ import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater_';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater_';
-import { ObserverSummary } from './ObserverSummary';
 
 const logger = createLogger('Observer');
 
@@ -211,30 +210,30 @@ export class Observer extends EventEmitter {
 		this.totalClientIssues += call.deltaNumberOfIssues;
 	}
 
-	public resetSummaryMetrics() {
-		this.totalAddedCall = 0;
-		this.totalRemovedCall = 0;
-		this.totalRttLt50Measurements = 0;
-		this.totalRttLt150Measurements = 0;
-		this.totalRttLt300Measurements = 0;
-		this.totalRttGtOrEq300Measurements = 0;
-		this.totalClientIssues = 0;
-	}
+	// public resetSummaryMetrics() {
+	// 	this.totalAddedCall = 0;
+	// 	this.totalRemovedCall = 0;
+	// 	this.totalRttLt50Measurements = 0;
+	// 	this.totalRttLt150Measurements = 0;
+	// 	this.totalRttLt300Measurements = 0;
+	// 	this.totalRttGtOrEq300Measurements = 0;
+	// 	this.totalClientIssues = 0;
+	// }
 
-	public createSummary(): ObserverSummary {
-		return {
-			totalAddedCall: this.totalAddedCall,
-			totalRemovedCall: this.totalRemovedCall,
-			totalRttLt50Measurements: this.totalRttLt50Measurements,
-			totalRttLt150Measurements: this.totalRttLt150Measurements,
-			totalRttLt300Measurements: this.totalRttLt300Measurements,
-			totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+	// public createSummary(): ObserverSummary {
+	// 	return {
+	// 		totalAddedCall: this.totalAddedCall,
+	// 		totalRemovedCall: this.totalRemovedCall,
+	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
+	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
+	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
+	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
 
-			totalClientIssues: this.totalClientIssues,
-			currentActiveCalls: this.observedCalls.size,
-			currentNumberOfClients: this.numberOfClients,
-			currentNumberOfClientsUsingTURN: this.numberOfClientsUsedTurn,
-		};
-	}
+	// 		totalClientIssues: this.totalClientIssues,
+	// 		currentActiveCalls: this.observedCalls.size,
+	// 		currentNumberOfClients: this.numberOfClients,
+	// 		currentNumberOfClientsUsingTURN: this.numberOfClientsUsedTurn,
+	// 	};
+	// }
 
 }

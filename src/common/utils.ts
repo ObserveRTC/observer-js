@@ -30,6 +30,12 @@ export function isValidUuid(str: string): boolean {
 	return regexp.test(str);
 }
 
+export function getAverage(arr: number[], defaultAvgIfArrLengthIs0 = 0): number {
+	if (arr.length === 0) return defaultAvgIfArrLengthIs0;
+	
+	return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
 export function getMedian(arr: number[], copyArrayForSorting = true): number {
 	// Sort the array in ascending order
 	const sortedArr = copyArrayForSorting 

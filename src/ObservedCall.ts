@@ -9,7 +9,6 @@ import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
 import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
 import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
-import { ObservedCallSummary } from './ObservedCallSummary';
 import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
@@ -153,6 +152,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public close() {
 		if (this.closed) return;
+		this.update(); // last update before closing
 		this.closed = true;
 
 		this.updater?.close();
@@ -190,7 +190,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
 			}
-			--this.totalRemovedClients;
+			++this.totalRemovedClients;
 		});
 		result.on('update', onUpdate);
 		result.on('joined', joined);
@@ -222,10 +222,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.numberOfOutboundRtpStreams += client.numberOfOutboundRtpStreams;
 			this.numberOfPeerConnections += client.numberOfPeerConnections;
 			this.numberOfDataChannels += client.numberOfDataChannels;
-
-			if (client.usingTURN) {
-				this.clientsUsedTurn.add(client.clientId);
-			}
 		}
 
 		this.detectors.update();
@@ -242,12 +238,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	private _onClientUpdate(client: ObservedClient) {
 		this.totalClientsReceivedAudioBytes += client.deltaReceivedAudioBytes;
-		this.totalClientsSentAudioBytes += client.deltaSentAudioBytes;
 		this.totalClientsReceivedVideoBytes += client.deltaReceivedVideoBytes;
-		this.totalClientsReceivedVideoBytes += client.deltaSentVideoBytes;
 		this.totalClientsReceivedDataChannelBytes += client.deltaDataChannelBytesReceived;
-		this.totalClientsSentDataChannelBytes += client.deltaDataChannelBytesSent;
 		this.totalClientsReceivedBytes += client.deltaTransportReceivedBytes;
+		this.totalClientsSentAudioBytes += client.deltaSentAudioBytes;
+		this.totalClientsSentVideoBytes += client.deltaSentVideoBytes;
+		this.totalClientsSentDataChannelBytes += client.deltaDataChannelBytesSent;
 		this.totalClientsSentBytes += client.deltaTransportSentBytes;
 		
 		this.deltaRttLt50Measurements += client.deltaRttLt50Measurements;
@@ -262,6 +258,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
 		this.numberOfIssues += client.deltaNumberOfIssues;
+		
+		if (client.usingTURN) {
+			this.clientsUsedTurn.add(client.clientId);
+		}
 	}
 
 	private _clientJoined(client: ObservedClient) {
@@ -304,50 +304,50 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.emit('ended');
 	}
 
-	public resetSummaryMetrics() {
-		this.totalAddedClients = 0;
-		this.totalRemovedClients = 0;
+	// public resetSummaryMetrics() {
+	// 	this.totalAddedClients = 0;
+	// 	this.totalRemovedClients = 0;
 
-		this.totalClientsReceivedAudioBytes = 0;
-		this.totalClientsReceivedVideoBytes = 0;
-		this.totalClientsReceivedBytes = 0;
+	// 	this.totalClientsReceivedAudioBytes = 0;
+	// 	this.totalClientsReceivedVideoBytes = 0;
+	// 	this.totalClientsReceivedBytes = 0;
 
-		this.totalClientsSentAudioBytes = 0;
-		this.totalClientsSentVideoBytes = 0;
-		this.totalClientsSentBytes = 0;
+	// 	this.totalClientsSentAudioBytes = 0;
+	// 	this.totalClientsSentVideoBytes = 0;
+	// 	this.totalClientsSentBytes = 0;
 
-		this.totalRttLt50Measurements = 0;
-		this.totalRttLt150Measurements = 0;
-		this.totalRttLt300Measurements = 0;
-		this.totalRttGtOrEq300Measurements = 0;
+	// 	this.totalRttLt50Measurements = 0;
+	// 	this.totalRttLt150Measurements = 0;
+	// 	this.totalRttLt300Measurements = 0;
+	// 	this.totalRttGtOrEq300Measurements = 0;
 
-		this.numberOfIssues = 0;
+	// 	this.numberOfIssues = 0;
 
-		this.clientsUsedTurn.clear();
+	// 	this.clientsUsedTurn.clear();
 		
-	}
+	// }
 
-	public createSummary(): ObservedCallSummary {
-		return {
-			currentActiveClients: this.observedClients.size,
-			totalAddedClients: this.totalAddedClients,
-			totalRemovedClients: this.totalRemovedClients,
+	// public createSummary(): ObservedCallSummary {
+	// 	return {
+	// 		currentActiveClients: this.observedClients.size,
+	// 		totalAddedClients: this.totalAddedClients,
+	// 		totalRemovedClients: this.totalRemovedClients,
 			
-			totalClientsReceivedAudioBytes: this.totalClientsReceivedBytes,
-			totalClientsReceivedVideoBytes: this.totalClientsReceivedVideoBytes,
-			totalClientsReceivedBytes: this.totalClientsReceivedBytes,
+	// 		totalClientsReceivedAudioBytes: this.totalClientsReceivedBytes,
+	// 		totalClientsReceivedVideoBytes: this.totalClientsReceivedVideoBytes,
+	// 		totalClientsReceivedBytes: this.totalClientsReceivedBytes,
 
-			totalClientsSentAudioBytes: this.totalClientsSentAudioBytes,
-			totalClientsSentVideoBytes: this.totalClientsSentVideoBytes,
-			totalClientsSentBytes: this.totalClientsSentBytes,
+	// 		totalClientsSentAudioBytes: this.totalClientsSentAudioBytes,
+	// 		totalClientsSentVideoBytes: this.totalClientsSentVideoBytes,
+	// 		totalClientsSentBytes: this.totalClientsSentBytes,
 
-			totalRttLt50Measurements: this.totalRttLt50Measurements,
-			totalRttLt150Measurements: this.totalRttLt150Measurements,
-			totalRttLt300Measurements: this.totalRttLt300Measurements,
-			totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
+	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
+	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
+	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
 
-			numberOfIssues: this.numberOfIssues,
-			numberOfClientsUsedTurn: this.clientsUsedTurn.size,
-		};
-	}
+	// 		numberOfIssues: this.numberOfIssues,
+	// 		numberOfClientsUsedTurn: this.clientsUsedTurn.size,
+	// 	};
+	// }
 }

@@ -7,10 +7,9 @@ import * as MetaData from './schema/ClientMetaTypes';
 import { ClientEventTypes } from './schema/ClientEventTypes';
 import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
-import { getMedian, parseJsonAs } from './common/utils';
+import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
-import { ObservedClientSummary } from './ObservedClientSummary';
 
 const logger = createLogger('ObservedClient');
 
@@ -73,8 +72,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public mediaConstraints: string[] = [];
 
 	public usingTURN = false;
+	public usingTCP = false;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
+
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
@@ -100,7 +101,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public deltaInboundPacketsLost = 0;
 	public deltaInboundPacketsReceived = 0;
 	public deltaOutboundPacketsSent = 0;
-	public deltaRttInMsMeasurements: number[] = [];
 	public deltaTransportSentBytes = 0;
 	public deltaTransportReceivedBytes = 0;
 	public deltaRttLt50Measurements = 0;
@@ -108,7 +108,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public deltaRttLt300Measurements = 0;
 	public deltaRttGtOrEq300Measurements = 0;
 
-	public currentRttInMs?: number;
+	public currentMaxRttInMs?: number;
+	public currentMinRttInMs?: number;
+	public currentAvgRttInMs?: number;
+
 	public sendingAudioBitrate = 0;
 	public sendingVideoBitrate = 0;
 	public receivingAudioBitrate = 0;
@@ -128,7 +131,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public totalScoreSum = 0;
 	public numberOfScoreMeasurements = 0;
-	public numberOfIssues = 0;
+	public totalNumberOfIssues = 0;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
@@ -166,7 +169,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const now = Date.now();
 		const elapsedInMs = now - this.updated;
 		const elapsedInSeconds = elapsedInMs / 1000;
-
+		let sumOfRtts = 0;
+		let numberOfRttMeasurements = 0;
+		
 		++this.acceptedSamples;
 		
 		this.availableIncomingBitrate = 0;
@@ -184,7 +189,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.deltaSentVideoBytes = 0;
 		this.deltaTransportReceivedBytes = 0;
 		this.deltaTransportSentBytes = 0;
-		this.deltaRttInMsMeasurements = [];
 		this.deltaRttLt50Measurements = 0;
 		this.deltaRttLt150Measurements = 0;
 		this.deltaRttLt300Measurements = 0;
@@ -196,14 +200,87 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.numberOfInbundTracks = 0;
 		this.numberOfOutboundRtpStreams = 0;
 		this.numberOfOutboundTracks = 0;
+		this.usingTURN = false;
+		this.usingTCP = false;
+		this.currentMinRttInMs = undefined;
+		this.currentMaxRttInMs = undefined;
 		
-		sample.clientEvents?.forEach(this._processClientEvent.bind(this));
-		sample.clientMetaItems?.forEach(this.addMetadata.bind(this));
-		sample.clientIssues?.forEach(this.addIssue.bind(this));
-		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
-		sample.extensionStats?.forEach(this.addExtensionStats.bind(this));
+		for (const clientEvent of sample.clientEvents ?? []) {
+			this._processClientEvent(clientEvent);
+		}
 
-		this._updateRttMeasurements();
+		for (const metaData of sample.clientMetaItems ?? []) {
+			this.addMetadata(metaData);
+		}
+
+		for (const issue of sample.clientIssues ?? []) {
+			this.addIssue(issue);
+
+			++this.deltaNumberOfIssues;
+		}
+
+		for (const extensionStat of sample.extensionStats ?? []) {
+			this.addExtensionStats(extensionStat);
+		}
+
+		for (const pcSample of sample.peerConnections ?? []) {
+			const observedPeerConnection = this._updatePeerConnection(pcSample);
+
+			if (!observedPeerConnection) continue;
+
+			this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
+			this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
+			this.deltaDataChannelMessagesReceived += observedPeerConnection.deltaDataChannelMessagesReceived;
+			this.deltaDataChannelMessagesSent += observedPeerConnection.deltaDataChannelMessagesSent;
+			this.deltaInboundPacketsLost += observedPeerConnection.deltaInboundPacketsLost;
+			this.deltaInboundPacketsReceived += observedPeerConnection.deltaInboundPacketsReceived;
+			this.deltaOutboundPacketsSent += observedPeerConnection.deltaOutboundPacketsSent;
+			this.deltaReceivedAudioBytes += observedPeerConnection.deltaReceivedAudioBytes;
+			this.deltaReceivedVideoBytes += observedPeerConnection.deltaReceivedVideoBytes;
+			this.deltaSentAudioBytes += observedPeerConnection.deltaSentAudioBytes;
+			this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
+			this.deltaTransportReceivedBytes += observedPeerConnection.deltaTransportReceivedBytes;
+			this.deltaTransportSentBytes += observedPeerConnection.deltaTransportSentBytes;
+			
+			this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
+			this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
+
+			this.numberOfDataChannels += observedPeerConnection.observedDataChannels.size;
+			this.numberOfInbundTracks += observedPeerConnection.observedInboundTracks.size;
+			this.numberOfOutboundRtpStreams += observedPeerConnection.observedOutboundRtps.size;
+			this.numberOfOutboundTracks += observedPeerConnection.observedOutboundTracks.size;
+			this.numberOfInboundRtpStreams += observedPeerConnection.observedInboundRtps.size;
+
+			if (observedPeerConnection.usingTURN) {
+				this.usingTURN = true;
+			}
+			if (observedPeerConnection.usingTCP) {
+				this.usingTCP = true;
+			}
+
+			if (observedPeerConnection.currentRttInMs) {
+				if (this.currentMinRttInMs === undefined || observedPeerConnection.currentRttInMs < this.currentMinRttInMs) {
+					this.currentMinRttInMs = observedPeerConnection.currentRttInMs;
+				}
+				if (this.currentMaxRttInMs === undefined || observedPeerConnection.currentRttInMs > this.currentMaxRttInMs) {
+					this.currentMaxRttInMs = observedPeerConnection.currentRttInMs;
+				}
+				if (observedPeerConnection.currentRttInMs < 50) {
+					this.deltaRttLt50Measurements += 1;
+				} else if (observedPeerConnection.currentRttInMs < 150) {
+					this.deltaRttLt150Measurements += 1;
+				} else if (observedPeerConnection.currentRttInMs < 300) {
+					this.deltaRttLt300Measurements += 1;
+				} else if (300 <= observedPeerConnection.currentRttInMs) {
+					this.deltaRttGtOrEq300Measurements += 1;
+				}
+
+				sumOfRtts += observedPeerConnection.currentRttInMs;
+				++numberOfRttMeasurements;
+			}
+		}
+
+		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
@@ -225,12 +302,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.totalRttLt150Measurements += this.deltaRttLt150Measurements;
 		this.totalRttLt300Measurements += this.deltaRttLt300Measurements;
 		this.totalRttGtOrEq300Measurements += this.deltaRttGtOrEq300Measurements;
-		this.numberOfIssues += this.deltaNumberOfIssues;
+		this.totalNumberOfIssues += this.deltaNumberOfIssues;
 
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
 		this.receivingVideoBitrate = (this.totalReceivedVideoBytes * 8) / (elapsedInSeconds);
 		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
 		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / (elapsedInSeconds);
+		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
 		this.calculatedScore.value = sample.score;
 		this.detectors.update();
@@ -311,7 +389,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public addIssue(issue: ClientIssue) {
 		if (this.closed) return;
 
-		++this.deltaNumberOfIssues;
 		this.emit('issue', issue);
 		this.call.observer.emit('client-issue', this, issue);
 	}
@@ -320,15 +397,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.call.observer.emit('client-extension-stats', this, stats);
 	}
 
-	private _updatePeerConnection(sample: PeerConnectionSample) {
+	private _updatePeerConnection(sample: PeerConnectionSample): ObservedPeerConnection | undefined {
 		let observedPeerConnection = this.observedPeerConnections.get(sample.peerConnectionId);
 
 		if (!observedPeerConnection) {
 			if (!sample.peerConnectionId) {
-				return logger.warn(
+				return (logger.warn(
 					`ObservedClient received an invalid PeerConnectionSample (missing peerConnectionId field). ClientId: ${this.clientId}, CallId: ${this.call.callId}`,
 					sample
-				);
+				), void 0);
 			}
 
 			observedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
@@ -343,107 +420,54 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		observedPeerConnection.accept(sample);
 
-		observedPeerConnection.currentRttInMs;
-
-		this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
-		this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
-		this.deltaDataChannelMessagesReceived += observedPeerConnection.deltaDataChannelMessagesReceived;
-		this.deltaDataChannelMessagesSent += observedPeerConnection.deltaDataChannelMessagesSent;
-		this.deltaInboundPacketsLost += observedPeerConnection.deltaInboundPacketsLost;
-		this.deltaInboundPacketsReceived += observedPeerConnection.deltaInboundPacketsReceived;
-		this.deltaOutboundPacketsSent += observedPeerConnection.deltaOutboundPacketsSent;
-		this.deltaReceivedAudioBytes += observedPeerConnection.deltaReceivedAudioBytes;
-		this.deltaReceivedVideoBytes += observedPeerConnection.deltaReceivedVideoBytes;
-		this.deltaSentAudioBytes += observedPeerConnection.deltaSentAudioBytes;
-		this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
-		this.deltaTransportReceivedBytes += observedPeerConnection.deltaTransportReceivedBytes;
-		this.deltaTransportSentBytes += observedPeerConnection.deltaTransportSentBytes;
-
-		this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
-		this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
-
-		this.numberOfDataChannels += observedPeerConnection.observedDataChannels.size;
-		this.numberOfInbundTracks += observedPeerConnection.observedInboundTracks.size;
-		this.numberOfOutboundRtpStreams += observedPeerConnection.observedOutboundRtps.size;
-		this.numberOfOutboundTracks += observedPeerConnection.observedOutboundTracks.size;
-		this.numberOfInboundRtpStreams += observedPeerConnection.observedInboundRtps.size;
-
-		if (observedPeerConnection.currentRttInMs) {
-			this.deltaRttInMsMeasurements.push(observedPeerConnection.currentRttInMs);
-		}
+		return observedPeerConnection;
 	}
 
-	public resetSummaryMetrics() {
-		this.totalDataChannelBytesReceived = 0;
-		this.totalDataChannelBytesSent = 0;
-		this.totalDataChannelMessagesReceived = 0;
-		this.totalDataChannelMessagesSent = 0;
-		this.totalInboundPacketsLost = 0;
-		this.totalInboundPacketsReceived = 0;
-		this.totalOutboundPacketsSent = 0;
-		this.totalReceivedAudioBytes = 0;
-		this.totalReceivedVideoBytes = 0;
-		this.totalSentAudioBytes = 0;
-		this.totalSentVideoBytes = 0;
-		this.totalSentBytes = 0;
-		this.totalReceivedBytes = 0;
+	// public resetSummaryMetrics() {
+	// 	this.totalDataChannelBytesReceived = 0;
+	// 	this.totalDataChannelBytesSent = 0;
+	// 	this.totalDataChannelMessagesReceived = 0;
+	// 	this.totalDataChannelMessagesSent = 0;
+	// 	this.totalInboundPacketsLost = 0;
+	// 	this.totalInboundPacketsReceived = 0;
+	// 	this.totalOutboundPacketsSent = 0;
+	// 	this.totalReceivedAudioBytes = 0;
+	// 	this.totalReceivedVideoBytes = 0;
+	// 	this.totalSentAudioBytes = 0;
+	// 	this.totalSentVideoBytes = 0;
+	// 	this.totalSentBytes = 0;
+	// 	this.totalReceivedBytes = 0;
 		
-		this.numberOfIssues = 0;
+	// 	this.totalNumberOfIssues = 0;
 		
-		this.totalScoreSum = 0;
-		this.numberOfScoreMeasurements = 0;
-	}
+	// 	this.totalScoreSum = 0;
+	// 	this.numberOfScoreMeasurements = 0;
+	// }
 
-	public createSummary(): ObservedClientSummary {
-		return {
-			totalRttLt50Measurements: this.totalRttLt50Measurements,
-			totalRttLt150Measurements: this.totalRttLt150Measurements,
-			totalRttLt300Measurements: this.totalRttLt300Measurements,
-			totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
-			totalDataChannelBytesReceived: this.totalDataChannelBytesReceived,
-			totalDataChannelBytesSent: this.totalDataChannelBytesSent,
-			totalDataChannelMessagesReceived: this.totalDataChannelMessagesReceived,
-			totalDataChannelMessagesSent: this.totalDataChannelMessagesSent,
-			totalInboundPacketsLost: this.totalInboundPacketsLost,
-			totalInboundPacketsReceived: this.totalInboundPacketsReceived,
-			totalOutboundPacketsSent: this.totalOutboundPacketsSent,
-			totalReceivedAudioBytes: this.totalReceivedAudioBytes,
-			totalReceivedVideoBytes: this.totalReceivedVideoBytes,
-			totalSentAudioBytes: this.totalSentAudioBytes,
-			totalSentVideoBytes: this.totalSentVideoBytes,
-			totalSentBytes: this.totalSentBytes,
-			totalReceivedBytes: this.totalReceivedBytes,
+	// public createSummary(): ObservedClientSummary {
+	// 	return {
+	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
+	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
+	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
+	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+	// 		totalDataChannelBytesReceived: this.totalDataChannelBytesReceived,
+	// 		totalDataChannelBytesSent: this.totalDataChannelBytesSent,
+	// 		totalDataChannelMessagesReceived: this.totalDataChannelMessagesReceived,
+	// 		totalDataChannelMessagesSent: this.totalDataChannelMessagesSent,
+	// 		totalInboundPacketsLost: this.totalInboundPacketsLost,
+	// 		totalInboundPacketsReceived: this.totalInboundPacketsReceived,
+	// 		totalOutboundPacketsSent: this.totalOutboundPacketsSent,
+	// 		totalReceivedAudioBytes: this.totalReceivedAudioBytes,
+	// 		totalReceivedVideoBytes: this.totalReceivedVideoBytes,
+	// 		totalSentAudioBytes: this.totalSentAudioBytes,
+	// 		totalSentVideoBytes: this.totalSentVideoBytes,
+	// 		totalSentBytes: this.totalSentBytes,
+	// 		totalReceivedBytes: this.totalReceivedBytes,
 			
-			numberOfIssues: this.numberOfIssues,
+	// 		numberOfIssues: this.totalNumberOfIssues,
 
-			totalScoreSum: this.totalScoreSum,
-			numberOfScoreMeasurements: this.numberOfScoreMeasurements,
-		};
-	}
-
-	private _updateRttMeasurements() {
-		if (this.deltaRttInMsMeasurements.length < 1) {
-			this.currentRttInMs = undefined;
-
-			return;
-		}
-		this.currentRttInMs = getMedian(this.deltaRttInMsMeasurements, false);
-
-		if (this.currentRttInMs < 0) {
-			logger.warn(`Current Rtt for client ${this.clientId} is smaller than 0`);
-			this.currentRttInMs = undefined;
-
-			return;
-		}
-		
-		if (this.currentRttInMs < 50) {
-			this.deltaRttLt50Measurements += 1;
-		} else if (this.currentRttInMs < 150) {
-			this.deltaRttLt150Measurements += 1;
-		} else if (this.currentRttInMs < 300) {
-			this.deltaRttLt300Measurements += 1;
-		} else if (300 <= this.currentRttInMs) {
-			this.deltaRttGtOrEq300Measurements += 1;
-		}
-	}
+	// 		totalScoreSum: this.totalScoreSum,
+	// 		numberOfScoreMeasurements: this.numberOfScoreMeasurements,
+	// 	};
+	// }
 }
