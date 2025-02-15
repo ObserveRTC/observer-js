@@ -64,6 +64,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public joinedAt?: number;
 	public leftAt?: number;
+	public closedAt?: number;
 	// the timestamp of the CLIENT_JOINED event
 	public operationSystem?: MetaData.OperationSystem;
 	public engine?: MetaData.Engine;
@@ -160,6 +161,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		Array.from(this.observedPeerConnections.values()).forEach((peerConnection) => peerConnection.close());
 
+		this.closedAt = Date.now();
+
 		this.emit('close');
 	}
 
@@ -204,9 +207,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.usingTCP = false;
 		this.currentMinRttInMs = undefined;
 		this.currentMaxRttInMs = undefined;
-		
+
+		const clientEventsPostBuffer: ClientEvent[] = [];
+
 		for (const clientEvent of sample.clientEvents ?? []) {
-			this._processClientEvent(clientEvent);
+			this._processClientEvent(clientEvent, clientEventsPostBuffer);
+
+			this.call.observer.emit('client-event', this, clientEvent);
 		}
 
 		for (const metaData of sample.clientMetaItems ?? []) {
@@ -280,7 +287,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		sample.peerConnections?.forEach(this._updatePeerConnection.bind(this));
+		for (const clientEvent of clientEventsPostBuffer) {
+			this._processClientEvent(clientEvent);
+		}
 
 		// emit new attachments?
 		this.attachments = sample.attachments;
@@ -327,7 +336,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 	}
 
-	private _processClientEvent(event: ClientEvent) {
+	private _processClientEvent(event: ClientEvent, postBuffer?: ClientEvent[]) {
 		// eslint-disable-next-line no-console
 		// console.warn('ClientEvent', event);
 		switch (event.type) {
@@ -356,9 +365,109 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				break;
 			}
-		}
+			case ClientEventTypes.PEER_CONNECTION_OPENED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
 
-		this.call.observer.emit('client-event', this, event);
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.openedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_OPENED event without a corresponding observedPeerConnection', event);
+					}
+					
+				}
+				break;
+			}
+			case ClientEventTypes.PEER_CONNECTION_CLOSED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.closedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_CLOSED event without a corresponding observedPeerConnection', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_ADDED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId) ?? observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedTrack) {
+						observedTrack.addedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_ADDED event without a corresponding observedPeerConnection or observedTrack', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_REMOVED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId) ?? observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedTrack) {
+						observedTrack.removedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_REMOVED event without a corresponding observedPeerConnection or observedTrack', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.DATA_CHANNEL_OPEN: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.dataChannelId && typeof payload.dataChannelId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedDataChannel = observedPeerConnection?.observedDataChannels.get(payload.dataChannelId);
+
+					if (observedDataChannel) {
+						observedDataChannel.addedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received DATA_CHANNEL_OPENED event without a corresponding observedPeerConnection or observedDataChannel', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.DATA_CHANNEL_CLOSED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.dataChannelId && typeof payload.dataChannelId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedDataChannel = observedPeerConnection?.observedDataChannels.get(payload.dataChannelId);
+
+					if (observedDataChannel) {
+						observedDataChannel.removedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received DATA_CHANNEL_CLOSE event without a corresponding observedPeerConnection or observedDataChannel', event);
+					}
+				}
+				break;
+			}
+			
+		}
 	}
 
 	public addMetadata(metadata: ClientMetaData) {

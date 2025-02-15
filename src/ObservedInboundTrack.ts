@@ -16,6 +16,9 @@ export class ObservedInboundTrack implements InboundTrackSample {
 
 	private _visited = false;
 
+	public addedAt?: number | undefined;
+	public removedAt?: number | undefined;
+	
 	attachments?: Record<string, unknown> | undefined;
 
 	constructor(

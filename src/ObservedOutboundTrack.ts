@@ -15,6 +15,9 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		value: undefined,
 	};
 
+	public addedAt?: number | undefined;
+	public removedAt?: number | undefined;
+
 	attachments?: Record<string, unknown> | undefined;
 
 	constructor(

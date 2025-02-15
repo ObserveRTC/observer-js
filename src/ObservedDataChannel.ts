@@ -16,6 +16,9 @@ export class ObservedDataChannel implements DataChannelStats	{
 	bytesReceived?: number | undefined;
 	attachments?: Record<string, unknown> | undefined;
 
+	public addedAt?: number | undefined;
+	public removedAt?: number | undefined;
+	
 	public deltaBytesSent = 0;
 	public deltaBytesReceived = 0;
 	public deltaMessagesSent = 0;

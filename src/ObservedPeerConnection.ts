@@ -280,6 +280,8 @@ export class ObservedPeerConnection extends EventEmitter {
 
 		this.client.call.observer.observedTURN.removePeerConnection(this);
 		
+		if (!this.closedAt) this.closedAt = Date.now();
+		
 		this.emit('close');
 	}
 

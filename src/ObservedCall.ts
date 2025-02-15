@@ -25,8 +25,6 @@ export type ObservedCallEvents = {
 	empty: [],
 	'not-empty': [],
 	close: [],
-	started: [],
-	ended: [],
 }
 
 export declare interface ObservedCall {
@@ -84,7 +82,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public appData: AppData;
 	public closed = false;
 	public startedAt?: number;
-	public ended?: number;
+	public endedAt?: number;
+	public closedAt?: number;
 
 	private _callStartedEvent: {
 		emitted: boolean,
@@ -158,10 +157,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.updater?.close();
 
 		[ ...this.observedClients.values() ].forEach((client) => client.close());
-		// make sure to emit the events
-		this.emitCallStartedEvent();
-		this.emitCallEndedEvent();
 
+		this.closedAt = Date.now();
 		this.emit('close');
 	}
 
@@ -268,40 +265,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (!client.joinedAt) return;
 
 		this.startedAt = Math.min(this.startedAt ?? client.joinedAt, client.joinedAt);
-
-		if (this._callStartedEvent.emitted) return;
-		if (this._callStartedEvent.timer) {
-			if (1 < this.observedClients.size) {
-				this.emitCallStartedEvent();
-			}
-			
-			return;
-		}
-		this._callStartedEvent.timer = setTimeout(() => {
-			this.emitCallStartedEvent();
-		}, 5000);
 	}
 
 	private _clientLeft(client: ObservedClient) {
 		if (!client.leftAt) return;
 
-		this.ended = Math.max(this.ended ?? client.leftAt, client.leftAt);
-	}
-
-	public emitCallStartedEvent() {
-		if (this._callStartedEvent.emitted) return;
-		this._callStartedEvent.emitted = true;
-		clearTimeout(this._callStartedEvent.timer);
-		this._callStartedEvent.timer = undefined;
-
-		this.emit('started');
-	}
-
-	public emitCallEndedEvent() {
-		if (this._callEndedEvent.emitted) return;
-		this._callEndedEvent.emitted = true;
-
-		this.emit('ended');
+		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
 	}
 
 	// public resetSummaryMetrics() {
