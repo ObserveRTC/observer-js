@@ -54,7 +54,7 @@ export class Observer extends EventEmitter {
 	public totalRttGtOrEq300Measurements = 0;
 	public totalClientIssues = 0;
 
-	public numberOfClientsUsedTurn = 0;
+	public numberOfClientsUsingTurn = 0;
 	public numberOfClients = 0;
 	public numberOfInboundRtpStreams = 0;
 	public numberOfOutboundRtpStreams = 0;
@@ -186,7 +186,7 @@ export class Observer extends EventEmitter {
 		this.numberOfPeerConnections = 0;
 		this.numberOfDataChannels = 0;
 		this.numberOfClients = 0;
-		this.numberOfClientsUsedTurn = 0;
+		this.numberOfClientsUsingTurn = 0;
 
 		for (const call of this.observedCalls.values()) {
 			this.numberOfInboundRtpStreams += call.numberOfInboundRtpStreams;
@@ -194,7 +194,7 @@ export class Observer extends EventEmitter {
 			this.numberOfPeerConnections += call.numberOfPeerConnections;
 			this.numberOfDataChannels += call.numberOfDataChannels;
 			this.numberOfClients += call.numberOfClients;
-			this.numberOfClientsUsedTurn += call.clientsUsedTurn.size;
+			this.numberOfClientsUsingTurn += call.clientsUsedTurn.size;
 		}
 
 		this.observedTURN.update();
