@@ -1,5 +1,51 @@
 /* eslint-disable no-shadow */
 
+interface DoubleRange {
+	max?: number;
+	min?: number;
+}
+
+interface ULongRange {
+	max?: number;
+	min?: number;
+}
+
+interface MediaTrackConstraints {
+	aspectRatio?: DoubleRange;
+	autoGainControl?: boolean[];
+	backgroundBlur?: boolean[];
+	channelCount?: ULongRange;
+	deviceId?: string;
+	displaySurface?: string;
+	echoCancellation?: boolean[];
+	facingMode?: string[];
+	frameRate?: DoubleRange;
+	groupId?: string;
+	height?: ULongRange;
+	noiseSuppression?: boolean[];
+	sampleRate?: ULongRange;
+	sampleSize?: ULongRange;
+	width?: ULongRange;
+}
+
+interface MediaTrackCapabilities {
+	aspectRatio?: DoubleRange;
+	autoGainControl?: boolean[];
+	backgroundBlur?: boolean[];
+	channelCount?: ULongRange;
+	deviceId?: string;
+	displaySurface?: string;
+	echoCancellation?: boolean[];
+	facingMode?: string[];
+	frameRate?: DoubleRange;
+	groupId?: string;
+	height?: ULongRange;
+	noiseSuppression?: boolean[];
+	sampleRate?: ULongRange;
+	sampleSize?: ULongRange;
+	width?: ULongRange;
+}
+
 export enum ClientEventTypes {
 	CLIENT_JOINED = 'CLIENT_JOINED',
 	CLIENT_LEFT = 'CLIENT_LEFT',
