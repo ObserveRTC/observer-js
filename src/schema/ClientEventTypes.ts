@@ -46,6 +46,24 @@ interface MediaTrackCapabilities {
 	width?: ULongRange;
 }
 
+interface MediaTrackSettings {
+	aspectRatio?: number;
+	autoGainControl?: boolean;
+	backgroundBlur?: boolean;
+	channelCount?: number;
+	deviceId?: string;
+	displaySurface?: string;
+	echoCancellation?: boolean;
+	facingMode?: string;
+	frameRate?: number;
+	groupId?: string;
+	height?: number;
+	noiseSuppression?: boolean;
+	sampleRate?: number;
+	sampleSize?: number;
+	width?: number;
+}
+
 export enum ClientEventTypes {
 	CLIENT_JOINED = 'CLIENT_JOINED',
 	CLIENT_LEFT = 'CLIENT_LEFT',
