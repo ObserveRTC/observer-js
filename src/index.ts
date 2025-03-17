@@ -23,5 +23,6 @@ export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
 export { ClientSample } from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
+export { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
 
 export { Middleware } from './common/Middleware';

@@ -10,6 +10,7 @@ import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
+import { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
 
 const logger = createLogger('ObservedClient');
 
@@ -530,6 +531,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		observedPeerConnection.accept(sample);
 
 		return observedPeerConnection;
+	}
+
+	public createEventMonitor<CTX = unknown>(ctx?: CTX): ObservedClientEventMonitor<CTX> {
+		return new ObservedClientEventMonitor<CTX>(this, ctx ?? {} as CTX);
 	}
 
 	// public resetSummaryMetrics() {
