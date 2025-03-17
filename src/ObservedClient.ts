@@ -138,6 +138,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
+	private _injections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
+
 	public constructor(settings: ObservedClientSettings<AppData>, public readonly call: ObservedCall) {
 		super();
 		this.setMaxListeners(Infinity);
@@ -208,6 +210,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.usingTCP = false;
 		this.currentMinRttInMs = undefined;
 		this.currentMaxRttInMs = undefined;
+
+		this._mergeInjections(sample);
 
 		const clientEventsPostBuffer: ClientEvent[] = [];
 
@@ -471,6 +475,47 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 	}
 
+	public injectMetaData(metaData: ClientMetaData) {
+		if (this.closed) return;
+		
+		if (!this._injections.clientMetaItems) this._injections.clientMetaItems = [];
+
+		this._injections.clientMetaItems.push(metaData);
+	}
+
+	public injectEvent(event: ClientEvent) {
+		if (this.closed) return;
+
+		if (!this._injections.clientEvents) this._injections.clientEvents = [];
+
+		this._injections.clientEvents.push(event);
+	}
+
+	public injectIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		if (!this._injections.clientIssues) this._injections.clientIssues = [];
+
+		this._injections.clientIssues.push(issue);
+	}
+
+	public injectExtensionStat(stat: ExtensionStat) {
+		if (this.closed) return;
+
+		if (!this._injections.extensionStats) this._injections.extensionStats = [];
+
+		this._injections.extensionStats.push(stat);
+	}
+
+	public injectAttachment(key: string, value: unknown) {
+		if (this.closed) return;
+
+		if (!this._injections.attachments) this._injections.attachments = {};
+
+		this._injections.attachments[key] = value;
+		
+	}
+
 	public addMetadata(metadata: ClientMetaData) {
 		if (this.closed) return;
 		
@@ -535,6 +580,47 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public createEventMonitor<CTX = unknown>(ctx?: CTX): ObservedClientEventMonitor<CTX> {
 		return new ObservedClientEventMonitor<CTX>(this, ctx ?? {} as CTX);
+	}
+
+	private _mergeInjections(sample: ClientSample): ClientSample {
+		if (this.closed) return sample;
+
+		if (this._injections.clientEvents) {
+			if (!sample.clientEvents) sample.clientEvents = [];
+			sample.clientEvents.push(...this._injections.clientEvents);
+			
+			this._injections.clientEvents = undefined;
+		}
+
+		if (this._injections.clientIssues) {
+			if (!sample.clientIssues) sample.clientIssues = [];
+			sample.clientIssues.push(...this._injections.clientIssues);
+			
+			this._injections.clientIssues = undefined;
+		}
+
+		if (this._injections.extensionStats) {
+			if (!sample.extensionStats) sample.extensionStats = [];
+			sample.extensionStats.push(...this._injections.extensionStats);
+			
+			this._injections.extensionStats = undefined;
+		}
+
+		if (this._injections.attachments) {
+			if (!sample.attachments) sample.attachments = {};
+			Object.assign(sample.attachments, this._injections.attachments);
+			
+			this._injections.attachments = undefined;
+		}
+
+		if (this._injections.clientMetaItems) {
+			if (!sample.clientMetaItems) sample.clientMetaItems = [];
+			sample.clientMetaItems.push(...this._injections.clientMetaItems);
+			
+			this._injections.clientMetaItems = undefined;
+		}
+
+		return sample;
 	}
 
 	// public resetSummaryMetrics() {
