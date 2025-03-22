@@ -9,6 +9,7 @@ import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater_';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater_';
+import { ObserverEventMonitor } from './ObserverEventMonitor';
 
 const logger = createLogger('Observer');
 
@@ -208,6 +209,10 @@ export class Observer extends EventEmitter {
 		this.totalRttLt300Measurements += call.deltaRttLt300Measurements;
 		this.totalRttGtOrEq300Measurements += call.deltaRttGtOrEq300Measurements;
 		this.totalClientIssues += call.deltaNumberOfIssues;
+	}
+
+	public createEventMonitor<CTX = unknown>(ctx?: CTX): ObserverEventMonitor<CTX> {
+		return new ObserverEventMonitor<CTX>(this, ctx ?? {} as CTX);
 	}
 
 	// public resetSummaryMetrics() {

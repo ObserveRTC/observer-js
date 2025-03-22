@@ -10,7 +10,6 @@ import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
-import { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
 
 const logger = createLogger('ObservedClient');
 
@@ -34,8 +33,9 @@ export type ObservedClientEvents = {
 	left: [];
 	usingturn: [boolean];
 	usermediaerror: [string];
+	extensionStats: [ExtensionStat];
+	clientEvent: [ClientEvent];
 
-	// do we need this?
 	newpeerconnection: [ObservedPeerConnection];
 };
 
@@ -471,8 +471,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				break;
 			}
-			
 		}
+		this.emit('clientEvent', event);
 	}
 
 	public injectMetaData(metaData: ClientMetaData) {
@@ -550,6 +550,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public addExtensionStats(stats: ExtensionStat) {
 		this.call.observer.emit('client-extension-stats', this, stats);
+		this.emit('extensionStats', stats);
 	}
 
 	private _updatePeerConnection(sample: PeerConnectionSample): ObservedPeerConnection | undefined {
@@ -576,10 +577,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		observedPeerConnection.accept(sample);
 
 		return observedPeerConnection;
-	}
-
-	public createEventMonitor<CTX = unknown>(ctx?: CTX): ObservedClientEventMonitor<CTX> {
-		return new ObservedClientEventMonitor<CTX>(this, ctx ?? {} as CTX);
 	}
 
 	private _mergeInjections(sample: ClientSample): ClientSample {
