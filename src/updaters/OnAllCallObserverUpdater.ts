@@ -7,6 +7,7 @@ export class OnAllCallObserverUpdater implements Updater {
 	public readonly description = 'Call Observer\'s update() method when all of the ObservedCalls are updated';
 	
 	private readonly _updatedCalls = new Set<string>();
+	public closed = false;
 
 	public constructor(
 		private observer: Observer
@@ -20,15 +21,22 @@ export class OnAllCallObserverUpdater implements Updater {
 	}
 
 	close(): void {
-		// do nothing, because we unsubscribe once close is emitted from observer
+		if (this.closed) return;
+		this.closed = true;
+
+		this._updatedCalls.clear();
 	}
 
 	private _onNewObservedCall(observedCall: ObservedCall) {
+		if (this.closed) return;
+		
 		const onUpdate = () => this._onObservedCallUpdated(observedCall);
 
 		observedCall.once('close', () => {
 			observedCall.off('update', onUpdate);
 			this._updatedCalls.delete(observedCall.callId);
+
+			this._updateIfEveryCallUpdated();
 		});
 		observedCall.on('update', onUpdate);
 	}
@@ -38,7 +46,12 @@ export class OnAllCallObserverUpdater implements Updater {
 
 		this._updatedCalls.add(observedCall.callId);
 
+		this._updateIfEveryCallUpdated();
+	}
+
+	private _updateIfEveryCallUpdated() {
 		if (this._updatedCalls.size < this.observer.observedCalls.size) return;
+		else if (this.closed) return;
 
 		this._updatedCalls.clear();
 		this.observer.update();

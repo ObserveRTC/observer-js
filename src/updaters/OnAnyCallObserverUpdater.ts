@@ -5,7 +5,8 @@ import { Updater } from './Updater';
 export class OnAnyCallObserverUpdater implements Updater {
 	public readonly name = 'OnAnyCallObserverUpdater';
 	public readonly description = 'Call Observer\'s update() method on any of the ObservedCall is updated';
-	
+	public closed = false;
+
 	public constructor(
 		private observver: Observer
 	) {
@@ -18,11 +19,19 @@ export class OnAnyCallObserverUpdater implements Updater {
 	}
 
 	close(): void {
+		if (this.closed) return;
+		this.closed = true;
 		// do nothing, because we unsubscribe once close is emitted from observer
 	}
 
 	private _onNewObservedCall(observedCall: ObservedCall) {
-		const onUpdate = () => this.observver.update();
+		if (this.closed) return;
+		
+		const onUpdate = () => {
+			if (this.closed) return;
+
+			this.observver.update();
+		};
 
 		observedCall.once('close', () => {
 			observedCall.off('update', onUpdate);

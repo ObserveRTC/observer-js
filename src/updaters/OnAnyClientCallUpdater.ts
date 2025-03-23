@@ -5,6 +5,7 @@ import { Updater } from './Updater';
 export class OnAnyClientCallUpdater implements Updater {
 	readonly name = 'OnAnyClientCallUpdater';
 	readonly description = 'Call the update() method of the ObservedCall when any of the client has been updated';
+	public closed = false;
 
 	public constructor(
 		private _observedCall: ObservedCall
@@ -18,11 +19,17 @@ export class OnAnyClientCallUpdater implements Updater {
 	}
 	
 	public close(): void {
-		// do nothing, as close once emitted unsubscription happened
+		if (this.closed) return;
+		this.closed = true;
 	}
 
 	private _onNewObservedClient(observedClient: ObservedClient) {
-		const onUpdate = () => this._observedCall.update();
+		if (this.closed) return;
+		
+		const onUpdate = () => {
+			if (this.closed) return;
+			this._observedCall.update();
+		};
 
 		observedClient.once('close', () => {
 			observedClient.off('update', onUpdate);
