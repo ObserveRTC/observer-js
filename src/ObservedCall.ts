@@ -10,6 +10,7 @@ import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
 import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
+import { ObservedCallEventMonitor } from './ObservedCallEventMonitor';
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
@@ -204,6 +205,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		}
 		
 		return result;
+	}
+
+	public createEventMonitor<CTX>(context: CTX): ObservedCallEventMonitor<CTX> {
+		return new ObservedCallEventMonitor(this, context);
 	}
 
 	public update() {

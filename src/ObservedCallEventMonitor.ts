@@ -13,12 +13,11 @@ import { ObservedMediaSource } from './ObservedMediaSource';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { Observer } from './Observer';
 import { ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 
-export class ObserverEventMonitor<Context> {
+export class ObservedCallEventMonitor<Context> {
 	public constructor(
-		public readonly observer: Observer,
+		public readonly call: ObservedCall,
 		public readonly context: Context,
 	) {
 		this._onPeerConnconnectionAdded = this._onPeerConnconnectionAdded.bind(this);
@@ -58,15 +57,10 @@ export class ObserverEventMonitor<Context> {
 		this._onClientRejoined = this._onClientRejoined.bind(this);
 		this._onClientExtensionStats = this._onClientExtensionStats.bind(this);
 
-		this.observer.once('close', () => {
-			this.observer.off('newcall', this._onCallAdded);
-		});
-		this.observer.on('newcall', this._onCallAdded);
+		this._onCallAdded(call);
 	}
 
 	// Public event handlers
-	public onCallAdded?: (call: ObservedCall, ctx: Context) => void;
-	public onCallRemoved?: (call: ObservedCall, ctx: Context) => void;
 	public onCallEmpty?: (call: ObservedCall, ctx: Context) => void;
 	public onCallNotEmpty?: (call: ObservedCall, ctx: Context) => void;
 	public onCallUpdated?: (call: ObservedCall, ctx: Context) => void;
@@ -138,14 +132,12 @@ export class ObserverEventMonitor<Context> {
 			call.off('not-empty', onCallNotEmpty);
 			call.off('update', onCallUpdated);
 
-			this.onCallRemoved?.(call, this.context);
 		});
 		call.on('newclient', this._onClientAdded);
 		call.on('empty', onCallEmpty);
 		call.on('not-empty', onCallNotEmpty);
 		call.on('update', onCallUpdated);
 		
-		this.onCallAdded?.(call, this.context);
 	}
 
 	private _onClientAdded(observedClient: ObservedClient) {
@@ -169,7 +161,6 @@ export class ObserverEventMonitor<Context> {
 			observedClient.off('rejoined', onClientJoined);
 			observedClient.off('usermediaerror', onUserMediaError);
 			observedClient.off('usingturn', onUsingTurn);
-			observedClient.off('extensionStats', onClientExtensionStats);
 			observedClient.off('update', onClientUpdated);
 			observedClient.off('clientEvent', onClientEvent);
 		

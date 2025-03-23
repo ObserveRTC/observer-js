@@ -7,9 +7,10 @@ import { ObservedTURN } from './ObservedTURN';
 import { Detectors } from './detectors/Detectors';
 import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
-import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater_';
-import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater_';
+import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater';
+import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater';
 import { ObserverEventMonitor } from './ObserverEventMonitor';
+import { MediasoupRemoteTrackResolver } from './utils/MediasoupRemoteTrackResolver';
 
 const logger = createLogger('Observer');
 
@@ -125,11 +126,14 @@ export class Observer extends EventEmitter {
 			settings.updatePolicy = this.config.defaultCallUpdatePolicy;
 			settings.updateIntervalInMs = this.config.defaultCallUpdateIntervalInMs;
 		}
-
 		const observedCall = new ObservedCall(settings, this);
 		const onCallUpdated = () => this._onObservedCallUpdated(observedCall);
 
 		if (this.observedCalls.has(observedCall.callId)) throw new Error(`Observed Call with id ${observedCall.callId} already exists`);
+
+		if (settings.remoteTrackResolvePolicy === 'mediasoup-sfu') {
+			observedCall.remoteTrackResolver = new MediasoupRemoteTrackResolver(observedCall);
+		}
 
 		observedCall.once('close', () => {
 			this.observedCalls.delete(observedCall.callId);
