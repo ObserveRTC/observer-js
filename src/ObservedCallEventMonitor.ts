@@ -1,6 +1,6 @@
 import { ObservedCall } from './ObservedCall';
 import { ObservedCertificate } from './ObservedCertificate';
-import { ObservedClient } from './ObservedClient';
+import { ObservedClient, ObservedClientEvents } from './ObservedClient';
 import { ObservedCodec } from './ObservedCodec';
 import { ObservedDataChannel } from './ObservedDataChannel';
 import { ObservedIceCandidate } from './ObservedIceCandidate';
@@ -13,7 +13,7 @@ import { ObservedMediaSource } from './ObservedMediaSource';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
+import { ClientEvent, ClientIssue, ClientMetaData, ClientSample, ExtensionStat } from './schema/ClientSample';
 
 export class ObservedCallEventMonitor<Context> {
 	public constructor(
@@ -75,7 +75,7 @@ export class ObservedCallEventMonitor<Context> {
 	public onClientLeft?: (client: ObservedClient, ctx: Context) => void;
 	public onClientUserMediaError?: (observedClient: ObservedClient, error: string, ctx: Context) => void;
 	public onClientUsingTurn?: (client: ObservedClient, usingTurn: boolean, ctx: Context) => void;
-	public onClientUpdated?: (client: ObservedClient, ctx: Context) => void;
+	public onClientUpdated?: (client: ObservedClient, sample: ClientSample, ctx: Context) => void;
 	public onClientEvent?: (client: ObservedClient, event: ClientEvent, ctx: Context) => void;
 
 	public onPeerConnectionAdded?: (peerConnection: ObservedPeerConnection, ctx: Context) => void;
@@ -149,7 +149,7 @@ export class ObservedCallEventMonitor<Context> {
 		const onClientExtensionStats = (extensionStats: ExtensionStat) => this._onClientExtensionStats(observedClient, extensionStats);
 		const onUsingTurn = (usingTurn: boolean) => this._onUsingTurn(observedClient, usingTurn);
 		const onUserMediaError = (error: string) => this._onUserMediaError(observedClient, error);
-		const onClientUpdated = () => this.onClientUpdated?.(observedClient, this.context);
+		const onClientUpdated = (...args: ObservedClientEvents['update']) => this.onClientUpdated?.(observedClient, args[0].sample, this.context);
 		const onClientEvent = (event: ClientEvent) => this.onClientEvent?.(observedClient, event, this.context);
 
 		observedClient.once('close', () => {
