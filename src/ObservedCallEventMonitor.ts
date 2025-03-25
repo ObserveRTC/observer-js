@@ -61,6 +61,7 @@ export class ObservedCallEventMonitor<Context> {
 	}
 
 	// Public event handlers
+	public onCallClosed?: (call: ObservedCall, ctx: Context) => void;
 	public onCallEmpty?: (call: ObservedCall, ctx: Context) => void;
 	public onCallNotEmpty?: (call: ObservedCall, ctx: Context) => void;
 	public onCallUpdated?: (call: ObservedCall, ctx: Context) => void;
@@ -131,6 +132,8 @@ export class ObservedCallEventMonitor<Context> {
 			call.off('empty', onCallEmpty);
 			call.off('not-empty', onCallNotEmpty);
 			call.off('update', onCallUpdated);
+
+			this.onCallClosed?.(call, this.context);
 
 		});
 		call.on('newclient', this._onClientAdded);
