@@ -25,11 +25,12 @@ export type ObserverEvents = {
 	'close': [],
 }
 
-export type ObserverConfig = {
+export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated' | 'update-on-interval',
 	updateIntervalInMs?: number,
 	defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'],
 	defaultCallUpdateIntervalInMs?: number,
+	appData?: AppData,
 }
 
 export declare interface Observer {
@@ -39,7 +40,7 @@ export declare interface Observer {
 	emit<U extends keyof ObserverEvents>(event: U, ...args: ObserverEvents[U]): boolean;
 }
 
-export class Observer extends EventEmitter {
+export class Observer<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly detectors: Detectors;
 
 	public readonly observedTURN = new ObservedTURN();
@@ -69,9 +70,10 @@ export class Observer extends EventEmitter {
 
 	private _timer?: ReturnType<typeof setInterval>;
 
-	public constructor(public readonly config: ObserverConfig = {
+	public constructor(public readonly config: ObserverConfig<AppData> = {
 		updatePolicy: 'update-when-all-call-updated',
 		updateIntervalInMs: undefined,
+		appData: {} as AppData,
 	}) {
 		super();
 		this.setMaxListeners(Infinity);
@@ -108,6 +110,10 @@ export class Observer extends EventEmitter {
 		}
 		
 		this.detectors = new Detectors();
+	}
+
+	public get appData() {
+		return this.config.appData;
 	}
 
 	public getObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCall<T> | undefined {
