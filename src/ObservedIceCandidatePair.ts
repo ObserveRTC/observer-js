@@ -8,7 +8,7 @@ export class ObservedIceCandidatePair implements IceCandidatePairStats {
 	transportId?: string | undefined;
 	localCandidateId?: string | undefined;
 	remoteCandidateId?: string | undefined;
-	state?: 'new' | 'inProgress' | 'failed' | 'succeeded' | undefined;
+	state?: 'new' | 'in-progress' | 'waiting' | 'failed' | 'succeeded' | undefined;
 	nominated?: boolean | undefined;
 	packetsSent?: number | undefined;
 	packetsReceived?: number | undefined;
