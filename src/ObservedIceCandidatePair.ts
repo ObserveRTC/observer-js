@@ -93,7 +93,7 @@ export class ObservedIceCandidatePair implements IceCandidatePairStats {
 		this.transportId = stats.transportId;
 		this.localCandidateId = stats.localCandidateId;
 		this.remoteCandidateId = stats.remoteCandidateId;
-		this.state = stats.state;
+		this.state = this._convertState(stats.state);
 		this.nominated = stats.nominated;
 		this.packetsSent = stats.packetsSent;
 		this.packetsReceived = stats.packetsReceived;
@@ -115,4 +115,20 @@ export class ObservedIceCandidatePair implements IceCandidatePairStats {
 		this.attachments = stats.attachments;
 	}
 
+	private _convertState(state: string | undefined) {
+		switch (state) {
+			case 'new':
+			case 'in-progress':
+			case 'waiting':
+			case 'failed':
+			case 'succeeded':
+				return state;
+			case 'cancelled':
+				return 'failed';
+			case 'inprogress':
+				return 'in-progress';
+			default:
+				return undefined;
+		}
+	}
 }
