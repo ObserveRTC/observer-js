@@ -644,11 +644,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedCertificate = new ObservedCertificate(stats.timestamp, stats.id, this);
 
+			observedCertificate.update(stats);
+
 			this.observedCertificates.set(stats.id, observedCertificate);
 			this.emit('added-certificate', observedCertificate);
+		} else {
+			observedCertificate.update(stats);
 		}
-
-		observedCertificate.update(stats);
 
 		return observedCertificate;
 	}
@@ -666,11 +668,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedCodec = new ObservedCodec(stats.timestamp, stats.id, stats.mimeType, this);
 
+			observedCodec.update(stats);
+			
 			this.observedCodecs.set(stats.id, observedCodec);
 			this.emit('added-codec', observedCodec);
+		} else {
+			observedCodec.update(stats);
 		}
-
-		observedCodec.update(stats);
 
 		return observedCodec;
 	}
@@ -688,11 +692,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedDataChannel = new ObservedDataChannel(stats.timestamp, stats.id, this);
 
+			observedDataChannel.update(stats);
+
 			this.observedDataChannels.set(stats.id, observedDataChannel);
 			this.emit('added-data-channel', observedDataChannel);
+		} else {
+			observedDataChannel.update(stats);
 		}
-
-		observedDataChannel.update(stats);
 
 		return observedDataChannel;
 	}
@@ -710,11 +716,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedIceCandidate = new ObservedIceCandidate(stats.timestamp, stats.id, this);
 
+			observedIceCandidate.update(stats);
+
 			this.observedIceCandidates.set(stats.id, observedIceCandidate);
 			this.emit('added-ice-candidate', observedIceCandidate);
+		} else {
+			observedIceCandidate.update(stats);
 		}
-
-		observedIceCandidate.update(stats);
 
 		return observedIceCandidate;
 	}
@@ -732,11 +740,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedIceCandidatePair = new ObservedIceCandidatePair(stats.timestamp, stats.id, this);
 
+			observedIceCandidatePair.update(stats);
+			
 			this.observedIceCandidatesPair.set(stats.id, observedIceCandidatePair);
 			this.emit('added-ice-candidate-pair', observedIceCandidatePair);
+		} else {
+			observedIceCandidatePair.update(stats);
 		}
-
-		observedIceCandidatePair.update(stats);
 
 		return observedIceCandidatePair;
 	}
@@ -754,11 +764,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedIceTransport = new ObservedIceTransport(stats.timestamp, stats.id, this);
 
+			observedIceTransport.update(stats);
+			
 			this.observedIceTransports.set(stats.id, observedIceTransport);
 			this.emit('added-ice-transport', observedIceTransport);
+		} else {
+			observedIceTransport.update(stats);
 		}
-
-		observedIceTransport.update(stats);
 
 		return observedIceTransport;
 	}
@@ -782,12 +794,14 @@ export class ObservedPeerConnection extends EventEmitter {
 				stats.trackIdentifier,
 				this
 			);
+			
+			observedInboundRtp.update(stats);
 
 			this.observedInboundRtps.set(stats.ssrc, observedInboundRtp);
 			this.emit('added-inbound-rtp', observedInboundRtp);
+		} else {
+			observedInboundRtp.update(stats);
 		}
-
-		observedInboundRtp.update(stats);
 
 		return observedInboundRtp;
 	}
@@ -816,11 +830,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				mediaPlayout,
 			);
 
+			observedInboundTrack.update(stats);
+			
 			this.observedInboundTracks.set(stats.id, observedInboundTrack);
 			this.emit('added-inbound-track', observedInboundTrack);
+		} else {
+			observedInboundTrack.update(stats);
 		}
-
-		observedInboundTrack.update(stats);
 
 		return observedInboundTrack;
 	}
@@ -843,11 +859,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				this
 			);
 
+			observedMediaPlayout.update(stats);
+
 			this.observedMediaPlayouts.set(stats.id, observedMediaPlayout);
 			this.emit('added-media-playout', observedMediaPlayout);
+		} else {
+			observedMediaPlayout.update(stats);
 		}
-
-		observedMediaPlayout.update(stats);
 
 		return observedMediaPlayout;
 	}
@@ -870,11 +888,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				this
 			);
 
+			observedMediaSource.update(stats);
+
 			this.observedMediaSources.set(stats.id, observedMediaSource);
 			this.emit('added-media-source', observedMediaSource);
+		} else {
+			observedMediaSource.update(stats);
 		}
-
-		observedMediaSource.update(stats);
 
 		return observedMediaSource;
 	}
@@ -898,11 +918,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				this
 			);
 
+			observedOutboundRtp.update(stats);
+
 			this.observedOutboundRtps.set(stats.ssrc, observedOutboundRtp);
 			this.emit('added-outbound-rtp', observedOutboundRtp);
+		} else {
+			observedOutboundRtp.update(stats);
 		}
-
-		observedOutboundRtp.update(stats);
 		
 		return observedOutboundRtp;
 	}
@@ -930,11 +952,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				observedMediaSource,
 			);
 
+			observedOutboundTrack.update(stats);
+
 			this.observedOutboundTracks.set(stats.id, observedOutboundTrack);
 			this.emit('added-outbound-track', observedOutboundTrack);
+		} else {
+			observedOutboundTrack.update(stats);
 		}
-
-		observedOutboundTrack.update(stats);
 
 		return observedOutboundTrack;
 	}
@@ -952,11 +976,13 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			observedPeerConnectionTransport = new ObservedPeerConnectionTransport(stats.timestamp, stats.id, this);
 
+			observedPeerConnectionTransport.update(stats);
+
 			this.observedPeerConnectionTransports.set(stats.id, observedPeerConnectionTransport);
 			this.emit('added-peer-connection-transport', observedPeerConnectionTransport);
+		} else {
+			observedPeerConnectionTransport.update(stats);
 		}
-
-		observedPeerConnectionTransport.update(stats);
 
 		return observedPeerConnectionTransport;
 	}
@@ -980,11 +1006,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				this
 			);
 
+			observedRemoteInboundRtp.update(stats);
+
 			this.observedRemoteInboundRtps.set(stats.ssrc, observedRemoteInboundRtp);
 			this.emit('added-remote-inbound-rtp', observedRemoteInboundRtp);
+		} else {
+			observedRemoteInboundRtp.update(stats);
 		}
-
-		observedRemoteInboundRtp.update(stats);
 
 		return observedRemoteInboundRtp;
 	}
@@ -1008,11 +1036,13 @@ export class ObservedPeerConnection extends EventEmitter {
 				this
 			);
 
+			observedRemoteOutboundRtp.update(stats);
+
 			this.observedRemoteOutboundRtps.set(stats.ssrc, observedRemoteOutboundRtp);
 			this.emit('added-remote-outbound-rtp', observedRemoteOutboundRtp);
+		} else {
+			observedRemoteOutboundRtp.update(stats);
 		}
-
-		observedRemoteOutboundRtp.update(stats);
 
 		return observedRemoteOutboundRtp;
 	}
