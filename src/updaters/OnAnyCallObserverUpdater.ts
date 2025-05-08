@@ -18,7 +18,7 @@ export class OnAnyCallObserverUpdater implements Updater {
 		this.observver.on('newcall', this._onNewObservedCall);
 	}
 
-	close(): void {
+	public close(): void {
 		if (this.closed) return;
 		this.closed = true;
 		// do nothing, because we unsubscribe once close is emitted from observer
