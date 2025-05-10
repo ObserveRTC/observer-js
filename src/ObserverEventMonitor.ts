@@ -63,10 +63,10 @@ export class ObserverEventMonitor<Context> {
 		this._onInboundTrackUpdated = this._onInboundTrackUpdated.bind(this);
 		this._onOutboundTrackUpdated = this._onOutboundTrackUpdated.bind(this);
 		this._onDataChannelUpdated = this._onDataChannelUpdated.bind(this);
-		this._onAddedIceTransportUpdated = this._onAddedIceTransportUpdated.bind(this);
-		this._onAddedIceCandidatePairUpdated = this._onAddedIceCandidatePairUpdated.bind(this);
-		this._onAddedMediaCodecUpdated = this._onAddedMediaCodecUpdated.bind(this);
-		this._onAddedMediaPlayoutUpdated = this._onAddedMediaPlayoutUpdated.bind(this);
+		this._onIceTransportUpdated = this._onIceTransportUpdated.bind(this);
+		this._onIceCandidatePairUpdated = this._onIceCandidatePairUpdated.bind(this);
+		this._onMediaCodecUpdated = this._onMediaCodecUpdated.bind(this);
+		this._onMediaPlayoutUpdated = this._onMediaPlayoutUpdated.bind(this);
 		this._onMediaSourceUpdated = this._onMediaSourceUpdated.bind(this);
 		this._onIceCandidateUpdated = this._onIceCandidateUpdated.bind(this);
 
@@ -129,7 +129,7 @@ export class ObserverEventMonitor<Context> {
 	
 	public onAddedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
 	public onRemovedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
-	public onAddedIceTransportUpdated?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
+	public onIceTransportUpdated?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
 	
 	public onIceCandidateAdded?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
 	public onIceCandidateRemoved?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
@@ -137,15 +137,15 @@ export class ObserverEventMonitor<Context> {
 	
 	public onAddedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
 	public onRemovedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
-	public onAddedIceCandidatePairUpdated?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
+	public onIceCandidatePairUpdated?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
 	
 	public onAddedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
 	public onRemovedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
-	public onAddedMediaCodecUpdated?: (codec: ObservedCodec, ctx: Context) => void;
+	public onMediaCodecUpdated?: (codec: ObservedCodec, ctx: Context) => void;
 	
 	public onAddedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
 	public onRemovedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
-	public onAddedMediaPlayoutUpdated?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
+	public onMediaPlayoutUpdated?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
 	
 	public onMediaSourceAdded?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
 	public onMediaSourceRemoved?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
@@ -252,7 +252,7 @@ export class ObserverEventMonitor<Context> {
 
 			peerConnection.off('added-ice-transport', this._onAddedIceTransport);
 			peerConnection.off('removed-ice-transport', this._onRemovedIceTransport);
-			peerConnection.off('updated-ice-transport', this._onAddedIceTransportUpdated);
+			peerConnection.off('updated-ice-transport', this._onIceTransportUpdated);
 
 			peerConnection.off('added-ice-candidate', this._onIceCandidateAdded);
 			peerConnection.off('removed-ice-candidate', this._onIceCandidateRemoved);
@@ -260,15 +260,15 @@ export class ObserverEventMonitor<Context> {
 
 			peerConnection.off('added-ice-candidate-pair', this._onAddedIceCandidatePair);
 			peerConnection.off('removed-ice-candidate-pair', this._onRemovedIceCandidatePair);
-			peerConnection.off('updated-ice-candidate-pair', this._onAddedIceCandidatePairUpdated);
+			peerConnection.off('updated-ice-candidate-pair', this._onIceCandidatePairUpdated);
 
 			peerConnection.off('added-codec', this._onAddedMediaCodec);
 			peerConnection.off('removed-codec', this._onRemovedMediaCodec);
-			peerConnection.off('updated-codec', this._onAddedMediaCodecUpdated);
+			peerConnection.off('updated-codec', this._onMediaCodecUpdated);
 
 			peerConnection.off('added-media-playout', this._onAddedMediaPlayout);
 			peerConnection.off('removed-media-playout', this._onRemovedMediaPlayout);
-			peerConnection.off('updated-media-playout', this._onAddedMediaPlayoutUpdated);
+			peerConnection.off('updated-media-playout', this._onMediaPlayoutUpdated);
 
 			peerConnection.off('added-media-source', this._onMediaSourceAdded);
 			peerConnection.off('removed-media-source', this._onMediaSourceRemoved);
@@ -308,7 +308,7 @@ export class ObserverEventMonitor<Context> {
 
 		peerConnection.on('added-ice-transport', this._onAddedIceTransport);
 		peerConnection.on('removed-ice-transport', this._onRemovedIceTransport);
-		peerConnection.on('updated-ice-transport', this._onAddedIceTransportUpdated);
+		peerConnection.on('updated-ice-transport', this._onIceTransportUpdated);
 
 		peerConnection.on('added-ice-candidate', this._onIceCandidateAdded);
 		peerConnection.on('removed-ice-candidate', this._onIceCandidateRemoved);
@@ -316,15 +316,15 @@ export class ObserverEventMonitor<Context> {
 
 		peerConnection.on('added-ice-candidate-pair', this._onAddedIceCandidatePair);
 		peerConnection.on('removed-ice-candidate-pair', this._onRemovedIceCandidatePair);
-		peerConnection.on('updated-ice-candidate-pair', this._onAddedIceCandidatePairUpdated);
+		peerConnection.on('updated-ice-candidate-pair', this._onIceCandidatePairUpdated);
 
 		peerConnection.on('added-codec', this._onAddedMediaCodec);
 		peerConnection.on('removed-codec', this._onRemovedMediaCodec);
-		peerConnection.on('updated-codec', this._onAddedMediaCodecUpdated);
+		peerConnection.on('updated-codec', this._onMediaCodecUpdated);
 
 		peerConnection.on('added-media-playout', this._onAddedMediaPlayout);
 		peerConnection.on('removed-media-playout', this._onRemovedMediaPlayout);
-		peerConnection.on('updated-media-playout', this._onAddedMediaPlayoutUpdated);
+		peerConnection.on('updated-media-playout', this._onMediaPlayoutUpdated);
 
 		peerConnection.on('added-media-source', this._onMediaSourceAdded);
 		peerConnection.on('removed-media-source', this._onMediaSourceRemoved);
@@ -424,8 +424,8 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedIceTransport?.(iceTransport, this.context);
 	}
 
-	private _onAddedIceTransportUpdated(iceTransport: ObservedIceTransport) {
-		this.onAddedIceTransport?.(iceTransport, this.context);
+	private _onIceTransportUpdated(iceTransport: ObservedIceTransport) {
+		this.onIceTransportUpdated?.(iceTransport, this.context);
 	}
 
 	private _onIceCandidateAdded(iceCandidate: ObservedIceCandidate) {
@@ -448,8 +448,8 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedIceCandidatePair?.(candidatePair, this.context);
 	}
 
-	private _onAddedIceCandidatePairUpdated(candidatePair: ObservedIceCandidatePair) {
-		this.onAddedIceCandidatePair?.(candidatePair, this.context);
+	private _onIceCandidatePairUpdated(candidatePair: ObservedIceCandidatePair) {
+		this.onIceCandidatePairUpdated?.(candidatePair, this.context);
 	}
 
 	private _onAddedMediaCodec(codec: ObservedCodec) {
@@ -460,8 +460,8 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedMediaCodec?.(codec, this.context);
 	}
 
-	private _onAddedMediaCodecUpdated(codec: ObservedCodec) {
-		this.onAddedMediaCodec?.(codec, this.context);
+	private _onMediaCodecUpdated(codec: ObservedCodec) {
+		this.onMediaCodecUpdated?.(codec, this.context);
 	}
 
 	private _onAddedMediaPlayout(mediaPlayout: ObservedMediaPlayout) {
@@ -472,8 +472,8 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedMediaPlayout?.(mediaPlayout, this.context);
 	}
 
-	private _onAddedMediaPlayoutUpdated(mediaPlayout: ObservedMediaPlayout) {
-		this.onAddedMediaPlayout?.(mediaPlayout, this.context);
+	private _onMediaPlayoutUpdated(mediaPlayout: ObservedMediaPlayout) {
+		this.onMediaPlayoutUpdated?.(mediaPlayout, this.context);
 	}
 
 	private _onMediaSourceAdded(mediaSource: ObservedMediaSource) {
