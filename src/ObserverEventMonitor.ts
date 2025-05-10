@@ -57,6 +57,18 @@ export class ObserverEventMonitor<Context> {
 		this._onCallAdded = this._onCallAdded.bind(this);
 		this._onClientRejoined = this._onClientRejoined.bind(this);
 		this._onClientExtensionStats = this._onClientExtensionStats.bind(this);
+		this._onCertificateUpdated = this._onCertificateUpdated.bind(this);
+		this._onInboundRtpUpdated = this._onInboundRtpUpdated.bind(this);
+		this._onOutboundRtpUpdated = this._onOutboundRtpUpdated.bind(this);
+		this._onInboundTrackUpdated = this._onInboundTrackUpdated.bind(this);
+		this._onOutboundTrackUpdated = this._onOutboundTrackUpdated.bind(this);
+		this._onDataChannelUpdated = this._onDataChannelUpdated.bind(this);
+		this._onAddedIceTransportUpdated = this._onAddedIceTransportUpdated.bind(this);
+		this._onAddedIceCandidatePairUpdated = this._onAddedIceCandidatePairUpdated.bind(this);
+		this._onAddedMediaCodecUpdated = this._onAddedMediaCodecUpdated.bind(this);
+		this._onAddedMediaPlayoutUpdated = this._onAddedMediaPlayoutUpdated.bind(this);
+		this._onMediaSourceUpdated = this._onMediaSourceUpdated.bind(this);
+		this._onIceCandidateUpdated = this._onIceCandidateUpdated.bind(this);
 
 		this.observer.once('close', () => {
 			this.observer.off('newcall', this._onCallAdded);
@@ -93,39 +105,51 @@ export class ObserverEventMonitor<Context> {
 
 	public onCertificateAdded?: (certificate: ObservedCertificate, ctx: Context) => void;
 	public onCertificateRemoved?: (certificate: ObservedCertificate, ctx: Context) => void;
+	public onCertificateUpdated?: (certificate: ObservedCertificate, ctx: Context) => void;
 	
 	public onInboundTrackAdded?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
 	public onInboundTrackRemoved?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
+	public onInboundTrackUpdated?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
 	
 	public onOutboundTrackAdded?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
 	public onOutboundTrackRemoved?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
+	public onOutboundTrackUpdated?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
 	
 	public onInboundRtpAdded?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
 	public onInboundRtpRemoved?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
+	public onInboundRtpUpdated?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
 	
 	public onOutboundRtpAdded?: (outboundRtp: ObservedOutboundRtp, ctx: Context) => void;
 	public onOutboundRtpRemoved?: (outboundRtp: ObservedOutboundRtp, ctx: Context) => void;
+	public onOutboundRtpUpdated?: (outboundRtp: ObservedOutboundRtp, ctx: Context) => void;
 	
 	public onDataChannelAdded?: (dataChannel: ObservedDataChannel, ctx: Context) => void;
 	public onDataChannelRemoved?: (dataChannel: ObservedDataChannel, ctx: Context) => void;
+	public onDataChannelUpdated?: (dataChannel: ObservedDataChannel, ctx: Context) => void;
 	
 	public onAddedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
 	public onRemovedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
+	public onAddedIceTransportUpdated?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
 	
 	public onIceCandidateAdded?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
 	public onIceCandidateRemoved?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
+	public onIceCandidateUpdated?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
 	
 	public onAddedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
 	public onRemovedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
+	public onAddedIceCandidatePairUpdated?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
 	
 	public onAddedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
 	public onRemovedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
+	public onAddedMediaCodecUpdated?: (codec: ObservedCodec, ctx: Context) => void;
 	
 	public onAddedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
 	public onRemovedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
+	public onAddedMediaPlayoutUpdated?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
 	
 	public onMediaSourceAdded?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
 	public onMediaSourceRemoved?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
+	public onMediaSourceUpdated?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
 
 	private _onCallAdded(call: ObservedCall) {
 		const onCallEmpty = () => this.onCallEmpty?.(call, this.context);
@@ -204,28 +228,52 @@ export class ObserverEventMonitor<Context> {
 		peerConnection.once('close', () => {
 			peerConnection.off('added-certificate', this._onCertificateAdded);
 			peerConnection.off('removed-certificate', this._onCertificateRemoved);
+			peerConnection.off('updated-certificate', this._onCertificateUpdated);
+
 			peerConnection.off('added-inbound-track', this._onInboundTrackAdded);
 			peerConnection.off('removed-inbound-track', this._onInboundTrackRemoved);
+			peerConnection.off('updated-inbound-track', this._onInboundTrackUpdated);
+
 			peerConnection.off('added-outbound-track', this._onOutboundTrackAdded);
 			peerConnection.off('removed-outbound-track', this._onOutboundTrackRemoved);
+			peerConnection.off('updated-outbound-track', this._onOutboundTrackUpdated);
+
 			peerConnection.off('added-inbound-rtp', this._onInboundRtpAdded);
 			peerConnection.off('removed-inbound-rtp', this._onInboundRtpRemoved);
+			peerConnection.off('updated-inbound-rtp', this._onInboundRtpUpdated);
+
 			peerConnection.off('added-outbound-rtp', this._onOutboundRtpAdded);
 			peerConnection.off('removed-outbound-rtp', this._onOutboundRtpRemoved);
+			peerConnection.off('updated-outbound-rtp', this._onOutboundRtpUpdated);
+
 			peerConnection.off('added-data-channel', this._onDataChannelAdded);
 			peerConnection.off('removed-data-channel', this._onDataChannelRemoved);
+			peerConnection.off('updated-data-channel', this._onDataChannelUpdated);
+
 			peerConnection.off('added-ice-transport', this._onAddedIceTransport);
 			peerConnection.off('removed-ice-transport', this._onRemovedIceTransport);
+			peerConnection.off('updated-ice-transport', this._onAddedIceTransportUpdated);
+
 			peerConnection.off('added-ice-candidate', this._onIceCandidateAdded);
 			peerConnection.off('removed-ice-candidate', this._onIceCandidateRemoved);
+			peerConnection.off('updated-ice-candidate', this._onIceCandidateUpdated);
+
 			peerConnection.off('added-ice-candidate-pair', this._onAddedIceCandidatePair);
 			peerConnection.off('removed-ice-candidate-pair', this._onRemovedIceCandidatePair);
+			peerConnection.off('updated-ice-candidate-pair', this._onAddedIceCandidatePairUpdated);
+
 			peerConnection.off('added-codec', this._onAddedMediaCodec);
 			peerConnection.off('removed-codec', this._onRemovedMediaCodec);
+			peerConnection.off('updated-codec', this._onAddedMediaCodecUpdated);
+
 			peerConnection.off('added-media-playout', this._onAddedMediaPlayout);
 			peerConnection.off('removed-media-playout', this._onRemovedMediaPlayout);
+			peerConnection.off('updated-media-playout', this._onAddedMediaPlayoutUpdated);
+
 			peerConnection.off('added-media-source', this._onMediaSourceAdded);
 			peerConnection.off('removed-media-source', this._onMediaSourceRemoved);
+			peerConnection.off('updated-media-source', this._onMediaSourceUpdated);
+
 			peerConnection.off('selectedcandidatepair', onSelectedCandidatePairChanged);
 			peerConnection.off('icegatheringstatechange', onIceGatheringStateChange);
 			peerConnection.off('iceconnectionstatechange', onIceConnectionStateChange);
@@ -236,28 +284,52 @@ export class ObserverEventMonitor<Context> {
         
 		peerConnection.on('added-certificate', this._onCertificateAdded);
 		peerConnection.on('removed-certificate', this._onCertificateRemoved);
+		peerConnection.on('updated-certificate', this._onCertificateUpdated);
+
 		peerConnection.on('added-inbound-track', this._onInboundTrackAdded);
 		peerConnection.on('removed-inbound-track', this._onInboundTrackRemoved);
+		peerConnection.on('updated-inbound-track', this._onInboundTrackUpdated);
+
 		peerConnection.on('added-outbound-track', this._onOutboundTrackAdded);
 		peerConnection.on('removed-outbound-track', this._onOutboundTrackRemoved);
+		peerConnection.on('updated-outbound-track', this._onOutboundTrackUpdated);
+
 		peerConnection.on('added-inbound-rtp', this._onInboundRtpAdded);
 		peerConnection.on('removed-inbound-rtp', this._onInboundRtpRemoved);
+		peerConnection.on('updated-inbound-rtp', this._onInboundRtpUpdated);
+
 		peerConnection.on('added-outbound-rtp', this._onOutboundRtpAdded);
 		peerConnection.on('removed-outbound-rtp', this._onOutboundRtpRemoved);
+		peerConnection.on('updated-outbound-rtp', this._onOutboundRtpUpdated);
+
 		peerConnection.on('added-data-channel', this._onDataChannelAdded);
 		peerConnection.on('removed-data-channel', this._onDataChannelRemoved);
+		peerConnection.on('updated-data-channel', this._onDataChannelUpdated);
+
 		peerConnection.on('added-ice-transport', this._onAddedIceTransport);
 		peerConnection.on('removed-ice-transport', this._onRemovedIceTransport);
+		peerConnection.on('updated-ice-transport', this._onAddedIceTransportUpdated);
+
 		peerConnection.on('added-ice-candidate', this._onIceCandidateAdded);
 		peerConnection.on('removed-ice-candidate', this._onIceCandidateRemoved);
+		peerConnection.on('updated-ice-candidate', this._onIceCandidateUpdated);
+
 		peerConnection.on('added-ice-candidate-pair', this._onAddedIceCandidatePair);
 		peerConnection.on('removed-ice-candidate-pair', this._onRemovedIceCandidatePair);
+		peerConnection.on('updated-ice-candidate-pair', this._onAddedIceCandidatePairUpdated);
+
 		peerConnection.on('added-codec', this._onAddedMediaCodec);
 		peerConnection.on('removed-codec', this._onRemovedMediaCodec);
+		peerConnection.on('updated-codec', this._onAddedMediaCodecUpdated);
+
 		peerConnection.on('added-media-playout', this._onAddedMediaPlayout);
 		peerConnection.on('removed-media-playout', this._onRemovedMediaPlayout);
+		peerConnection.on('updated-media-playout', this._onAddedMediaPlayoutUpdated);
+
 		peerConnection.on('added-media-source', this._onMediaSourceAdded);
 		peerConnection.on('removed-media-source', this._onMediaSourceRemoved);
+		peerConnection.on('updated-media-source', this._onMediaSourceUpdated);
+		
 		peerConnection.on('selectedcandidatepair', onSelectedCandidatePairChanged);
 		peerConnection.on('icegatheringstatechange', onIceGatheringStateChange);
 		peerConnection.on('iceconnectionstatechange', onIceConnectionStateChange);
@@ -280,12 +352,20 @@ export class ObserverEventMonitor<Context> {
 		this.onCertificateRemoved?.(certificate, this.context);
 	}
 
+	private _onCertificateUpdated(certificate: ObservedCertificate) {
+		this.onCertificateUpdated?.(certificate, this.context);
+	}
+
 	private _onInboundTrackAdded(inboundTrack: ObservedInboundTrack) {
 		this.onInboundTrackAdded?.(inboundTrack, this.context);
 	}
 
 	private _onInboundTrackRemoved(inboundTrack: ObservedInboundTrack) {
 		this.onInboundTrackRemoved?.(inboundTrack, this.context);
+	}
+
+	private _onInboundTrackUpdated(inboundTrack: ObservedInboundTrack) {
+		this.onInboundTrackUpdated?.(inboundTrack, this.context);
 	}
 
 	private _onOutboundTrackAdded(outboundTrack: ObservedOutboundTrack) {
@@ -296,12 +376,20 @@ export class ObserverEventMonitor<Context> {
 		this.onOutboundTrackRemoved?.(outboundTrack, this.context);
 	}
 
+	private _onOutboundTrackUpdated(outboundTrack: ObservedOutboundTrack) {
+		this.onOutboundTrackUpdated?.(outboundTrack, this.context);
+	}
+
 	private _onInboundRtpAdded(inboundRtp: ObservedInboundRtp) {
 		this.onInboundRtpAdded?.(inboundRtp, this.context);
 	}
 
 	private _onInboundRtpRemoved(inboundRtp: ObservedInboundRtp) {
 		this.onInboundRtpRemoved?.(inboundRtp, this.context);
+	}
+
+	private _onInboundRtpUpdated(inboundRtp: ObservedInboundRtp) {
+		this.onInboundRtpUpdated?.(inboundRtp, this.context);
 	}
 
 	private _onOutboundRtpAdded(outboundRtp: ObservedOutboundRtp) {
@@ -312,12 +400,20 @@ export class ObserverEventMonitor<Context> {
 		this.onOutboundRtpRemoved?.(outboundRtp, this.context);
 	}
 
+	private _onOutboundRtpUpdated(outboundRtp: ObservedOutboundRtp) {
+		this.onOutboundRtpUpdated?.(outboundRtp, this.context);
+	}
+
 	private _onDataChannelAdded(dataChannel: ObservedDataChannel) {
 		this.onDataChannelAdded?.(dataChannel, this.context);
 	}
 
 	private _onDataChannelRemoved(dataChannel: ObservedDataChannel) {
 		this.onDataChannelRemoved?.(dataChannel, this.context);
+	}
+
+	private _onDataChannelUpdated(dataChannel: ObservedDataChannel) {
+		this.onDataChannelUpdated?.(dataChannel, this.context);
 	}
 
 	private _onAddedIceTransport(iceTransport: ObservedIceTransport) {
@@ -328,12 +424,20 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedIceTransport?.(iceTransport, this.context);
 	}
 
+	private _onAddedIceTransportUpdated(iceTransport: ObservedIceTransport) {
+		this.onAddedIceTransport?.(iceTransport, this.context);
+	}
+
 	private _onIceCandidateAdded(iceCandidate: ObservedIceCandidate) {
 		this.onIceCandidateAdded?.(iceCandidate, this.context);
 	}
 
 	private _onIceCandidateRemoved(iceCandidate: ObservedIceCandidate) {
 		this.onIceCandidateRemoved?.(iceCandidate, this.context);
+	}
+
+	private _onIceCandidateUpdated(iceCandidate: ObservedIceCandidate) {
+		this.onIceCandidateUpdated?.(iceCandidate, this.context);
 	}
 
 	private _onAddedIceCandidatePair(candidatePair: ObservedIceCandidatePair) {
@@ -344,12 +448,20 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedIceCandidatePair?.(candidatePair, this.context);
 	}
 
+	private _onAddedIceCandidatePairUpdated(candidatePair: ObservedIceCandidatePair) {
+		this.onAddedIceCandidatePair?.(candidatePair, this.context);
+	}
+
 	private _onAddedMediaCodec(codec: ObservedCodec) {
 		this.onAddedMediaCodec?.(codec, this.context);
 	}
 
 	private _onRemovedMediaCodec(codec: ObservedCodec) {
 		this.onRemovedMediaCodec?.(codec, this.context);
+	}
+
+	private _onAddedMediaCodecUpdated(codec: ObservedCodec) {
+		this.onAddedMediaCodec?.(codec, this.context);
 	}
 
 	private _onAddedMediaPlayout(mediaPlayout: ObservedMediaPlayout) {
@@ -360,12 +472,20 @@ export class ObserverEventMonitor<Context> {
 		this.onRemovedMediaPlayout?.(mediaPlayout, this.context);
 	}
 
+	private _onAddedMediaPlayoutUpdated(mediaPlayout: ObservedMediaPlayout) {
+		this.onAddedMediaPlayout?.(mediaPlayout, this.context);
+	}
+
 	private _onMediaSourceAdded(mediaSource: ObservedMediaSource) {
 		this.onMediaSourceAdded?.(mediaSource, this.context);
 	}
 	
 	private _onMediaSourceRemoved(mediaSource: ObservedMediaSource) {
 		this.onMediaSourceRemoved?.(mediaSource, this.context);
+	}
+
+	private _onMediaSourceUpdated(mediaSource: ObservedMediaSource) {
+		this.onMediaSourceUpdated?.(mediaSource, this.context);
 	}
 
 	private _onClientIssue(observedClent: ObservedClient, issue: ClientIssue) {

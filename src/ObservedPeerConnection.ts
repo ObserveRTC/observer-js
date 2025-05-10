@@ -72,6 +72,21 @@ export type ObservedPeerConnectionEvents = {
 	'removed-peer-connection-transport': [ObservedPeerConnectionTransport];
 	'removed-remote-inbound-rtp': [ObservedRemoteInboundRtp];
 	'removed-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
+	'updated-inbound-rtp': [ObservedInboundRtp];
+	'updated-outbound-rtp': [ObservedOutboundRtp];
+	'updated-inbound-track': [ObservedInboundTrack];
+	'updated-outbound-track': [ObservedOutboundTrack];
+	'updated-ice-candidate-pair': [ObservedIceCandidatePair];
+	'updated-ice-transport': [ObservedIceTransport];
+	'updated-peer-connection-transport': [ObservedPeerConnectionTransport];
+	'updated-media-source': [ObservedMediaSource];
+	'updated-media-playout': [ObservedMediaPlayout];
+	'updated-data-channel': [ObservedDataChannel];
+	'updated-ice-candidate': [ObservedIceCandidate];
+	'updated-certificate': [ObservedCertificate];
+	'updated-codec': [ObservedCodec];
+	'updated-remote-inbound-rtp': [ObservedRemoteInboundRtp];
+	'updated-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
 	'update': [],
 	close: [];
 };
@@ -650,6 +665,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-certificate', observedCertificate);
 		} else {
 			observedCertificate.update(stats);
+			this.emit('updated-certificate', observedCertificate);
 		}
 
 		return observedCertificate;
@@ -674,6 +690,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-codec', observedCodec);
 		} else {
 			observedCodec.update(stats);
+			this.emit('updated-codec', observedCodec);
 		}
 
 		return observedCodec;
@@ -698,6 +715,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-data-channel', observedDataChannel);
 		} else {
 			observedDataChannel.update(stats);
+			this.emit('updated-data-channel', observedDataChannel);
 		}
 
 		return observedDataChannel;
@@ -722,6 +740,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-ice-candidate', observedIceCandidate);
 		} else {
 			observedIceCandidate.update(stats);
+			this.emit('updated-ice-candidate', observedIceCandidate);
 		}
 
 		return observedIceCandidate;
@@ -746,6 +765,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-ice-candidate-pair', observedIceCandidatePair);
 		} else {
 			observedIceCandidatePair.update(stats);
+			this.emit('updated-ice-candidate-pair', observedIceCandidatePair);
 		}
 
 		return observedIceCandidatePair;
@@ -770,6 +790,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-ice-transport', observedIceTransport);
 		} else {
 			observedIceTransport.update(stats);
+			this.emit('updated-ice-transport', observedIceTransport);
 		}
 
 		return observedIceTransport;
@@ -801,6 +822,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-inbound-rtp', observedInboundRtp);
 		} else {
 			observedInboundRtp.update(stats);
+			this.emit('updated-inbound-rtp', observedInboundRtp);
 		}
 
 		return observedInboundRtp;
@@ -836,6 +858,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-inbound-track', observedInboundTrack);
 		} else {
 			observedInboundTrack.update(stats);
+			this.emit('updated-inbound-track', observedInboundTrack);
 		}
 
 		return observedInboundTrack;
@@ -865,6 +888,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-media-playout', observedMediaPlayout);
 		} else {
 			observedMediaPlayout.update(stats);
+			this.emit('updated-media-playout', observedMediaPlayout);
 		}
 
 		return observedMediaPlayout;
@@ -894,6 +918,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-media-source', observedMediaSource);
 		} else {
 			observedMediaSource.update(stats);
+			this.emit('updated-media-source', observedMediaSource);
 		}
 
 		return observedMediaSource;
@@ -924,6 +949,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-outbound-rtp', observedOutboundRtp);
 		} else {
 			observedOutboundRtp.update(stats);
+			this.emit('updated-outbound-rtp', observedOutboundRtp);
 		}
 		
 		return observedOutboundRtp;
@@ -958,6 +984,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-outbound-track', observedOutboundTrack);
 		} else {
 			observedOutboundTrack.update(stats);
+			this.emit('updated-outbound-track', observedOutboundTrack);
 		}
 
 		return observedOutboundTrack;
@@ -982,6 +1009,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-peer-connection-transport', observedPeerConnectionTransport);
 		} else {
 			observedPeerConnectionTransport.update(stats);
+			this.emit('updated-peer-connection-transport', observedPeerConnectionTransport);
 		}
 
 		return observedPeerConnectionTransport;
@@ -1012,6 +1040,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-remote-inbound-rtp', observedRemoteInboundRtp);
 		} else {
 			observedRemoteInboundRtp.update(stats);
+			this.emit('updated-remote-inbound-rtp', observedRemoteInboundRtp);
 		}
 
 		return observedRemoteInboundRtp;
@@ -1042,6 +1071,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			this.emit('added-remote-outbound-rtp', observedRemoteOutboundRtp);
 		} else {
 			observedRemoteOutboundRtp.update(stats);
+			this.emit('updated-remote-outbound-rtp', observedRemoteOutboundRtp);
 		}
 
 		return observedRemoteOutboundRtp;
