@@ -128,6 +128,10 @@ export class ObservedPeerConnection extends EventEmitter {
 	public closedAt?: number;
 	public updated = Date.now();
 
+	public connectionState?: string;
+	public iceConnectionState?: string;
+	public iceGatheringState?: string;
+
 	public availableIncomingBitrate = 0;
 	public availableOutgoingBitrate = 0;
 	public totalInboundPacketsLost = 0;

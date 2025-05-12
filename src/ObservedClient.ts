@@ -381,7 +381,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received PEER_CONNECTION_OPENED event without a corresponding observedPeerConnection', event);
+						logger.warn('Received PEER_CONNECTION_OPENED event without a corresponding observedPeerConnection: %o', event);
 					}
 					
 				}
@@ -398,7 +398,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received PEER_CONNECTION_CLOSED event without a corresponding observedPeerConnection', event);
+						logger.warn('Received PEER_CONNECTION_CLOSED event without a corresponding observedPeerConnection: %o', event);
 					}
 				}
 				break;
@@ -415,7 +415,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received MEDIA_TRACK_ADDED event without a corresponding observedPeerConnection or observedTrack', event);
+						logger.warn('Received MEDIA_TRACK_ADDED event without a corresponding observedPeerConnection or observedTrack: %o', event);
 					}
 				}
 				break;
@@ -432,7 +432,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received MEDIA_TRACK_REMOVED event without a corresponding observedPeerConnection or observedTrack', event);
+						logger.warn('Received MEDIA_TRACK_REMOVED event without a corresponding observedPeerConnection or observedTrack: %o', event);
 					}
 				}
 				break;
@@ -449,7 +449,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received DATA_CHANNEL_OPENED event without a corresponding observedPeerConnection or observedDataChannel', event);
+						logger.warn('Received DATA_CHANNEL_OPENED event without a corresponding observedPeerConnection or observedDataChannel: %o', event);
 					}
 				}
 				break;
@@ -466,7 +466,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received DATA_CHANNEL_CLOSE event without a corresponding observedPeerConnection or observedDataChannel', event);
+						logger.warn('Received DATA_CHANNEL_CLOSE event without a corresponding observedPeerConnection or observedDataChannel: %o', event);
 					}
 				}
 				break;
@@ -490,7 +490,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received MEDIA_TRACK_MUTED event without a corresponding observedPeerConnection or observedTrack', event);
+						logger.warn('Received MEDIA_TRACK_MUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
 					}
 				}
 
@@ -515,12 +515,70 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
-						logger.warn('Received MEDIA_TRACK_UNMUTED event without a corresponding observedPeerConnection or observedTrack', event);
+						logger.warn('Received MEDIA_TRACK_UNMUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.ICE_CONNECTION_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.iceConnectionState && typeof payload.iceConnectionState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.iceConnectionState = payload.iceConnectionState;
+						observedPeerConnection.emit('iceconnectionstatechange', {
+							state: payload.iceConnectionState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received ICE_CONNECTION_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.ICE_GATHERING_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.iceGatheringState && typeof payload.iceGatheringState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.iceGatheringState = payload.iceGatheringState;
+						observedPeerConnection.emit('icegatheringstatechange', {
+							state: payload.iceGatheringState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received ICE_GATHERING_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.PEER_CONNECTION_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.peerConnectionState && typeof payload.peerConnectionState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.connectionState = payload.peerConnectionState;
+						observedPeerConnection.emit('connectionstatechange', {
+							state: payload.peerConnectionState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
 					}
 				}
 				break;
 			}
 		}
+		
 		this.emit('clientEvent', event);
 	}
 
