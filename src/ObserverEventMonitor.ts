@@ -29,8 +29,13 @@ export class ObserverEventMonitor<Context> {
 		this._onInboundTrackRemoved = this._onInboundTrackRemoved.bind(this);
 		this._onOutboundTrackAdded = this._onOutboundTrackAdded.bind(this);
 		this._onOutboundTrackRemoved = this._onOutboundTrackRemoved.bind(this);
+		this._onOutboundTrackMuted = this._onOutboundTrackMuted.bind(this);
+		this._onOutboundTrackUnmuted = this._onOutboundTrackUnmuted.bind(this);
 		this._onInboundRtpAdded = this._onInboundRtpAdded.bind(this);
 		this._onInboundRtpRemoved = this._onInboundRtpRemoved.bind(this);
+		this._onInboundRtpUpdated = this._onInboundRtpUpdated.bind(this);
+		this._onOutboundTrackUpdated = this._onOutboundTrackUpdated.bind(this);
+		this._onInboundTrackUpdated = this._onInboundTrackUpdated.bind(this);
 		this._onOutboundRtpAdded = this._onOutboundRtpAdded.bind(this);
 		this._onOutboundRtpRemoved = this._onOutboundRtpRemoved.bind(this);
 		this._onDataChannelAdded = this._onDataChannelAdded.bind(this);
@@ -110,10 +115,14 @@ export class ObserverEventMonitor<Context> {
 	public onInboundTrackAdded?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
 	public onInboundTrackRemoved?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
 	public onInboundTrackUpdated?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
+	public onInboundTrackMuted?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
+	public onInboundTrackUnmuted?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
 	
 	public onOutboundTrackAdded?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
 	public onOutboundTrackRemoved?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
 	public onOutboundTrackUpdated?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
+	public onOutboundTrackMuted?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
+	public onOutboundTrackUnmuted?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
 	
 	public onInboundRtpAdded?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
 	public onInboundRtpRemoved?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
@@ -233,10 +242,14 @@ export class ObserverEventMonitor<Context> {
 			peerConnection.off('added-inbound-track', this._onInboundTrackAdded);
 			peerConnection.off('removed-inbound-track', this._onInboundTrackRemoved);
 			peerConnection.off('updated-inbound-track', this._onInboundTrackUpdated);
+			peerConnection.off('muted-inbound-track', this._onInboundTrackMuted);
+			peerConnection.off('unmuted-inbound-track', this._onInboundTrackUnmuted);
 
 			peerConnection.off('added-outbound-track', this._onOutboundTrackAdded);
 			peerConnection.off('removed-outbound-track', this._onOutboundTrackRemoved);
 			peerConnection.off('updated-outbound-track', this._onOutboundTrackUpdated);
+			peerConnection.off('muted-outbound-track', this._onOutboundTrackMuted);
+			peerConnection.off('unmuted-outbound-track', this._onOutboundTrackUnmuted);
 
 			peerConnection.off('added-inbound-rtp', this._onInboundRtpAdded);
 			peerConnection.off('removed-inbound-rtp', this._onInboundRtpRemoved);
@@ -289,10 +302,14 @@ export class ObserverEventMonitor<Context> {
 		peerConnection.on('added-inbound-track', this._onInboundTrackAdded);
 		peerConnection.on('removed-inbound-track', this._onInboundTrackRemoved);
 		peerConnection.on('updated-inbound-track', this._onInboundTrackUpdated);
+		peerConnection.on('muted-inbound-track', this._onInboundTrackMuted);
+		peerConnection.on('unmuted-inbound-track', this._onInboundTrackUnmuted);
 
 		peerConnection.on('added-outbound-track', this._onOutboundTrackAdded);
 		peerConnection.on('removed-outbound-track', this._onOutboundTrackRemoved);
 		peerConnection.on('updated-outbound-track', this._onOutboundTrackUpdated);
+		peerConnection.on('muted-outbound-track', this._onOutboundTrackMuted);
+		peerConnection.on('unmuted-outbound-track', this._onOutboundTrackUnmuted);
 
 		peerConnection.on('added-inbound-rtp', this._onInboundRtpAdded);
 		peerConnection.on('removed-inbound-rtp', this._onInboundRtpRemoved);
@@ -368,6 +385,14 @@ export class ObserverEventMonitor<Context> {
 		this.onInboundTrackUpdated?.(inboundTrack, this.context);
 	}
 
+	private _onOutboundTrackMuted(outboundTrack: ObservedOutboundTrack) {
+		this.onOutboundTrackMuted?.(outboundTrack, this.context);
+	}
+
+	private _onOutboundTrackUnmuted(outboundTrack: ObservedOutboundTrack) {
+		this.onOutboundTrackUnmuted?.(outboundTrack, this.context);
+	}
+
 	private _onOutboundTrackAdded(outboundTrack: ObservedOutboundTrack) {
 		this.onOutboundTrackAdded?.(outboundTrack, this.context);
 	}
@@ -378,6 +403,14 @@ export class ObserverEventMonitor<Context> {
 
 	private _onOutboundTrackUpdated(outboundTrack: ObservedOutboundTrack) {
 		this.onOutboundTrackUpdated?.(outboundTrack, this.context);
+	}
+
+	private _onInboundTrackMuted(inboundTrack: ObservedInboundTrack) {
+		this.onInboundTrackMuted?.(inboundTrack, this.context);
+	}
+
+	private _onInboundTrackUnmuted(inboundTrack: ObservedInboundTrack) {
+		this.onInboundTrackUnmuted?.(inboundTrack, this.context);
 	}
 
 	private _onInboundRtpAdded(inboundRtp: ObservedInboundRtp) {

@@ -87,6 +87,11 @@ export type ObservedPeerConnectionEvents = {
 	'updated-codec': [ObservedCodec];
 	'updated-remote-inbound-rtp': [ObservedRemoteInboundRtp];
 	'updated-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
+	'muted-inbound-track': [ObservedInboundTrack];
+	'muted-outbound-track': [ObservedOutboundTrack];
+	'unmuted-inbound-track': [ObservedInboundTrack];
+	'unmuted-outbound-track': [ObservedOutboundTrack];
+
 	'update': [],
 	close: [];
 };

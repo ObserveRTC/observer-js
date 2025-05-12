@@ -471,6 +471,55 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				break;
 			}
+			case ClientEventTypes.MEDIA_TRACK_MUTED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedPeerConnection) {
+						if (observedInboundTrack) {
+							observedInboundTrack.muted = true;
+							observedPeerConnection?.emit('muted-inbound-track', observedInboundTrack);
+						} else if (observedOutboundTrack) {
+							observedOutboundTrack.muted = true;
+							observedPeerConnection?.emit('muted-outbound-track', observedOutboundTrack);
+						}
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_MUTED event without a corresponding observedPeerConnection or observedTrack', event);
+					}
+				}
+
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_UNMUTED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedPeerConnection) {
+						if (observedInboundTrack) {
+							observedInboundTrack.muted = false;
+							observedPeerConnection?.emit('unmuted-inbound-track', observedInboundTrack);
+						} else if (observedOutboundTrack) {
+							observedOutboundTrack.muted = false;
+							observedPeerConnection?.emit('unmuted-outbound-track', observedOutboundTrack);
+						}
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_UNMUTED event without a corresponding observedPeerConnection or observedTrack', event);
+					}
+				}
+				break;
+			}
 		}
 		this.emit('clientEvent', event);
 	}

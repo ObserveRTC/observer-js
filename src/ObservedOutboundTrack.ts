@@ -18,6 +18,8 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 	public addedAt?: number | undefined;
 	public removedAt?: number | undefined;
 
+	public muted?: boolean;
+
 	attachments?: Record<string, unknown> | undefined;
 
 	constructor(
