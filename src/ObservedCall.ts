@@ -157,7 +157,18 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.updater?.close();
 
-		[ ...this.observedClients.values() ].forEach((client) => client.close());
+		let minSampleTimestamps: number | undefined;
+		let maxSampleTimestamps: number | undefined;
+
+		for (const client of this.observedClients.values()) {
+			client.close();
+
+			if (client.joinedAt) minSampleTimestamps = Math.min(minSampleTimestamps ?? client.joinedAt, client.joinedAt);
+			if (client.leftAt) maxSampleTimestamps = Math.max(maxSampleTimestamps ?? client.leftAt, client.leftAt);
+		}
+
+		if (this.startedAt === undefined) this.startedAt = minSampleTimestamps;
+		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
 		this.closedAt = Date.now();
 		this.emit('close');

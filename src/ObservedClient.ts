@@ -66,6 +66,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public joinedAt?: number;
 	public leftAt?: number;
 	public closedAt?: number;
+	public lastSampleTimestamp?: number;
 	// the timestamp of the CLIENT_JOINED event
 	public operationSystem?: MetaData.OperationSystem;
 	public engine?: MetaData.Engine;
@@ -163,7 +164,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.closed = true;
 
 		Array.from(this.observedPeerConnections.values()).forEach((peerConnection) => peerConnection.close());
+		if (!this.leftAt) {
+			this.leftAt = this.lastSampleTimestamp;
 
+			if (this.leftAt) {
+				this.emit('left');
+			}
+		}
 		this.closedAt = Date.now();
 
 		this.emit('close');
@@ -327,6 +334,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.calculatedScore.value = sample.score;
 		this.detectors.update();
 
+		this.lastSampleTimestamp = sample.timestamp;
 		// emit update
 		this.emit('update', {
 			sample,
@@ -357,6 +365,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 						logger.warn(`Client ${this.clientId} joinedAt timestamp was updated to ${event.timestamp}. the joined event will not be emitted.`);
 					}
 				}
+				logger.debug('Client %s joined at %o', this.clientId, event);
 				break;
 			}
 			case ClientEventTypes.CLIENT_LEFT: {
@@ -367,7 +376,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else {
 						logger.warn(`Client ${this.clientId} leftAt timestamp was already set`);
 					}
+
 				}
+				logger.debug('Client %s left at %o', this.clientId, event);
 				break;
 			}
 			case ClientEventTypes.PEER_CONNECTION_OPENED: {
