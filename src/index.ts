@@ -21,7 +21,7 @@ export { ObservedIceTransport } from './ObservedIceTransport';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
 export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
-export { ClientSample, ClientIssue } from './schema/ClientSample';
+export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
 export { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
 export { ObserverEventMonitor } from './ObserverEventMonitor';
