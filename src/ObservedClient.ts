@@ -163,6 +163,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this.closed) return;
 		this.closed = true;
 
+		this._injections.clientEvents?.forEach((clientEvent) => this._processClientEvent(clientEvent));
+		this._injections.clientIssues?.forEach((clientIssue) => this.addIssue(clientIssue));
+		this._injections.extensionStats?.forEach((extensionStat) => this.addExtensionStats(extensionStat));
+		this._injections.clientMetaItems?.forEach((clientMetaItem) => this.addMetadata(clientMetaItem));
+
 		Array.from(this.observedPeerConnections.values()).forEach((peerConnection) => peerConnection.close());
 		if (!this.leftAt) {
 			this.leftAt = this.lastSampleTimestamp;
