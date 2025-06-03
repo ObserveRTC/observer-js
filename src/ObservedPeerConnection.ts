@@ -1,65 +1,146 @@
 import { EventEmitter } from 'events';
-import { PeerConnectionTransport } from '@observertc/sample-schemas-js';
 import { ObservedClient } from './ObservedClient';
-import { CallEventReport, PeerConnectionTransportReport } from '@observertc/report-schemas-js';
-import { ObservedICE } from './ObservedICE';
+import { CertificateStats, CodecStats, DataChannelStats, IceCandidateStats, InboundRtpStats, InboundTrackSample, MediaPlayoutStats, MediaSourceStats, OutboundRtpStats, OutboundTrackSample, PeerConnectionSample, PeerConnectionTransportStats, RemoteInboundRtpStats, RemoteOutboundRtpStats } from './schema/ClientSample';
+import { ObservedInboundRtp } from './ObservedInboundRtp';
+import { createLogger } from './common/logger';
+import { MediaKind } from './common/types';
+import { ObservedOutboundRtp } from './ObservedOutboundRtp';
+import { ObservedCertificate } from './ObservedCertificate';
+import { ObservedCodec } from './ObservedCodec';
 import { ObservedDataChannel } from './ObservedDataChannel';
-import { PartialBy } from './common/utils';
-import { ObservedInboundAudioTrack, ObservedInboundAudioTrackModel } from './ObservedInboundAudioTrack';
-import { ObservedInboundVideoTrack, ObservedInboundVideoTrackModel } from './ObservedInboundVideoTrack';
-import { ObservedOutboundAudioTrack, ObservedOutboundAudioTrackModel } from './ObservedOutboundAudioTrack';
-import { ObservedOutboundVideoTrack, ObservedOutboundVideoTrackModel } from './ObservedOutboundVideoTrack';
-import { CalculatedScore, getRttScore } from './common/CalculatedScore';
-import { ClientIssue } from './monitors/CallSummary';
+import { ObservedIceCandidate } from './ObservedIceCandidate';
+import { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
+import { ObservedIceTransport } from './ObservedIceTransport';
+import { ObservedMediaSource } from './ObservedMediaSource';
+import { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
+import { ObservedMediaPlayout } from './ObservedMediaPlayout';
+import { ObservedRemoteInboundRtp } from './ObservedRemoteInboundRtp';
+import { ObservedRemoteOutboundRtp } from './ObservedRemoteOutboundRtp';
+import { ObservedInboundTrack } from './ObservedInboundTrack';
+import { ObservedOutboundTrack } from './ObservedOutboundTrack';
+import { CalculatedScore } from './scores/CalculatedScore';
+import { ObservedTurnServer } from './ObservedTurnServer';
+import { getMedian } from './common/utils';
+
+const logger = createLogger('ObservedPeerConnection');
 
 export type ObservedPeerConnectionEvents = {
-	update: [{
-		elapsedTimeInMs: number;
-	}],
-	close: [],
-	score: [CalculatedScore],
-	newinboudaudiotrack: [ObservedInboundAudioTrack],
-	newinboudvideotrack: [ObservedInboundVideoTrack],
-	newoutboundaudiotrack: [ObservedOutboundAudioTrack],
-	newoutboundvideotrack: [ObservedOutboundVideoTrack],
-	newdatachannel: [ObservedDataChannel],
-};
+	iceconnectionstatechange: [
+		{
+			state: string;
+		}
+	];
+	icegatheringstatechange: [
+		{
+			state: string;
+		}
+	];
+	connectionstatechange: [
+		{
+			state: string;
+		}
+	];
+	selectedcandidatepair: [];
 
-export type ObservedPeerConnectionModel = {
-	peerConnectionId: string;
-	label?: string;
-};
+	'added-certificate': [ObservedCertificate];
+	'added-codec': [ObservedCodec];
+	'added-data-channel': [ObservedDataChannel];
+	'added-ice-candidate': [ObservedIceCandidate];
+	'added-ice-candidate-pair': [ObservedIceCandidatePair];
+	'added-ice-transport': [ObservedIceTransport];
+	'added-inbound-rtp': [ObservedInboundRtp];
+	'added-inbound-track': [ObservedInboundTrack];
+	'added-media-playout': [ObservedMediaPlayout];
+	'added-media-source': [ObservedMediaSource];
+	'added-outbound-rtp': [ObservedOutboundRtp];
+	'added-outbound-track': [ObservedOutboundTrack];
+	'added-peer-connection-transport': [ObservedPeerConnectionTransport];
+	'added-remote-inbound-rtp': [ObservedRemoteInboundRtp];
+	'added-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
+	'removed-certificate': [ObservedCertificate];
+	'removed-codec': [ObservedCodec];
+	'removed-data-channel': [ObservedDataChannel];
+	'removed-ice-candidate': [ObservedIceCandidate];
+	'removed-ice-candidate-pair': [ObservedIceCandidatePair];
+	'removed-ice-transport': [ObservedIceTransport];
+	'removed-inbound-rtp': [ObservedInboundRtp];
+	'removed-inbound-track': [ObservedInboundTrack];
+	'removed-media-playout': [ObservedMediaPlayout];
+	'removed-media-source': [ObservedMediaSource];
+	'removed-outbound-rtp': [ObservedOutboundRtp];
+	'removed-outbound-track': [ObservedOutboundTrack];
+	'removed-peer-connection-transport': [ObservedPeerConnectionTransport];
+	'removed-remote-inbound-rtp': [ObservedRemoteInboundRtp];
+	'removed-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
+	'updated-inbound-rtp': [ObservedInboundRtp];
+	'updated-outbound-rtp': [ObservedOutboundRtp];
+	'updated-inbound-track': [ObservedInboundTrack];
+	'updated-outbound-track': [ObservedOutboundTrack];
+	'updated-ice-candidate-pair': [ObservedIceCandidatePair];
+	'updated-ice-transport': [ObservedIceTransport];
+	'updated-peer-connection-transport': [ObservedPeerConnectionTransport];
+	'updated-media-source': [ObservedMediaSource];
+	'updated-media-playout': [ObservedMediaPlayout];
+	'updated-data-channel': [ObservedDataChannel];
+	'updated-ice-candidate': [ObservedIceCandidate];
+	'updated-certificate': [ObservedCertificate];
+	'updated-codec': [ObservedCodec];
+	'updated-remote-inbound-rtp': [ObservedRemoteInboundRtp];
+	'updated-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
+	'muted-inbound-track': [ObservedInboundTrack];
+	'muted-outbound-track': [ObservedOutboundTrack];
+	'unmuted-inbound-track': [ObservedInboundTrack];
+	'unmuted-outbound-track': [ObservedOutboundTrack];
 
-export type ObservedPeerConnectionStats = Omit<PeerConnectionTransport, 'transportId' | 'label'>;
+	'update': [],
+	close: [];
+};
 
 export declare interface ObservedPeerConnection {
-	on<U extends keyof ObservedPeerConnectionEvents>(event: U, listener: (...args: ObservedPeerConnectionEvents[U]) => void): this;
-	off<U extends keyof ObservedPeerConnectionEvents>(event: U, listener: (...args: ObservedPeerConnectionEvents[U]) => void): this;
-	once<U extends keyof ObservedPeerConnectionEvents>(event: U, listener: (...args: ObservedPeerConnectionEvents[U]) => void): this;
+	on<U extends keyof ObservedPeerConnectionEvents>(
+		event: U,
+		listener: (...args: ObservedPeerConnectionEvents[U]) => void
+	): this;
+	off<U extends keyof ObservedPeerConnectionEvents>(
+		event: U,
+		listener: (...args: ObservedPeerConnectionEvents[U]) => void
+	): this;
+	once<U extends keyof ObservedPeerConnectionEvents>(
+		event: U,
+		listener: (...args: ObservedPeerConnectionEvents[U]) => void
+	): this;
 	emit<U extends keyof ObservedPeerConnectionEvents>(event: U, ...args: ObservedPeerConnectionEvents[U]): boolean;
 }
 
 export class ObservedPeerConnection extends EventEmitter {
-	public readonly created = Date.now();
-	public visited = true;
+	private _visited = true;
 
+	public appData?: Record<string, unknown>;
+	public readonly calculatedScore: CalculatedScore = {
+		weight: 1,
+		value: undefined,
+	};
+	
+	public closed = false;
 	// timestamp of the PEER_CONNECTION_OPENED event
-	public opened?: number;
+	public openedAt?: number;
 	// timestamp of the PEER_CONNECTION_CLOSED event
-	public closedTimestamp?: number;
+	public closedAt?: number;
+	public updated = Date.now();
 
-	private _elapsedTimeSinceLastUpdate?: number;
-	private _statsTimestamp?: number;
-	private _stabilityScores: number[] = [];
+	public connectionState?: string;
+	public iceConnectionState?: string;
+	public iceGatheringState?: string;
 
-	public ωpendingIssuesForScores: ClientIssue[] = [];
-
-	public score?: CalculatedScore;
+	public availableIncomingBitrate = 0;
+	public availableOutgoingBitrate = 0;
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
 	public totalDataChannelBytesSent = 0;
 	public totalDataChannelBytesReceived = 0;
+	public totalDataChannelMessagesSent = 0;
+	public totalDataChannelMessagesReceived = 0;
 
 	public totalSentAudioBytes = 0;
 	public totalSentVideoBytes = 0;
@@ -75,182 +156,165 @@ export class ObservedPeerConnection extends EventEmitter {
 	public deltaOutboundPacketsSent = 0;
 	public deltaDataChannelBytesSent = 0;
 	public deltaDataChannelBytesReceived = 0;
+	public deltaDataChannelMessagesSent = 0;
+	public deltaDataChannelMessagesReceived = 0;
 	public deltaInboundReceivedBytes = 0;
 	public deltaOutboundSentBytes = 0;
-	
+
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
 	public deltaReceivedAudioPackets = 0;
 	public deltaReceivedVideoPackets = 0;
 	public deltaSentAudioBytes = 0;
 	public deltaSentVideoBytes = 0;
+	public deltaTransportSentBytes = 0;
+	public deltaTransportReceivedBytes = 0;
+
 	public receivingPacketsPerSecond = 0;
 	public sendingPacketsPerSecond = 0;
 	public sendingAudioBitrate = 0;
 	public sendingVideoBitrate = 0;
 	public receivingAudioBitrate = 0;
 	public receivingVideoBitrate = 0;
-    
-	public avgRttInMs?: number;
-	public avgJitter?: number;
 
-	private _closed = false;
-	private _updated = Date.now();
-	private _sample?: ObservedPeerConnectionStats;
-	private _marker?: string;
+	public currentRttInMs?: number;
+	public currentJitter?: number;
 
-	public readonly ICE = ObservedICE.create(this);
-	private readonly _inboundAudioTracks = new Map<string, ObservedInboundAudioTrack>();
-	private readonly _inboundVideoTracks = new Map<string, ObservedInboundVideoTrack>();
-	private readonly _outboundAudioTracks = new Map<string, ObservedOutboundAudioTrack>();
-	private readonly _outboundVideoTracks = new Map<string, ObservedOutboundVideoTrack>();
-	private readonly _dataChannels = new Map<number, ObservedDataChannel>();
-	
-	public constructor(
-		private readonly _model: ObservedPeerConnectionModel,
-		public readonly client: ObservedClient,
-	) {
+	public usingTCP = false;
+	public usingTURN = false;
+
+	public observedTurnServer?: ObservedTurnServer;
+	public readonly observedCertificates = new Map<string, ObservedCertificate>();
+	public readonly observedCodecs = new Map<string, ObservedCodec>();
+	public readonly observedDataChannels = new Map<string, ObservedDataChannel>();
+	public readonly observedIceCandidates = new Map<string, ObservedIceCandidate>();
+	public readonly observedIceCandidatesPair = new Map<string, ObservedIceCandidatePair>();
+	public readonly observedIceTransports = new Map<string, ObservedIceTransport>();
+	public readonly observedInboundRtps = new Map<number, ObservedInboundRtp>();
+	public readonly observedInboundTracks = new Map<string, ObservedInboundTrack>();
+	public readonly observedMediaPlayouts = new Map<string, ObservedMediaPlayout>();
+	public readonly observedMediaSources = new Map<string, ObservedMediaSource>();
+	public readonly observedOutboundRtps = new Map<number, ObservedOutboundRtp>();
+	public readonly observedOutboundTracks = new Map<string, ObservedOutboundTrack>();
+	public readonly observedPeerConnectionTransports = new Map<string, ObservedPeerConnectionTransport>();
+	public readonly observedRemoteInboundRtps = new Map<number, ObservedRemoteInboundRtp>();
+	public readonly observedRemoteOutboundRtps = new Map<number, ObservedRemoteOutboundRtp>();
+
+	public constructor(public readonly peerConnectionId: string, public readonly client: ObservedClient) {
 		super();
 		this.setMaxListeners(Infinity);
 	}
 
-	public get serviceId() {
-		return this.client.serviceId;
+	public get score() { 
+		return this.calculatedScore.value; 
 	}
 
-	public get roomId() {
-		return this.client.roomId;
+	public get visited() {
+		const visited = this._visited;
+
+		this._visited = false;
+
+		return visited;
 	}
 
-	public get callId() {
-		return this.client.callId;
+	public get codecs() {
+		return [ ...this.observedCodecs.values() ];
 	}
 
-	public get clientId() {
-		return this.client.clientId;
+	public get inboundRtps() {
+		return [ ...this.observedInboundRtps.values() ];
 	}
 
-	public get mediaUnitId() {
-		return this.client.mediaUnitId;
+	public get remoteOutboundRtps() {
+		return [ ...this.observedRemoteOutboundRtps.values() ];
 	}
 
-	public get label() {
-		return this._model.label;
+	public get outboundRtps() {
+		return [ ...this.observedOutboundRtps.values() ];
 	}
 
-	public set label(value: string | undefined) {
-		this._model.label = value;
+	public get remoteInboundRtps() {
+		return [ ...this.observedRemoteInboundRtps.values() ];
 	}
 
-	public get usingTURN() {
-		return this.ICE.usingTURN;
+	public get mediaSources() {
+		return [ ...this.observedMediaSources.values() ];
 	}
 
-	public get availableOutgoingBitrate() {
-		return this.ICE.stats?.availableOutgoingBitrate;
+	public get mediaPlayouts() {
+		return [ ...this.observedMediaPlayouts.values() ];
 	}
 
-	public get availableIncomingBitrate() {
-		return this.ICE.stats?.availableIncomingBitrate;
+	public get dataChannels() {
+		return [ ...this.observedDataChannels.values() ];
 	}
 
-	public get peerConnectionId(): string {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.peerConnectionId!;
+	public get peerConnectionTransports() {
+		return [ ...this.observedPeerConnectionTransports.values() ];
 	}
 
-	public get reports() {
-		return this.client.reports;
+	public get iceTransports() {
+		return [ ...this.observedIceTransports.values() ];
 	}
 
-	public get stats(): ObservedPeerConnectionStats | undefined {
-		return this._sample;
+	public get iceCandidates() {
+		return [ ...this.observedIceCandidates.values() ];
 	}
 
-	public get updated(): number {
-		return this._updated;
+	public get iceCandidatePairs() {
+		return [ ...this.observedIceCandidatesPair.values() ];
 	}
 
-	public get inboundAudioTracks(): ReadonlyMap<string, ObservedInboundAudioTrack> {
-		return this._inboundAudioTracks;
+	public get certificates() {
+		return [ ...this.observedCertificates.values() ];
 	}
 
-	public get inboundVideoTracks(): ReadonlyMap<string, ObservedInboundVideoTrack> {
-		return this._inboundVideoTracks;
+	public get selectedIceCandidatePairs() {
+		return this.iceTransports.map((iceTransport) => iceTransport.getSelectedCandidatePair())
+			.filter((pair) => pair !== undefined) as ObservedIceCandidatePair[];
 	}
 
-	public get outboundAudioTracks(): ReadonlyMap<string, ObservedOutboundAudioTrack> {
-		return this._outboundAudioTracks;
-	}
-
-	public get outboundVideoTracks(): ReadonlyMap<string, ObservedOutboundVideoTrack> {
-		return this._outboundVideoTracks;
-	}
-
-	public get dataChannels(): ReadonlyMap<number, ObservedDataChannel> {
-		return this._dataChannels;
-	}
-
-	public get uptimeInMs() {
-		return this._updated - this.created;
-	}
-
-	public get marker() {
-		return this._marker;
-	}
-
-	public set marker(value: string | undefined) {
-		this._marker = value;
-		this._inboundAudioTracks.forEach((track) => (track.marker = value));
-		this._inboundVideoTracks.forEach((track) => (track.marker = value));
-		this._outboundAudioTracks.forEach((track) => (track.marker = value));
-		this._outboundVideoTracks.forEach((track) => (track.marker = value));
-		this._dataChannels.forEach((channel) => (channel.marker = value));
-		this.ICE.marker = value;
-	}
-
-	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'peerConnectionId' | 'marker'>, 'timestamp'>) {
-		this.reports.addCallEventReport({
-			...params,
-			serviceId: this.serviceId,
-			mediaUnitId: this.mediaUnitId,
-			roomId: this.roomId,
-			callId: this.callId,
-			clientId: this.clientId,
-			userId: this.client.userId,
-			peerConnectionId: this.peerConnectionId,
-			marker: this.client.marker,
-			timestamp: params.timestamp ?? Date.now(),
-		});
-	}
-
-	public get closed() {
-		return this._closed;
+	public get selectedIceCandiadtePairForTurn() {
+		return this.selectedIceCandidatePairs
+			.filter((pair) => 
+				pair.getLocalCandidate()?.candidateType === 'relay' && 
+				pair.getRemoteCandidate()?.url?.startsWith('turn:')
+			);
 	}
 
 	public close() {
-		if (this._closed) return;
-		this._closed = true;
+		if (this.closed) return;
+		this.closed = true;
 
-		Array.from(this._inboundAudioTracks.values()).forEach((track) => track.close());
-		Array.from(this._inboundVideoTracks.values()).forEach((track) => track.close());
-		Array.from(this._outboundAudioTracks.values()).forEach((track) => {
-			this.client.call.sfuStreamIdToOutboundAudioTrack.delete(track.sfuStreamId ?? '');
-			track.close();
-		});
-		Array.from(this._outboundVideoTracks.values()).forEach((track) => {
-			this.client.call.sfuStreamIdToOutboundVideoTrack.delete(track.sfuStreamId ?? '');
-			track.close();
-		});
+		this.observedCertificates.clear();
+		this.observedCodecs.clear();
+		this.observedDataChannels.clear();
+		this.observedIceCandidates.clear();
+		this.observedIceCandidatesPair.clear();
+		this.observedIceTransports.clear();
+		this.observedInboundRtps.clear();
+		this.observedInboundTracks.clear();
+		this.observedMediaPlayouts.clear();
+		this.observedMediaSources.clear();
+		this.observedOutboundRtps.clear();
+		this.observedOutboundTracks.clear();
+		this.observedPeerConnectionTransports.clear();
+		this.observedRemoteInboundRtps.clear();
+		this.observedRemoteOutboundRtps.clear();
 
+		this.client.call.observer.observedTURN.removePeerConnection(this);
+		
+		if (!this.closedAt) this.closedAt = Date.now();
+		
 		this.emit('close');
 	}
 
-	public getTrack(trackId: string): ObservedInboundAudioTrack | ObservedInboundVideoTrack | ObservedOutboundAudioTrack | ObservedOutboundVideoTrack | undefined {
-		return this._inboundAudioTracks.get(trackId) ?? this._inboundVideoTracks.get(trackId) ?? this._outboundAudioTracks.get(trackId) ?? this._outboundVideoTracks.get(trackId);
-	}
+	public accept(sample: PeerConnectionSample) {
+		if (this.closed) return;
+		this._visited = true;
 
-	public resetMetrics() {
+		this.availableIncomingBitrate = 0;
+		this.availableOutgoingBitrate = 0;
 		this.deltaInboundPacketsLost = 0;
 		this.deltaInboundPacketsReceived = 0;
 		this.deltaOutboundPacketsSent = 0;
@@ -258,316 +322,767 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaDataChannelBytesReceived = 0;
 		this.deltaInboundReceivedBytes = 0;
 		this.deltaOutboundSentBytes = 0;
-		
 		this.deltaReceivedAudioBytes = 0;
 		this.deltaReceivedVideoBytes = 0;
 		this.deltaReceivedAudioPackets = 0;
 		this.deltaReceivedVideoPackets = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
+		this.deltaTransportReceivedBytes = 0;
+		this.deltaTransportSentBytes = 0;
+
 		this.sendingAudioBitrate = 0;
 		this.sendingVideoBitrate = 0;
 		this.receivingAudioBitrate = 0;
 		this.receivingVideoBitrate = 0;
 
-		this.ICE.resetMetrics();
-	}
-
-	public update(sample: PeerConnectionTransport, timestamp: number) {
-		if (this._closed) return;
-		if (sample.peerConnectionId !== this._model.peerConnectionId) throw new Error(`TransportId mismatch. PeerConnectionId: ${ this._model.peerConnectionId } TransportId: ${ sample.transportId}`);
-
-		this._sample = sample;
-		if (this._model.label !== sample.label) {
-			this._model.label = sample.label;
-		}
 		const now = Date.now();
-		const report: PeerConnectionTransportReport = {
-			serviceId: this.client.call.serviceId,
-			roomId: this.client.call.roomId,
-			callId: this.client.call.callId,
-			clientId: this.client.clientId,
-			userId: this.client.userId,
-			mediaUnitId: this.client.mediaUnitId,
-			...sample,
-			timestamp,
-			sampleSeq: -1, // deprecated
-			marker: this.marker,
-		};
+		const elapsedTimeInMs = now - this.updated;
+		const elapsedTimeInSec = elapsedTimeInMs / 1000;
+		const rttMeasurementsInSec: number[] = [];
+		const jitterMeasurements: number[] = [];
 
-		this.reports.addPeerConnectionTransportReports(report);
-		this._elapsedTimeSinceLastUpdate = now - this._updated;		
-		this.visited = true;
-		this._updated = now;
-		this._statsTimestamp = timestamp;
-		this.emit('update', {
-			elapsedTimeInMs: this._elapsedTimeSinceLastUpdate,
-		});
-	}
+		if (sample.certificates) {
+			for (const certificate of sample.certificates) {
+				this._updateCertificateStats(certificate);
+			}
+		}
+		if (sample.codecs) {
+			for (const codec of sample.codecs) {
+				this._updateCodecStats(codec);
+			}
+		}
+		if (sample.dataChannels) {
+			for (const dataChannel of sample.dataChannels) {
+				const observedDataChannel = this._updateDataChannelStats(dataChannel);
 
-	public createInboundAudioTrack(config: ObservedInboundAudioTrackModel): ObservedInboundAudioTrack {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		const result = new ObservedInboundAudioTrack(config, this);
+				if (!observedDataChannel) continue;
 
-		result.on('close', () => {
-			this._inboundAudioTracks.delete(result.trackId);
-		});
-		this._inboundAudioTracks.set(result.trackId, result);
+				this.deltaDataChannelBytesSent += observedDataChannel.deltaBytesSent;
+				this.deltaDataChannelBytesReceived += observedDataChannel.deltaBytesReceived;
+				this.deltaDataChannelMessagesSent += observedDataChannel.deltaMessagesSent;
+				this.deltaDataChannelMessagesReceived += observedDataChannel.deltaMessagesReceived;
+			}
+		}
+		if (sample.iceCandidates) {
+			for (const iceCandidate of sample.iceCandidates) {
+				this._updateIceCandidateStats(iceCandidate);
+			}
+		}
+		if (sample.iceCandidatePairs) {
+			for (const iceCandidatePair of sample.iceCandidatePairs) {
+				const observedCandidatePair = this._updateIceCandidatePairStats(iceCandidatePair);
 
-		this.emit('newinboudaudiotrack', result);
+				if (!observedCandidatePair) continue;
 
-		return result;
-	}
+				if (observedCandidatePair.currentRoundTripTime) {
+					rttMeasurementsInSec.push(observedCandidatePair.currentRoundTripTime);
+				}
+				if (observedCandidatePair.availableIncomingBitrate) {
+					this.availableIncomingBitrate += observedCandidatePair.availableIncomingBitrate;
+				}
+				if (observedCandidatePair.availableOutgoingBitrate) {
+					this.availableOutgoingBitrate += observedCandidatePair.availableOutgoingBitrate;
+				}
+			}
+		}
+		if (sample.iceTransports) {
+			for (const iceTransport of sample.iceTransports) {
+				const observedIceTransport = this._updateIceTransportStats(iceTransport);
 
-	public createInboundVideoTrack(config: ObservedInboundVideoTrackModel): ObservedInboundVideoTrack {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		const result = new ObservedInboundVideoTrack(config, this);
+				if (!observedIceTransport) return;
 
-		result.on('close', () => {
-			this._inboundVideoTracks.delete(result.trackId);
-		});
-		this._inboundVideoTracks.set(result.trackId, result);
+				observedIceTransport.bytesReceived;
 
-		this.emit('newinboudvideotrack', result);
+			}
+		}
+		if (sample.inboundRtps) {
+			for (const inboundRtp of sample.inboundRtps) {
+				const observedInboundRtp = this._updateInboundRtpStats(inboundRtp);
+				
+				if (!observedInboundRtp) continue;
 
-		return result;
-	}
+				this.deltaInboundPacketsLost += observedInboundRtp.deltaLostPackets;
+				this.deltaInboundPacketsReceived += observedInboundRtp.deltaReceivedPackets;
+				this.deltaInboundReceivedBytes += observedInboundRtp.deltaBytesReceived;
+				
+				switch (inboundRtp.kind) {
+					case 'audio':
+						this.deltaReceivedAudioBytes += observedInboundRtp.deltaBytesReceived;
+						this.deltaReceivedAudioPackets += observedInboundRtp.deltaReceivedPackets;
+						break;
+					case 'video':
+						this.deltaReceivedVideoBytes += observedInboundRtp.deltaBytesReceived;
+						this.deltaReceivedVideoPackets += observedInboundRtp.deltaReceivedPackets;
+						break;
+				}
 
-	public createOutboundAudioTrack(config: ObservedOutboundAudioTrackModel): ObservedOutboundAudioTrack {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		const result = new ObservedOutboundAudioTrack(config, this);
-
-		result.on('close', () => {
-			this._outboundAudioTracks.delete(result.trackId);
-		});
-		this._outboundAudioTracks.set(result.trackId, result);
-
-		this.emit('newoutboundaudiotrack', result);
-
-		return result;
-	}
-
-	public createOutboundVideoTrack(config: ObservedOutboundVideoTrackModel): ObservedOutboundVideoTrack {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		const result = new ObservedOutboundVideoTrack(config, this);
-
-		result.on('close', () => {
-			this._outboundVideoTracks.delete(result.trackId);
-		});
-		this._outboundVideoTracks.set(result.trackId, result);
-
-		this.emit('newoutboundvideotrack', result);
-
-		return result;
-	}
-
-	public createDataChannel(channelId: number) {
-		if (this._closed) throw new Error(`PeerConnection ${this.peerConnectionId} is closed`);
-		
-		const result = new ObservedDataChannel({
-			channelId,
-		}, this);
-
-		result.on('close', () => {
-			this._dataChannels.delete(result.channelId);
-		});
-		this._dataChannels.set(result.channelId, result);
-
-		this.emit('newdatachannel', result);
-
-		return result;
-	}
-
-	public updateMetrics() {
-		let sumRttInMs = 0;
-		let sumJitter = 0;
-		const trackScores: CalculatedScore[] = [];
-
-		this._inboundAudioTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaInboundPacketsLost += track.deltaLostPackets;
-			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
-			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
+				if (observedInboundRtp.jitter) {
+					jitterMeasurements.push(observedInboundRtp.jitter);
+				}
+			}
+		}
+		if (sample.mediaPlayouts) {
+			for (const mediaPlayout of sample.mediaPlayouts) {
+				this._updateMediaPlayoutStats(mediaPlayout);
+			}
+		}
+		if (sample.mediaSources) {
+			for (const mediaSource of sample.mediaSources) {
+				this._updateMediaSourceStats(mediaSource);
+			}
+		}
+		if (sample.outboundRtps) {
+			for (const outboundRtp of sample.outboundRtps) {
+				const observedOutboundRtp = this._updateOutboundRtpStats(outboundRtp);
 			
-			this.deltaReceivedAudioBytes += track.deltaBytesReceived;
-			this.deltaReceivedAudioPackets += track.deltaReceivedPackets;
+				if (!observedOutboundRtp) continue;
+
+				this.deltaOutboundPacketsSent += observedOutboundRtp.deltaPacketsSent ?? 0;
+				this.deltaOutboundSentBytes += observedOutboundRtp.deltaBytesSent ?? 0;
+
+				switch (outboundRtp.kind) {
+					case 'audio':
+						this.deltaSentAudioBytes += observedOutboundRtp.deltaBytesSent;
+						this.deltaSentAudioBytes += observedOutboundRtp.deltaPacketsSent;
+						break;
+					case 'video':
+						this.deltaSentVideoBytes += observedOutboundRtp.deltaBytesSent;
+						this.deltaSentVideoBytes += observedOutboundRtp.deltaPacketsSent;
+						break;
+				}
+
+			}
+		}
+		if (sample.peerConnectionTransports) {
+			for (const peerConnectionTransport of sample.peerConnectionTransports) {
+				const observedTransport = this._updatePeerConnectionTransportStats(peerConnectionTransport);
+				
+				if (!observedTransport) continue;
+
+			}
+		}
+		if (sample.remoteInboundRtps) {
+			for (const remoteInboundRtp of sample.remoteInboundRtps) {
+				const observedRemoteInboundRtp = this._updateRemoteInboundRtpStats(remoteInboundRtp);
+
+				if (!observedRemoteInboundRtp) continue;
+
+				if (observedRemoteInboundRtp.roundTripTime) {
+					rttMeasurementsInSec.push(observedRemoteInboundRtp.roundTripTime);
+				}
+			}
+		}
+		if (sample.remoteOutboundRtps) {
+			for (const remoteOutboundRtp of sample.remoteOutboundRtps) {
+				const observedRemoteOutboundRtp = this._updateRemoteOutboundRtpStats(remoteOutboundRtp);
 			
-			this.receivingAudioBitrate += track.bitrate;
-
-			sumRttInMs += (track.rttInMs ?? 0);
-			sumJitter += (track.jitter ?? 0);
-
-			track.score && trackScores.push(track.score);
-		});
-
-		this._inboundVideoTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaInboundPacketsLost += track.deltaLostPackets;
-			this.deltaInboundPacketsReceived += track.deltaReceivedPackets;
-			this.deltaInboundReceivedBytes += track.deltaBytesReceived;
-			
-			this.deltaReceivedVideoBytes += track.deltaBytesReceived;
-			this.deltaReceivedVideoPackets += track.deltaReceivedPackets;
-			
-			this.receivingVideoBitrate += track.bitrate;
-
-			sumRttInMs += (track.rttInMs ?? 0);
-			sumJitter += (track.jitter ?? 0);
-
-			track.score && trackScores.push(track.score);
-		});
-
-		this._outboundAudioTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaOutboundPacketsSent += track.deltaSentPackets;
-			this.deltaOutboundSentBytes += track.deltaSentBytes;
-			
-			this.deltaSentAudioBytes += track.deltaSentBytes;
-			this.deltaSentAudioBytes += track.deltaSentPackets;
-			
-			this.sendingAudioBitrate += track.bitrate;
-
-			sumRttInMs += (track.rttInMs ?? 0);
-			sumJitter += (track.jitter ?? 0);
-
-			track.score && trackScores.push(track.score);
-		});
-
-		this._outboundVideoTracks.forEach((track) => {
-			track.updateMetrics();
-
-			this.deltaOutboundPacketsSent += track.deltaSentPackets;
-			this.deltaOutboundSentBytes += track.deltaSentBytes;
-			
-			this.deltaSentVideoBytes += track.deltaSentBytes;
-			this.deltaSentVideoBytes += track.deltaSentPackets;
-			
-			this.sendingVideoBitrate += track.bitrate;
-
-			sumRttInMs += (track.rttInMs ?? 0);
-			sumJitter += (track.jitter ?? 0);
-
-			track.score && trackScores.push(track.score);
-		});
-
-		this._dataChannels.forEach((channel) => {
-			this.deltaDataChannelBytesSent += channel.deltaBytesSent;
-			this.deltaDataChannelBytesReceived += channel.deltaBytesReceived;
-		});
-
-		const iceRttInMs = this.ICE.stats?.currentRoundTripTime;
-		let nrOfBelongings = this._inboundAudioTracks.size + this._inboundVideoTracks.size + this._outboundAudioTracks.size + this._outboundVideoTracks.size;
-
-		this.avgJitter = 0 < nrOfBelongings ? sumJitter / nrOfBelongings : undefined;
-
-		if (iceRttInMs) {
-			sumRttInMs += iceRttInMs;
-			nrOfBelongings += 1;
+				if (!observedRemoteOutboundRtp) continue;
+			}
 		}
 
-		this.avgRttInMs = 0 < nrOfBelongings ? sumRttInMs / nrOfBelongings : undefined;
-		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
-		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		// tracks should be updated last as they are derived stats
+		// and depends on base stats but they all received in the sample sample
+		if (sample.inboundTracks) {
+			for (const inboundTrack of sample.inboundTracks) {
+				this._updateInboundTrackSample(inboundTrack);
+			}
+		}
+		if (sample.outboundTracks) {
+			for (const outboundTrack of sample.outboundTracks) {
+				this._updateOutboundTrackSample(outboundTrack);
+			}
+		}
+
 		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
 		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
 		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
-		this.totalSentAudioBytes += this.deltaSentAudioBytes;
-		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
 		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
 		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
+		this.totalSentAudioBytes += this.deltaSentAudioBytes;
+		this.totalSentVideoBytes += this.deltaSentVideoBytes;
 		this.totalReceivedAudioPacktes += this.deltaReceivedAudioPackets;
 		this.totalReceivedVideoPackets += this.deltaReceivedVideoPackets;
 		this.totalSentAudioPackets += this.deltaSentAudioBytes;
 		this.totalSentVideoPackets += this.deltaSentVideoBytes;
 
-		if (this._elapsedTimeSinceLastUpdate && 0 < this._elapsedTimeSinceLastUpdate) {
-			this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / (this._elapsedTimeSinceLastUpdate / 1000);
-			this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / (this._elapsedTimeSinceLastUpdate / 1000);
+		this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / elapsedTimeInSec;
+		this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / elapsedTimeInSec;
+		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / elapsedTimeInSec;
+		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / elapsedTimeInSec;
+		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / elapsedTimeInSec;
+		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedTimeInSec;
+
+		if (rttMeasurementsInSec.length > 0) {
+			this.currentRttInMs = getMedian(rttMeasurementsInSec, false) * 1000;
 		} else {
-			this.sendingPacketsPerSecond = 0;
-			this.receivingPacketsPerSecond = 0;
+			this.currentRttInMs = undefined;
+		}
+		if (jitterMeasurements.length > 0) {
+			this.currentJitter = getMedian(jitterMeasurements, false);
+		} else {
+			this.currentJitter = undefined;
+		}
+		const wasUsingTURN = this.usingTURN;
+		const selectedIceCandidatePairs = this.selectedIceCandidatePairs;
+		const selectedCandidatePairForTurn: ObservedIceCandidatePair[] = [];
+
+		this.usingTCP = false;
+		this.usingTURN = false;
+
+		for (const selectedCandidatePair of selectedIceCandidatePairs) {
+			if (selectedCandidatePair.getLocalCandidate()?.protocol === 'tcp') {
+				this.usingTCP = true;
+			}
+			if (selectedCandidatePair.getLocalCandidate()?.candidateType === 'relay' && selectedCandidatePair.getRemoteCandidate()?.url?.startsWith('turn:')) {
+				selectedCandidatePairForTurn.push(selectedCandidatePair);
+				this.usingTURN = true;
+			}
+			this.deltaTransportReceivedBytes += selectedCandidatePair.deltaBytesReceived;
+			this.deltaTransportSentBytes += selectedCandidatePair.deltaBytesSent;
 		}
 
-		// calculate quality score
-		this._updateQualityScore(trackScores);
+		if (this.usingTURN) {
+			if (!this.observedTurnServer) {
+				this.observedTurnServer = this.client.call.observer.observedTURN.addPeerConnection(this);
+			}
+			this.observedTurnServer?.updateTurnUsage(...selectedCandidatePairForTurn);
+		} else if (wasUsingTURN) {
+			if (!this.usingTURN) {
+				this.client.call.observer.observedTURN.removePeerConnection(this);
+			}
+		}
+		this.calculatedScore.value = sample.score;
+		this.updated = now;
+		this._checkVisited();
+
+		this.emit('update');
 	}
 
-	private _updateQualityScore(trackScores: CalculatedScore[]) {
-		// Packet Jitter measured in seconds
-		// we use RTT and lost packets to calculate the base score for the connection
-		const rttInMs = this.avgRttInMs ?? 0;
-		const latencyFactor = rttInMs < 150 ? 1.0 : getRttScore(rttInMs);
-		const totalPackets = Math.max(1, (this.totalInboundPacketsReceived ?? 0) + (this.totalOutboundPacketsSent ?? 0));
-		const lostPackets = (this.totalInboundPacketsLost ?? 0) + (this.deltaOutboundPacketsSent ?? 0);
-		const deliveryFactor = 1.0 - ((lostPackets) / (lostPackets + totalPackets));
-		// let's push the actual stability score
-		const stabilityScore = ((latencyFactor * 0.5) + (deliveryFactor * 0.5)) ** 2;
+	private _checkVisited() {
+		for (const certificate of [ ...this.observedCertificates.values() ]) {
+			if (certificate.visited) continue;
 
-		this._stabilityScores.push(stabilityScore);
-		if (10 < this._stabilityScores.length) {
-			this._stabilityScores.shift();
-		} else if (this._stabilityScores.length < 5) {
-			return;
+			this.observedCertificates.delete(certificate.id);
 		}
-		let counter = 0;
-		let weight = 0;
-		let totalScore = 0;
+		for (const codec of [ ...this.observedCodecs.values() ]) {
+			if (codec.visited) continue;
 
-		for (const score of this._stabilityScores) {
-			weight += 1;
-			counter += weight;
-			totalScore += weight * score;
+			this.observedCodecs.delete(codec.id);
+			this.emit('removed-codec', codec);
 		}
-		const weightedStabilityScore = totalScore / counter;
-		let sumTrackScores = 0;
+		for (const dataChannel of [ ...this.observedDataChannels.values() ]) {
+			if (dataChannel.visited) continue;
 
-		for (const trackScore of trackScores) {
-			sumTrackScores += trackScore.score;
+			this.observedDataChannels.delete(dataChannel.id);
+			this.emit('removed-data-channel', dataChannel);
 		}
+		for (const iceCandidate of [ ...this.observedIceCandidates.values() ]) {
+			if (iceCandidate.visited) continue;
 
-		const avgTrackScores = sumTrackScores / trackScores.length;
+			this.observedIceCandidates.delete(iceCandidate.id);
+			this.emit('removed-ice-candidate', iceCandidate);
+		}
+		for (const iceCandidatePair of [ ...this.observedIceCandidatesPair.values() ]) {
+			if (iceCandidatePair.visited) continue;
 
-		const score: CalculatedScore = {
-			remarks: [ {
-				severity: 'none',
-				text: `Peer Connection stability score: ${weightedStabilityScore}`,
-			},
-			{
-				severity: 'none',
-				text: `Avg. Track score: ${avgTrackScores}`,
-			} ],
-			score: Math.round(((weightedStabilityScore + avgTrackScores) * 5 * 100)) / 100.0,
-			timestamp: this._statsTimestamp ?? Date.now(),
-		};
+			this.observedIceCandidatesPair.delete(iceCandidatePair.id);
+			this.emit('removed-ice-candidate-pair', iceCandidatePair);
+		}
+		for (const iceTransport of [ ...this.observedIceTransports.values() ]) {
+			if (iceTransport.visited) continue;
 
-		for (const pendingIssue of this.ωpendingIssuesForScores) {
-			switch (pendingIssue.severity) {
-				case 'critical':
-					score.score = 0.0;
-					break;
-				case 'major':
-					score.score *= 0.5;
-					break;
-				case 'minor':
-					score.score *= 0.8;
-					break;
+			this.observedIceTransports.delete(iceTransport.id);
+			this.emit('removed-ice-transport', iceTransport);
+		}
+		for (const inboundRtp of [ ...this.observedInboundRtps.values() ]) {
+			if (inboundRtp.visited) continue;
+
+			this.observedInboundRtps.delete(inboundRtp.ssrc);
+			this.emit('removed-inbound-rtp', inboundRtp);
+		}
+		for (const inboundTrack of [ ...this.observedInboundTracks.values() ]) {
+			if (inboundTrack.visited) continue;
+
+			this.observedInboundTracks.delete(inboundTrack.id);
+			this.emit('removed-inbound-track', inboundTrack);
+		}
+		for (const mediaPlayout of [ ...this.observedMediaPlayouts.values() ]) {
+			if (mediaPlayout.visited) continue;
+
+			this.observedMediaPlayouts.delete(mediaPlayout.id);
+			this.emit('removed-media-playout', mediaPlayout);
+		}
+		for (const mediaSource of [ ...this.observedMediaSources.values() ]) {
+			if (mediaSource.visited) continue;
+
+			this.observedMediaSources.delete(mediaSource.id);
+			this.emit('removed-media-source', mediaSource);
+		}
+		for (const outboundRtp of [ ...this.observedOutboundRtps.values() ]) {
+			if (outboundRtp.visited) continue;
+
+			this.observedOutboundRtps.delete(outboundRtp.ssrc);
+			this.emit('removed-outbound-rtp', outboundRtp);
+		}
+		for (const outboundTrack of [ ...this.observedOutboundTracks.values() ]) {
+			if (outboundTrack.visited) continue;
+
+			this.observedOutboundTracks.delete(outboundTrack.id);
+			this.emit('removed-outbound-track', outboundTrack);
+		}
+		for (const peerConnectionTransport of [ ...this.observedPeerConnectionTransports.values() ]) {
+			if (peerConnectionTransport.visited) continue;
+
+			this.observedPeerConnectionTransports.delete(peerConnectionTransport.id);
+			this.emit('removed-peer-connection-transport', peerConnectionTransport);
+		}
+		for (const remoteInboundRtp of [ ...this.observedRemoteInboundRtps.values() ]) {
+			if (remoteInboundRtp.visited) continue;
+
+			this.observedRemoteInboundRtps.delete(remoteInboundRtp.ssrc);
+			this.emit('removed-remote-inbound-rtp', remoteInboundRtp);
+		}
+		for (const remoteOutboundRtp of [ ...this.observedRemoteOutboundRtps.values() ]) {
+			if (remoteOutboundRtp.visited) continue;
+
+			this.observedRemoteOutboundRtps.delete(remoteOutboundRtp.ssrc);
+			this.emit('removed-remote-outbound-rtp', remoteOutboundRtp);
+		}
+	}
+
+	private _updateCertificateStats(stats: CertificateStats) {
+		let observedCertificate = this.observedCertificates.get(stats.id);
+
+		if (!observedCertificate) {
+			if (!stats.timestamp || !stats.id || !stats.fingerprint) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid CertificateStats (missing timestamp OR id OR fingerprint field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
 			}
-			score.remarks.push({
-				severity: pendingIssue.severity,
-				text: pendingIssue.description ?? 'Issue occurred',
-			});
+
+			observedCertificate = new ObservedCertificate(stats.timestamp, stats.id, this);
+
+			observedCertificate.update(stats);
+
+			this.observedCertificates.set(stats.id, observedCertificate);
+			this.emit('added-certificate', observedCertificate);
+		} else {
+			observedCertificate.update(stats);
+			this.emit('updated-certificate', observedCertificate);
 		}
 
-		this.ωpendingIssuesForScores = [];
-		this.score = score;
+		return observedCertificate;
+	}
 
-		this.emit('score', score);
+	private _updateCodecStats(stats: CodecStats) {
+		let observedCodec = this.observedCodecs.get(stats.id);
+
+		if (!observedCodec) {
+			if (!stats.timestamp || !stats.id || !stats.mimeType) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid CodecStats (missing timestamp OR id OR mimeType field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedCodec = new ObservedCodec(stats.timestamp, stats.id, stats.mimeType, this);
+
+			observedCodec.update(stats);
+			
+			this.observedCodecs.set(stats.id, observedCodec);
+			this.emit('added-codec', observedCodec);
+		} else {
+			observedCodec.update(stats);
+		}
+		this.emit('updated-codec', observedCodec);
+
+		return observedCodec;
+	}
+
+	private _updateDataChannelStats(stats: DataChannelStats) {
+		let observedDataChannel = this.observedDataChannels.get(stats.id);
+
+		if (!observedDataChannel) {
+			if (!stats.timestamp || !stats.id) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid DataChannelStats (missing timestamp OR id field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedDataChannel = new ObservedDataChannel(stats.timestamp, stats.id, this);
+
+			observedDataChannel.update(stats);
+
+			this.observedDataChannels.set(stats.id, observedDataChannel);
+			this.emit('added-data-channel', observedDataChannel);
+		} else {
+			observedDataChannel.update(stats);
+		}
+		this.emit('updated-data-channel', observedDataChannel);
+
+		return observedDataChannel;
+	}
+
+	private _updateIceCandidateStats(stats: IceCandidateStats) {
+		let observedIceCandidate = this.observedIceCandidates.get(stats.id);
+
+		if (!observedIceCandidate) {
+			if (!stats.timestamp || !stats.id) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid IceCandidateStats (missing timestamp OR id field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedIceCandidate = new ObservedIceCandidate(stats.timestamp, stats.id, this);
+
+			observedIceCandidate.update(stats);
+
+			this.observedIceCandidates.set(stats.id, observedIceCandidate);
+			this.emit('added-ice-candidate', observedIceCandidate);
+		} else {
+			observedIceCandidate.update(stats);
+		}
+		this.emit('updated-ice-candidate', observedIceCandidate);
+
+		return observedIceCandidate;
+	}
+
+	private _updateIceCandidatePairStats(stats: IceCandidateStats) {
+		let observedIceCandidatePair = this.observedIceCandidatesPair.get(stats.id);
+
+		if (!observedIceCandidatePair) {
+			if (!stats.timestamp || !stats.id) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid IceCandidateStats (missing timestamp OR id field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedIceCandidatePair = new ObservedIceCandidatePair(stats.timestamp, stats.id, this);
+
+			observedIceCandidatePair.update(stats);
+			
+			this.observedIceCandidatesPair.set(stats.id, observedIceCandidatePair);
+			this.emit('added-ice-candidate-pair', observedIceCandidatePair);
+		} else {
+			observedIceCandidatePair.update(stats);
+		}
+		this.emit('updated-ice-candidate-pair', observedIceCandidatePair);
+
+		return observedIceCandidatePair;
+	}
+
+	private _updateIceTransportStats(stats: IceCandidateStats) {
+		let observedIceTransport = this.observedIceTransports.get(stats.id);
+
+		if (!observedIceTransport) {
+			if (!stats.timestamp || !stats.id) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid IceCandidateStats (missing timestamp OR id field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedIceTransport = new ObservedIceTransport(stats.timestamp, stats.id, this);
+
+			observedIceTransport.update(stats);
+			
+			this.observedIceTransports.set(stats.id, observedIceTransport);
+			this.emit('added-ice-transport', observedIceTransport);
+		} else {
+			observedIceTransport.update(stats);
+		}
+		this.emit('updated-ice-transport', observedIceTransport);
+
+		return observedIceTransport;
+	}
+
+	private _updateInboundRtpStats(stats: InboundRtpStats) {
+		let observedInboundRtp = this.observedInboundRtps.get(stats.ssrc);
+
+		if (!observedInboundRtp) {
+			if (!stats.timestamp || !stats.id || !stats.ssrc || !stats.kind || !stats.trackIdentifier) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid InboundRtpStats (missing timestamp OR id OR ssrc OR kind OR trackIdentifier field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedInboundRtp = new ObservedInboundRtp(
+				stats.timestamp,
+				stats.id,
+				stats.ssrc,
+				stats.kind as MediaKind,
+				stats.trackIdentifier,
+				this
+			);
+			
+			observedInboundRtp.update(stats);
+
+			this.observedInboundRtps.set(stats.ssrc, observedInboundRtp);
+			this.emit('added-inbound-rtp', observedInboundRtp);
+		} else {
+			observedInboundRtp.update(stats);
+		}
+		this.emit('updated-inbound-rtp', observedInboundRtp);
+
+		return observedInboundRtp;
+	}
+
+	private _updateInboundTrackSample(stats: InboundTrackSample) {
+		let observedInboundTrack = this.observedInboundTracks.get(stats.id);
+
+		if (!observedInboundTrack) {
+			if (!stats.timestamp || !stats.id || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid InboundTrackSample (missing timestamp OR id OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			const inboundRtp = [ ...this.observedInboundRtps.values() ].find((inbRtp) => inbRtp.trackIdentifier === stats.id);
+			const mediaPlayout = inboundRtp ? 
+				[ ...this.observedMediaPlayouts.values() ].find((mp) => mp.id === inboundRtp.playoutId) : undefined;
+
+			observedInboundTrack = new ObservedInboundTrack(
+				stats.timestamp,
+				stats.id,
+				stats.kind as MediaKind,
+				this,
+				inboundRtp,
+				mediaPlayout,
+			);
+
+			observedInboundTrack.update(stats);
+			
+			this.observedInboundTracks.set(stats.id, observedInboundTrack);
+			this.emit('added-inbound-track', observedInboundTrack);
+		} else {
+			observedInboundTrack.update(stats);
+		}
+		this.emit('updated-inbound-track', observedInboundTrack);
+
+		return observedInboundTrack;
+	}
+
+	private _updateMediaPlayoutStats(stats: MediaPlayoutStats) {
+		let observedMediaPlayout = this.observedMediaPlayouts.get(stats.id);
+
+		if (!observedMediaPlayout) {
+			if (!stats.timestamp || !stats.id || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid InboundRtpStats (missing timestamp OR id OR kind OR trackIdentifier field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedMediaPlayout = new ObservedMediaPlayout(
+				stats.timestamp, 
+				stats.id, 
+				stats.kind as MediaKind, 
+				this
+			);
+
+			observedMediaPlayout.update(stats);
+
+			this.observedMediaPlayouts.set(stats.id, observedMediaPlayout);
+			this.emit('added-media-playout', observedMediaPlayout);
+		} else {
+			observedMediaPlayout.update(stats);
+		}
+		this.emit('updated-media-playout', observedMediaPlayout);
+
+		return observedMediaPlayout;
+	}
+
+	private _updateMediaSourceStats(stats: MediaSourceStats) {
+		let observedMediaSource = this.observedMediaSources.get(stats.id);
+
+		if (!observedMediaSource) {
+			if (!stats.timestamp || !stats.id || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid InboundRtpStats (missing timestamp OR id OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedMediaSource = new ObservedMediaSource(
+				stats.timestamp, 
+				stats.id, 
+				stats.kind as MediaKind, 
+				this
+			);
+
+			observedMediaSource.update(stats);
+
+			this.observedMediaSources.set(stats.id, observedMediaSource);
+			this.emit('added-media-source', observedMediaSource);
+		} else {
+			observedMediaSource.update(stats);
+		}
+		this.emit('updated-media-source', observedMediaSource);
+
+		return observedMediaSource;
+	}
+
+	private _updateOutboundRtpStats(stats: OutboundRtpStats) {
+		let observedOutboundRtp = this.observedOutboundRtps.get(stats.ssrc);
+
+		if (!observedOutboundRtp) {
+			if (!stats.timestamp || !stats.id || !stats.ssrc || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid OutboundRtpStats (missing timestamp OR id OR ssrc OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedOutboundRtp = new ObservedOutboundRtp(
+				stats.timestamp,
+				stats.id,
+				stats.ssrc,
+				stats.kind as MediaKind,
+				this
+			);
+
+			observedOutboundRtp.update(stats);
+
+			this.observedOutboundRtps.set(stats.ssrc, observedOutboundRtp);
+			this.emit('added-outbound-rtp', observedOutboundRtp);
+		} else {
+			observedOutboundRtp.update(stats);
+		}
+		this.emit('updated-outbound-rtp', observedOutboundRtp);
+		
+		return observedOutboundRtp;
+	}
+
+	public _updateOutboundTrackSample(stats: OutboundTrackSample) {
+		let observedOutboundTrack = this.observedOutboundTracks.get(stats.id);
+
+		if (!observedOutboundTrack) {
+			if (!stats.timestamp || !stats.id || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid OutboundTrackSample (missing timestamp OR id OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+			const observedMediaSource = [ ...this.observedMediaSources.values() ].find((mediaSource) => mediaSource.trackIdentifier === stats.id);
+			const outboundRtps = observedMediaSource 
+				? [ ...this.observedOutboundRtps.values() ].filter((outboundRtp) => outboundRtp.mediaSourceId === observedMediaSource?.id) : undefined;
+
+			observedOutboundTrack = new ObservedOutboundTrack(
+				stats.timestamp,
+				stats.id,
+				stats.kind as MediaKind,
+				this,
+				outboundRtps,
+				observedMediaSource,
+			);
+
+			observedOutboundTrack.update(stats);
+
+			this.observedOutboundTracks.set(stats.id, observedOutboundTrack);
+			this.emit('added-outbound-track', observedOutboundTrack);
+		} else {
+			observedOutboundTrack.update(stats);
+		}
+		this.emit('updated-outbound-track', observedOutboundTrack);
+
+		return observedOutboundTrack;
+	}
+
+	private _updatePeerConnectionTransportStats(stats: PeerConnectionTransportStats) {
+		let observedPeerConnectionTransport = this.observedPeerConnectionTransports.get(stats.id);
+
+		if (!observedPeerConnectionTransport) {
+			if (!stats.timestamp || !stats.id) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid PeerConnectionTransportStats (missing timestamp OR id field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedPeerConnectionTransport = new ObservedPeerConnectionTransport(stats.timestamp, stats.id, this);
+
+			observedPeerConnectionTransport.update(stats);
+
+			this.observedPeerConnectionTransports.set(stats.id, observedPeerConnectionTransport);
+			this.emit('added-peer-connection-transport', observedPeerConnectionTransport);
+		} else {
+			observedPeerConnectionTransport.update(stats);
+		}
+		this.emit('updated-peer-connection-transport', observedPeerConnectionTransport);
+
+		return observedPeerConnectionTransport;
+	}
+
+	private _updateRemoteInboundRtpStats(stats: RemoteInboundRtpStats) {
+		let observedRemoteInboundRtp = this.observedRemoteInboundRtps.get(stats.ssrc);
+
+		if (!observedRemoteInboundRtp) {
+			if (!stats.timestamp || !stats.id || !stats.ssrc || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid RemoteInboundRtpStats (missing timestamp OR id OR ssrc OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedRemoteInboundRtp = new ObservedRemoteInboundRtp(
+				stats.timestamp,
+				stats.id,
+				stats.ssrc,
+				stats.kind as MediaKind,
+				this
+			);
+
+			observedRemoteInboundRtp.update(stats);
+
+			this.observedRemoteInboundRtps.set(stats.ssrc, observedRemoteInboundRtp);
+			this.emit('added-remote-inbound-rtp', observedRemoteInboundRtp);
+		} else {
+			observedRemoteInboundRtp.update(stats);
+		}
+		this.emit('updated-remote-inbound-rtp', observedRemoteInboundRtp);
+
+		return observedRemoteInboundRtp;
+	}
+
+	private _updateRemoteOutboundRtpStats(stats: RemoteOutboundRtpStats) {
+		let observedRemoteOutboundRtp = this.observedRemoteOutboundRtps.get(stats.ssrc);
+
+		if (!observedRemoteOutboundRtp) {
+			if (!stats.timestamp || !stats.id || !stats.ssrc || !stats.kind) {
+				return logger.warn(
+					`ObservedPeerConnection received an invalid RemoteOutboundRtpStats (missing timestamp OR id OR ssrc OR kind field). PeerConnectionId: ${this.peerConnectionId} ClientId: ${this.client.clientId}, CallId: ${this.client.call.callId}`,
+					stats
+				);
+			}
+
+			observedRemoteOutboundRtp = new ObservedRemoteOutboundRtp(
+				stats.timestamp,
+				stats.id,
+				stats.ssrc,
+				stats.kind as MediaKind,
+				this
+			);
+
+			observedRemoteOutboundRtp.update(stats);
+
+			this.observedRemoteOutboundRtps.set(stats.ssrc, observedRemoteOutboundRtp);
+			this.emit('added-remote-outbound-rtp', observedRemoteOutboundRtp);
+		} else {
+			observedRemoteOutboundRtp.update(stats);
+		}
+		this.emit('updated-remote-outbound-rtp', observedRemoteOutboundRtp);
+
+		return observedRemoteOutboundRtp;
 	}
 }

@@ -30,9 +30,19 @@ export function isValidUuid(str: string): boolean {
 	return regexp.test(str);
 }
 
-export function getMedian(arr: number[]): number {
+export function getAverage(arr: number[], defaultAvgIfArrLengthIs0 = 0): number {
+	if (arr.length === 0) return defaultAvgIfArrLengthIs0;
+	
+	return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+export function getMedian(arr: number[], copyArrayForSorting = true): number {
 	// Sort the array in ascending order
-	const sortedArr = arr.slice().sort((a, b) => a - b);
+	const sortedArr = copyArrayForSorting 
+		? arr.slice().sort((a, b) => a - b)
+		: arr.sort((a, b) => a-b)
+
+	;
 
 	// Calculate the middle index
 	const mid = Math.floor(sortedArr.length / 2);
@@ -44,4 +54,16 @@ export function getMedian(arr: number[]): number {
 
 	// If the array length is even, return the average of the two middle elements
 	return (sortedArr[mid - 1] + sortedArr[mid]) / 2;
+}
+
+export function parseJsonAs<T>(json?: string): T | undefined {
+	if (!json) {
+		return undefined;
+	}
+	
+	try {
+		return JSON.parse(json) as T;
+	} catch (error) {
+		return undefined;
+	}
 }

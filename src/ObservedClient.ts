@@ -1,123 +1,92 @@
-import { Browser, ClientSample, Engine, IceLocalCandidate, IceRemoteCandidate, MediaCodecStats, MediaDevice, OperationSystem, Platform } from '@observertc/sample-schemas-js';
-import { ObservedCall } from './ObservedCall';
 import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { createLogger } from './common/logger';
-import { CallMetaType, createCallMetaReport } from './common/CallMetaReports';
 // eslint-disable-next-line camelcase
-import { PartialBy, isValidUuid } from './common/utils';
-import { CallEventType } from './common/CallEventType';
-import { ObservedSfu } from './ObservedSfu';
-import { ClientIssue } from './monitors/CallSummary';
-import { CallEventReport } from '@observertc/report-schemas-js';
-import { CalculatedScore } from './common/CalculatedScore';
+import { ClientEvent, ClientMetaData, ClientSample, PeerConnectionSample, ClientIssue, ExtensionStat } from './schema/ClientSample';
+import * as MetaData from './schema/ClientMetaTypes';
+import { ClientEventTypes } from './schema/ClientEventTypes';
+import { ObservedCall } from './ObservedCall';
+import { ClientMetaTypes } from './schema/ClientMetaTypes';
+import { parseJsonAs } from './common/utils';
+import { CalculatedScore } from './scores/CalculatedScore';
+import { Detectors } from './detectors/Detectors';
 
 const logger = createLogger('ObservedClient');
 
-export type ObservedClientModel= {
+export type ObservedClientSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	clientId: string;
-	mediaUnitId: string;
-	userId?: string,
-	marker?: string,
-	operationSystem?: OperationSystem,
-	engine?: Engine,
-	platform?: Platform,
-	browser?: Browser,
-	coordinates?: {
-		latitude: number;
-		longitude: number;
-	},
+	appData?: AppData;
 };
 
 export type ObservedClientEvents = {
-	update: [{
-		sample: ClientSample,
-		elapsedTimeInMs: number,
-	}],
-	close: [],
-	joined: [],
-	left: [],
-	newpeerconnection: [ObservedPeerConnection],
-	iceconnectionstatechange: [{
-		peerConnection: ObservedPeerConnection,
-		state: string,
-	}],
-	icegatheringstatechange: [{
-		peerConnection: ObservedPeerConnection,
-		state: string,
-	}],
-	connectionstatechange: [{
-		peerConnection: ObservedPeerConnection,
-		state: string,
-	}],
-	selectedcandidatepair: [{
-		peerConnection: ObservedPeerConnection,
-		localCandidate: IceLocalCandidate,
-		remoteCandidate: IceRemoteCandidate,
-	}],
-	issue: [ClientIssue],
-	usingturn: [boolean],
-	usermediaerror: [string],
-	rejoined: [{
-		lastJoined: number,
-	}],
-	score: [CalculatedScore],
+	update: [sample: ClientSample, elapsedTimeInMs: number];
+	close: [];
+	joined: [];
+	issue: [ClientIssue];
+	metaData: [ClientMetaData];
+	rejoined: [timestamp: number];
+	left: [];
+	usingturn: [boolean];
+	usermediaerror: [string];
+	extensionStats: [ExtensionStat];
+	clientEvent: [ClientEvent];
+
+	newpeerconnection: [ObservedPeerConnection];
 };
 
-export declare interface ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> {
+export declare interface ObservedClient {
 	on<U extends keyof ObservedClientEvents>(event: U, listener: (...args: ObservedClientEvents[U]) => void): this;
 	off<U extends keyof ObservedClientEvents>(event: U, listener: (...args: ObservedClientEvents[U]) => void): this;
 	once<U extends keyof ObservedClientEvents>(event: U, listener: (...args: ObservedClientEvents[U]) => void): this;
 	emit<U extends keyof ObservedClientEvents>(event: U, ...args: ObservedClientEvents[U]): boolean;
-	readonly appData: AppData;
-}
-
-type PendingPeerConnectionTimestamp = {
-	type: 'opened' | 'closed'
-	peerConnectionId: string;
-	timestamp: number;
-}
-
-type PendingMediaTrackTimestamp = {
-	type: 'added' | 'removed'
-	peerConnectionId: string;
-	mediaTrackId: string;
-	timestamp: number;
 }
 
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
-	
-	public readonly created = Date.now();
+	public readonly detectors: Detectors;
+
+	public readonly clientId: string;
+	public readonly observedPeerConnections = new Map<string, ObservedPeerConnection>();
+	public readonly calculatedScore: CalculatedScore = {
+		weight: 1,
+		value: undefined,
+	};
+
+	public appData: AppData;
+	public attachments?: Record<string, unknown>;
+
 	public updated = Date.now();
-	public sfuId?: string;
-	
-	private readonly _peerConnections = new Map<string, ObservedPeerConnection>();
-	
-	private _closed = false;
-	
-	private _acceptedSamples = 0;
-	private _timeZoneOffsetInHours?: number;
+	public acceptedSamples = 0;
+	public closed = false;
 
+	public joinedAt?: number;
+	public leftAt?: number;
+	public closedAt?: number;
+	public lastSampleTimestamp?: number;
 	// the timestamp of the CLIENT_JOINED event
-	private _joined?: number;
-	private _left?: number;
-	public lastStatsTimestamp?: number;
+	public operationSystem?: MetaData.OperationSystem;
+	public engine?: MetaData.Engine;
+	public platform?: MetaData.Platform;
+	public browser?: MetaData.Browser;
+	public mediaConstraints: string[] = [];
 
-	public score?: CalculatedScore;
 	public usingTURN = false;
+	public usingTCP = false;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
+
 	public totalInboundPacketsLost = 0;
 	public totalInboundPacketsReceived = 0;
 	public totalOutboundPacketsSent = 0;
 	public totalDataChannelBytesSent = 0;
 	public totalDataChannelBytesReceived = 0;
-	public totalSentBytes = 0;
-	public totalReceivedBytes = 0;
+	public totalDataChannelMessagesSent = 0;
+	public totalDataChannelMessagesReceived = 0;
 	public totalReceivedAudioBytes = 0;
 	public totalReceivedVideoBytes = 0;
 	public totalSentAudioBytes = 0;
 	public totalSentVideoBytes = 0;
+	public totalSentBytes = 0;
+	public totalReceivedBytes = 0;
 
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
@@ -125,908 +94,105 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public deltaSentVideoBytes = 0;
 	public deltaDataChannelBytesSent = 0;
 	public deltaDataChannelBytesReceived = 0;
+	public deltaDataChannelMessagesSent = 0;
+	public deltaDataChannelMessagesReceived = 0;
 	public deltaInboundPacketsLost = 0;
 	public deltaInboundPacketsReceived = 0;
 	public deltaOutboundPacketsSent = 0;
+	public deltaTransportSentBytes = 0;
+	public deltaTransportReceivedBytes = 0;
+	public deltaRttLt50Measurements = 0;
+	public deltaRttLt150Measurements = 0;
+	public deltaRttLt300Measurements = 0;
+	public deltaRttGtOrEq300Measurements = 0;
 
-	public avgRttInMs?: number;
-	public outboundAudioBitrate?: number;
-	public outboundVideoBitrate?: number;
-	public inboundAudioBitrate?: number;
-	public inboundVideoBitrate?: number;
-	public mediaConstraints: string[] = [];
+	public currentMaxRttInMs?: number;
+	public currentMinRttInMs?: number;
+	public currentAvgRttInMs?: number;
 
-	public readonly mediaDevices: MediaDevice[] = [];
-	public readonly mediaCodecs: MediaCodecStats[] = [];
-	public readonly userMediaErrors: string[] = [];
+	public sendingAudioBitrate = 0;
+	public sendingVideoBitrate = 0;
+	public receivingAudioBitrate = 0;
+	public receivingVideoBitrate = 0;
+
+	public numberOfInboundRtpStreams = 0;
+	public numberOfInbundTracks = 0;
+	public numberOfOutboundRtpStreams = 0;
+	public numberOfOutboundTracks = 0;
+	public numberOfDataChannels = 0;
+
+	public totalRttLt50Measurements = 0;
+	public totalRttLt150Measurements = 0;
+	public totalRttLt300Measurements = 0;
+	public totalRttGtOrEq300Measurements = 0;
+	public deltaNumberOfIssues = 0;
+
+	public totalScoreSum = 0;
+	public numberOfScoreMeasurements = 0;
+	public totalNumberOfIssues = 0;
+
+	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
-	public ωpendingPeerConnectionTimestamps: PendingPeerConnectionTimestamp[] = [];
-	public ωpendingMediaTrackTimestamps: PendingMediaTrackTimestamp[] = [];
-	
-	public constructor(
-		private readonly _model: ObservedClientModel,
-		public readonly call: ObservedCall,
-		public readonly appData: AppData
-	) {
+	private _injections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
+
+	public constructor(settings: ObservedClientSettings<AppData>, public readonly call: ObservedCall) {
 		super();
 		this.setMaxListeners(Infinity);
-	}
 
-	public getSfu<T extends Record<string, unknown> = Record<string, unknown>>(): ObservedSfu<T> | undefined {
-		const sfu = this.call.observer.observedSfus.get(this.sfuId ?? '');
-
-		if (!sfu) return;
+		this.clientId = settings.clientId;
+		this.appData = settings.appData ?? {} as AppData;
 		
-		return sfu as ObservedSfu<T>;
-	}
-
-	public get joined() {
-		return this._joined;
-	}
-
-	public set joined(value: number | undefined) {
-		this._joined = value;
-		
-		if (this._joined) {
-			this.emit('joined');
-		}
-	}
-
-	public get left() {
-		return this._left;
-	}
-
-	public set left(value: number | undefined) {
-		this._left = value;
-		
-		if (this._left) {
-			this.emit('left');
-		}
-	}
-
-	public get sfu(): ObservedSfu | undefined {
-		if (!this.sfuId) return;
-		
-		return this.call.observer.observedSfus.get(this.sfuId);
-	}
-
-	public get coordinates() {
-		return this._model.coordinates;
-	}
-
-	public set coordinates(value: { latitude: number; longitude: number } | undefined) {
-		this._model.coordinates = value;
-	}
-
-	public get clientId(): string {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.clientId!;
-	}
-
-	public get roomId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this.call.roomId!;
-	}
-
-	public get serviceId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this.call.serviceId!;
-	}
-
-	public get callId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this.call.callId!;
-	}
-
-	public get mediaUnitId() {
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-		return this._model.mediaUnitId!;
-	}
-
-	public get reports() {
-		return this.call.reports;
-	}
-
-	public get userId() {
-		return this._model.userId;
-	}
-
-	public set userId(userId: string | undefined) {
-		this._model.userId = userId;
-	}
-
-	public get timeZoneOffsetInHours() {
-		return this._timeZoneOffsetInHours;
-	}
-
-	public get marker() {
-		return this._model.marker;
-	}
-
-	public get browser() {
-		return this._model.browser;
-	}
-
-	public get engine() {
-		return this._model.engine;
-	}
-
-	public get operationSystem() {
-		return this._model.operationSystem;
-	}
-
-	public get platform() {
-		return this._model.platform;
-	}
-
-	public get acceptedSamples() {
-		return this._acceptedSamples;
-	}
-
-	public get closed() {
-		return this._closed;
-	}
-
-	public get peerConnections(): ReadonlyMap<string, ObservedPeerConnection> {
-		return this._peerConnections;
+		this.detectors = new Detectors();
 	}
 	
-	public close() {
-		if (this._closed) return;
-		this._closed = true;
+	public get numberOfPeerConnections() {
+		return this.observedPeerConnections.size;
+	}
 
-		Array.from(this._peerConnections.values()).forEach((peerConnection) => peerConnection.close());
+	public get score() { 
+		return this.calculatedScore.value; 
+	}
+
+	public close() {
+		if (this.closed) return;
+		this.closed = true;
+
+		this._injections.clientEvents?.forEach((clientEvent) => this._processClientEvent(clientEvent));
+		this._injections.clientIssues?.forEach((clientIssue) => this.addIssue(clientIssue));
+		this._injections.extensionStats?.forEach((extensionStat) => this.addExtensionStats(extensionStat));
+		this._injections.clientMetaItems?.forEach((clientMetaItem) => this.addMetadata(clientMetaItem));
+
+		Array.from(this.observedPeerConnections.values()).forEach((peerConnection) => peerConnection.close());
+		if (!this.leftAt) {
+			this.leftAt = this.lastSampleTimestamp;
+
+			if (this.leftAt) {
+				this.emit('left');
+			}
+		}
+		this.closedAt = Date.now();
 
 		this.emit('close');
 	}
 
-	public addEventReport(params: PartialBy<Omit<CallEventReport, 'serviceId' | 'roomId' | 'callId' | 'clientId' | 'userId' | 'marker' | 'attachments'>, 'timestamp'> & { attachments?: Record<string, unknown> }) {
-		const {
-			attachments,
-			...fields
-		} = params;
-
-		this.reports.addCallEventReport({
-			...fields,
-			serviceId: this.serviceId,
-			mediaUnitId: this.mediaUnitId,
-			roomId: this.roomId,
-			callId: this.callId,
-			clientId: this.clientId,
-			userId: this.userId,
-			timestamp: params.timestamp ?? Date.now(),
-			marker: this.marker,
-			attachments: attachments ? JSON.stringify(attachments) : undefined,
-		});
-	}
-
-	public addExtensionStatsReport(extensionType: string, payload?: Record<string, unknown>) {
-		this.reports.addClientExtensionReport({
-			serviceId: this.serviceId,
-			mediaUnitId: this.mediaUnitId,
-			roomId: this.roomId,
-			callId: this.callId,
-			clientId: this.clientId,
-			userId: this.userId,
-			timestamp: Date.now(),
-			extensionType,
-			payload: JSON.stringify(payload),
-			marker: this.marker,
-		});
-	}
-
-	public addIssue(issue: ClientIssue) {
-		try {
-			
-			this.reports.addCallEventReport({
-				serviceId: this.serviceId,
-				mediaUnitId: this.mediaUnitId,
-				roomId: this.roomId,
-				callId: this.callId,
-				clientId: this.clientId,
-				userId: this.userId,
-				
-				name: CallEventType.CLIENT_ISSUE,
-				value: issue.severity,
-				peerConnectionId: issue.peerConnectionId,
-				mediaTrackId: issue.trackId,
-				message: issue.description,
-				timestamp: issue.timestamp ?? Date.now(),
-				attachments: issue.attachments ? JSON.stringify(issue.attachments): undefined,
-			});
-		} catch (err) {
-			logger.warn(`Error adding client issue: ${(err as Error)?.message}`);
-		}
-
-		this._addAndEmitIssue(issue);
-	}
-
 	public accept(sample: ClientSample): void {
-		if (this._closed) throw new Error(`Client ${this.clientId} is closed`);
-		if (sample.clientId && sample.clientId !== 'NULL' && sample.clientId !== this.clientId) {
-			throw new Error(`Sample client id (${sample.clientId}) does not match the client id of the observed client (${this.clientId})`);
-		}
+		if (this.closed) throw new Error(`Client ${this.clientId} is closed`);
+
 		const now = Date.now();
-
-		++this._acceptedSamples;
-		if (0 < this.issues.length) {
-			// we reset the issues every time we accept a new sample
-			this.issues = [];
-		}
-		for (const peerConnection of this._peerConnections.values()) {
-			if (peerConnection.closed) continue;
-			peerConnection.resetMetrics();
-		}
-
-		if (this._model.userId) {
-			if (sample.userId && sample.userId !== 'NULL' && sample.userId !== this._model.userId) {
-				this._model.userId = sample.userId;
-			}
-		} else if (sample.userId && sample.userId !== 'NULL') {
-			this._model.userId = sample.userId;
-		}
+		const elapsedInMs = now - this.updated;
+		const elapsedInSeconds = elapsedInMs / 1000;
+		let sumOfRtts = 0;
+		let numberOfRttMeasurements = 0;
 		
-		if (this._model.marker !== sample.marker) {
-			this._model.marker = sample.marker;
-			this._peerConnections.forEach((peerConnection) => (peerConnection.marker = sample.marker));
-		}
-
-		if (this._timeZoneOffsetInHours !== sample.timeZoneOffsetInHours) {
-			this._timeZoneOffsetInHours = sample.timeZoneOffsetInHours;
-		}
-
-		if (sample.os && (
-			this._model.operationSystem?.name !== sample.os.name || 
-				this._model.operationSystem?.version !== sample.os.version ||
-				this._model.operationSystem?.versionName !== sample.os.versionName
-		)) {
-			this._model.operationSystem = sample.os;
-				
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.OPERATION_SYSTEM,
-					payload: sample.os,
-				}, 
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-	
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		if (sample.engine && (
-			this._model.engine?.name !== sample.engine.name || 
-				this._model.engine?.version !== sample.engine.version
-		)) {
-			this._model.engine = sample.engine;
-	
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.ENGINE,
-					payload: sample.engine,
-				}, 
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-	
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		if (sample.platform && (
-			this._model.platform?.model !== sample.platform.model || 
-				this._model.platform?.type !== sample.platform.type ||
-				this._model.platform?.vendor !== sample.platform.vendor
-		)) {
-			this._model.platform = sample.platform;
-	
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.PLATFORM,
-					payload: sample.platform,
-				},
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-	
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		if (sample.browser && (
-			this._model.browser?.name !== sample.browser.name || 
-				this._model.browser?.version !== sample.browser.version
-		)) {
-			this._model.browser = sample.browser;
-	
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.BROWSER,
-					payload: sample.browser,
-				}, 
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-	
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		for (const mediaConstraint of sample.mediaConstraints ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.MEDIA_CONSTRAINT,
-					payload: mediaConstraint,
-				}, 
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-
-			this.reports.addCallMetaReport(callMetaReport);
-			this.mediaConstraints.push(mediaConstraint);
-		}
-
-		for (const localSDP of sample.localSDPs ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, 
-				{
-					type: CallMetaType.LOCAL_SDP,
-					payload: localSDP,
-				}, 
-				this.userId,
-				undefined,
-				sample.timestamp
-			);
-
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		for (const extensionStats of sample.extensionStats ?? []) {
-			this.reports.addClientExtensionReport({
-				serviceId: this.serviceId,
-				mediaUnitId: this.mediaUnitId,
-				roomId: this.roomId,
-				callId: this.callId,
-				clientId: this.clientId,
-				userId: this.userId,
-				timestamp: now,
-				payload: extensionStats.payload,
-				extensionType: extensionStats.type,
-			});
-		}
-
-		for (const { timestamp, ...callEvent } of sample.customCallEvents ?? []) {
-			switch (callEvent.name) {
-				case CallEventType.CLIENT_JOINED: {
-					const lastJoined = this.joined;
-
-					this.joined = timestamp;
-
-					// if it is joined before and it is joined again
-					if (lastJoined && this.joined && lastJoined !== this.joined) {
-						this.emit('rejoined', { lastJoined });
-					}
-					// in case we have a left event before the joined event
-					if (this.left && this.joined && this.left < this.joined) {
-						this.left = undefined;
-					}
-					break;
-				}
-				case CallEventType.CLIENT_LEFT: {
-					this.left = timestamp;
-					break;
-				}
-				case CallEventType.PEER_CONNECTION_OPENED: {
-					callEvent.peerConnectionId && this.ωpendingPeerConnectionTimestamps.push({
-						type: 'opened',
-						peerConnectionId: callEvent.peerConnectionId,
-						timestamp: timestamp ?? sample.timestamp,
-					});
-					break;
-				}
-				case CallEventType.PEER_CONNECTION_CLOSED: {
-					callEvent.peerConnectionId && this.ωpendingPeerConnectionTimestamps.push({
-						type: 'closed',
-						peerConnectionId: callEvent.peerConnectionId,
-						timestamp: timestamp ?? sample.timestamp,
-					});
-					break;
-				}
-				case CallEventType.MEDIA_TRACK_ADDED: {
-					callEvent.peerConnectionId && callEvent.mediaTrackId && this.ωpendingMediaTrackTimestamps.push({
-						type: 'added',
-						peerConnectionId: callEvent.peerConnectionId,
-						mediaTrackId: callEvent.mediaTrackId,
-						timestamp: timestamp ?? sample.timestamp,
-					});
-					break;
-				}
-				case CallEventType.MEDIA_TRACK_REMOVED: {
-					callEvent.peerConnectionId && callEvent.mediaTrackId && this.ωpendingMediaTrackTimestamps.push({
-						type: 'removed',
-						peerConnectionId: callEvent.peerConnectionId,
-						mediaTrackId: callEvent.mediaTrackId,
-						timestamp: timestamp ?? sample.timestamp,
-					});
-					break;
-				}
-				case CallEventType.CLIENT_ISSUE: {
-					const severity = callEvent.value ? callEvent.value as ClientIssue['severity'] : 'minor';
-
-					try {
-						const issue: ClientIssue = {
-							severity,
-							timestamp: timestamp ?? Date.now(),
-							description: callEvent.message,
-							peerConnectionId: callEvent.peerConnectionId,
-							trackId: callEvent.mediaTrackId,
-							attachments: callEvent.attachments ? JSON.parse(callEvent.attachments) : undefined,
-						};
-
-						this._addAndEmitIssue(issue);
-					} catch (err) {
-						logger.warn(`Error parsing client issue: ${(err as Error)?.message}`);
-					}
-					break;
-				}
-			}
-
-			this.reports.addCallEventReport({
-				serviceId: this.serviceId,
-				mediaUnitId: this.mediaUnitId,
-				roomId: this.roomId,
-				callId: this.callId,
-				clientId: this.clientId,
-				userId: this.userId,
-				timestamp: timestamp ?? now,
-				...callEvent,
-			});
-
-			this.call.emit('callevent', {
-				mediaUnitId: this.mediaUnitId,
-				clientId: this.clientId,
-				userId: this.userId,
-				timestamp: timestamp ?? now,
-				...callEvent,
-			});
-			
-		}
-
-		for (const userMediaError of sample.userMediaErrors ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.USER_MEDIA_ERROR,
-					payload: userMediaError,
-				}, 
-				this.userId,
-			);
-
-			this.reports.addCallMetaReport(callMetaReport);
-			this.userMediaErrors.push(userMediaError);
-			this.emit('usermediaerror', userMediaError);
-		}
-
-		for (const certificate of sample.certificates ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.CERTIFICATE,
-					payload: certificate,
-				}, 
-				this.userId
-			);
-
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-	
-		for (const codec of sample.codecs ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.CODEC,
-					payload: codec,
-				}, this.userId);
-
-			this.reports.addCallMetaReport(callMetaReport);
-			if (codec.mimeType && !this.mediaCodecs.find((c) => c.mimeType === codec.mimeType)) {
-				this.mediaCodecs.push(codec);
-			}
-		}
-	
-		for (const iceServer of sample.iceServers ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.ICE_SERVER,
-					payload: iceServer,
-				}, this.userId);
-
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-	
-		for (const mediaDevice of sample.mediaDevices ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.MEDIA_DEVICE,
-					payload: mediaDevice,
-				}, this.userId);
-			
-			this.reports.addCallMetaReport(callMetaReport);
-			if (mediaDevice.id && !this.mediaDevices.find((d) => d.id === mediaDevice.id)) {
-				this.mediaDevices.push(mediaDevice);
-			}
-		}
-			
-		for (const mediaSource of sample.mediaSources ?? []) {
-			const callMetaReport = createCallMetaReport(
-				this.serviceId, 
-				this.mediaUnitId, 
-				this.roomId, 
-				this.callId, 
-				this.clientId, {
-					type: CallMetaType.MEDIA_SOURCE,
-					payload: mediaSource,
-				}, this.userId);
-				
-			this.reports.addCallMetaReport(callMetaReport);
-		}
-
-		for (const transport of sample.pcTransports ?? []) {
-			try {
-				const peerConnection = this._peerConnections.get(transport.transportId) ?? this._createPeerConnection(transport.peerConnectionId);
-
-				!peerConnection.label && transport.label && (peerConnection.label = transport.label);
-				peerConnection.update(transport, sample.timestamp); 
-			} catch (err) {
-				logger.error(`Error creating peer connection: ${(err as Error)?.message}`);
-			}
-				
-		}
-
-		for (const track of sample.inboundAudioTracks ?? []) {
-			if (!track.peerConnectionId || !track.trackId) {
-				logger.warn(`InboundAudioTrack without peerConnectionId or trackId: ${JSON.stringify(track)}`);
-
-				continue;
-			}
-
-			try {
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? this._createPeerConnection(track.peerConnectionId);
-
-				if (!peerConnection) continue;
-	
-				const inboundAudioTrack = peerConnection.inboundAudioTracks.get(track.trackId) ?? peerConnection.createInboundAudioTrack({
-					trackId: track.trackId,
-					sfuStreamId: track.sfuStreamId,
-					sfuSinkId: track.sfuSinkId,
-				});
-	
-				inboundAudioTrack.update(track, sample.timestamp);
-	
-				if (!inboundAudioTrack.remoteOutboundTrack) {
-					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundAudioTrack.get(inboundAudioTrack.sfuStreamId ?? '');
-
-					if (remoteOutboundTrack) {
-						inboundAudioTrack.remoteOutboundTrack = remoteOutboundTrack;
-						
-						inboundAudioTrack.once('close', () => {
-							remoteOutboundTrack?.remoteInboundTracks.delete(inboundAudioTrack.trackId ?? '');
-						});
-						remoteOutboundTrack.remoteInboundTracks.set(inboundAudioTrack.trackId ?? '', inboundAudioTrack);
-					}
-				}
-			} catch (err) {
-				logger.error(`Error creating inbound audio track: ${(err as Error)?.message}`);
-			}
-		}
-
-		for (const track of sample.inboundVideoTracks ?? []) {
-			if (!track.peerConnectionId || !track.trackId) {
-				logger.warn(`InboundVideoTrack without peerConnectionId or trackId: ${JSON.stringify(track)}`);
-
-				continue;
-			}
-			if (isValidUuid(track.trackId) === false) {
-				// mediasoup-probator trackId is not a valid UUID, no need to warn about it
-				if (track.trackId === 'probator') continue;
-				logger.warn(`InboundVideoTrack with invalid trackId: ${track.trackId}`);
-				continue;
-			}
-
-			try {
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? this._createPeerConnection(track.peerConnectionId);
-
-				if (!peerConnection) continue;
-	
-				const inboundVideoTrack = peerConnection.inboundVideoTracks.get(track.trackId) ?? peerConnection.createInboundVideoTrack({
-					trackId: track.trackId,
-					sfuStreamId: track.sfuStreamId,
-					sfuSinkId: track.sfuSinkId,
-				});
-	
-				inboundVideoTrack.update(track, sample.timestamp);
-
-				if (!inboundVideoTrack.remoteOutboundTrack) {
-					const remoteOutboundTrack = this.call.sfuStreamIdToOutboundVideoTrack.get(inboundVideoTrack.sfuStreamId ?? '');
-
-					if (remoteOutboundTrack) {
-						inboundVideoTrack.remoteOutboundTrack = remoteOutboundTrack;
-						
-						inboundVideoTrack.once('close', () => {
-							remoteOutboundTrack?.remoteInboundTracks.delete(inboundVideoTrack.trackId ?? '');
-						});
-						remoteOutboundTrack.remoteInboundTracks.set(inboundVideoTrack.trackId ?? '', inboundVideoTrack);
-					}
-				}
-			} catch (err) {
-				logger.error(`Error creating inbound video track: ${(err as Error)?.message}`);
-			}
-		}
-
-		for (const track of sample.outboundAudioTracks ?? []) {
-			if (!track.peerConnectionId || !track.trackId) {
-				logger.warn(`OutboundAudioTrack without peerConnectionId or trackId: ${JSON.stringify(track)}`);
-
-				continue;
-			}
-
-			try {
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? this._createPeerConnection(track.peerConnectionId);
-
-				if (!peerConnection) continue;
-	
-				const outboundAudioTrack = peerConnection.outboundAudioTracks.get(track.trackId) ?? peerConnection.createOutboundAudioTrack({
-					trackId: track.trackId,
-					sfuStreamId: track.sfuStreamId,
-				});
-
-				outboundAudioTrack.update(track, sample.timestamp);
-
-				if (outboundAudioTrack.sfuStreamId && !this.call.sfuStreamIdToOutboundAudioTrack.has(outboundAudioTrack.sfuStreamId)) {
-					this.call.sfuStreamIdToOutboundAudioTrack.set(outboundAudioTrack.sfuStreamId, outboundAudioTrack);
-				}
-
-			} catch (err) {
-				logger.error(`Error creating outbound audio track: ${(err as Error)?.message}`);
-			}
-				
-		}
-
-		for (const track of sample.outboundVideoTracks ?? []) {
-			if (!track.peerConnectionId || !track.trackId) {
-				logger.warn(`OutboundVideoTrack without peerConnectionId or trackId: ${JSON.stringify(track)}`);
-
-				continue;
-			}
-
-			try {
-				const peerConnection = this._peerConnections.get(track.peerConnectionId) ?? this._createPeerConnection(track.peerConnectionId);
-
-				if (!peerConnection) continue;
-	
-				const outboundVideoTrack = peerConnection.outboundVideoTracks.get(track.trackId) ?? peerConnection.createOutboundVideoTrack({
-					trackId: track.trackId,
-					sfuStreamId: track.sfuStreamId,
-				});
-	
-				outboundVideoTrack.update(track, sample.timestamp);
-
-				if (outboundVideoTrack.sfuStreamId && !this.call.sfuStreamIdToOutboundVideoTrack.has(outboundVideoTrack.sfuStreamId)) {
-					this.call.sfuStreamIdToOutboundVideoTrack.set(outboundVideoTrack.sfuStreamId, outboundVideoTrack);
-				}
-
-			} catch (err) {
-				logger.error(`Error creating outbound video track: ${(err as Error)?.message}`);
-			}
-		}
-
-		for (const iceLocalCandidate of sample.iceLocalCandidates ?? []) {
-			if (!iceLocalCandidate.peerConnectionId) {
-				logger.warn(`Local ice candidate without peerConnectionId: ${JSON.stringify(iceLocalCandidate)}`);
-				continue;
-			}
-			const peerConnection = this._peerConnections.get(iceLocalCandidate.peerConnectionId);
-
-			if (!peerConnection) {
-				logger.debug(`Peer connection ${iceLocalCandidate.peerConnectionId} not found for ice local candidate ${iceLocalCandidate.id}`);
-				continue;
-			}
-
-			peerConnection.ICE.addLocalCandidate(iceLocalCandidate, sample.timestamp);
-		}
-	
-		for (const iceRemoteCandidate of sample.iceRemoteCandidates ?? []) {
-			if (!iceRemoteCandidate.peerConnectionId) {
-				logger.warn(`Remote ice candidate without peerConnectionId: ${JSON.stringify(iceRemoteCandidate)}`);
-				continue;
-			}
-			const peerConnection = this._peerConnections.get(iceRemoteCandidate.peerConnectionId);
-
-			if (!peerConnection) {
-				logger.debug(`Peer connection ${iceRemoteCandidate.peerConnectionId} not found for ice remote candidate ${iceRemoteCandidate.id}`);
-				continue;
-			}
-
-			peerConnection.ICE.addRemoteCandidate(iceRemoteCandidate, sample.timestamp);
-		}
-
-		for (const candidatePair of sample.iceCandidatePairs ?? []) {
-			const peerConnection = this._peerConnections.get(candidatePair.peerConnectionId);
-
-			if (!peerConnection) {
-				logger.debug(`Peer connection ${candidatePair.peerConnectionId} not found for ice candidate pair ${candidatePair.localCandidateId}, ${candidatePair.remoteCandidateId}`);
-
-				continue;
-			}
-
-			peerConnection.ICE.update(candidatePair, sample.timestamp);
-		}
-
-		for (const dataChannel of sample.dataChannels ?? []) {
-			if (!dataChannel.peerConnectionId || !dataChannel.dataChannelIdentifier) {
-				logger.warn(`DataChannel without peerConnectionId or dataChannelIdentifier: ${JSON.stringify(dataChannel)}`);
-
-				continue;
-			}
-
-			try {
-				const peerConnection = this._peerConnections.get(dataChannel.peerConnectionId) ?? this._createPeerConnection(dataChannel.peerConnectionId);
-
-				if (!peerConnection) continue;
-	
-				const observedDataChannel = peerConnection.dataChannels.get(dataChannel.dataChannelIdentifier) ?? peerConnection.createDataChannel(dataChannel.dataChannelIdentifier);
-	
-				observedDataChannel.update(dataChannel, sample.timestamp);
-			} catch (err) {
-				logger.error(`Error creating data channel: ${(err as Error)?.message}`);
-			}
-		}
-
-		// try to set the timestamps of the peer connections
-		if (0 < this.ωpendingPeerConnectionTimestamps.length) {
-			const newPendingTimestamps: PendingPeerConnectionTimestamp[] = [];
-
-			for (const pendingTimestamp of this.ωpendingPeerConnectionTimestamps) {
-				const peerConnection = this._peerConnections.get(pendingTimestamp.peerConnectionId);
-
-				if (!peerConnection) {
-					newPendingTimestamps.push(pendingTimestamp);
-					continue;
-				}
-				if (pendingTimestamp.type === 'opened') peerConnection.opened = pendingTimestamp.timestamp;
-				else if (pendingTimestamp.type === 'closed') peerConnection.closedTimestamp = pendingTimestamp.timestamp;
-			}
-
-			this.ωpendingPeerConnectionTimestamps = newPendingTimestamps;
-		}
+		++this.acceptedSamples;
 		
-		// try to set the timestamps of the media tracks
-		if (0 < this.ωpendingMediaTrackTimestamps.length) {
-			const newPendingTimestamps: PendingMediaTrackTimestamp[] = [];
-
-			for (const pendingTimestamp of this.ωpendingMediaTrackTimestamps) {
-				const peerConnection = this._peerConnections.get(pendingTimestamp.peerConnectionId);
-				const mediaTrack = peerConnection?.inboundAudioTracks.get(pendingTimestamp.mediaTrackId) ??
-					peerConnection?.inboundVideoTracks.get(pendingTimestamp.mediaTrackId) ??
-					peerConnection?.outboundAudioTracks.get(pendingTimestamp.mediaTrackId) ??
-					peerConnection?.outboundVideoTracks.get(pendingTimestamp.mediaTrackId);
-
-				if (!mediaTrack) {
-					newPendingTimestamps.push(pendingTimestamp);
-					continue;
-				}
-
-				if (pendingTimestamp.type === 'added') mediaTrack.added = pendingTimestamp.timestamp;
-				else if (pendingTimestamp.type === 'removed') mediaTrack.removed = pendingTimestamp.timestamp;
-			}
-
-			this.ωpendingMediaTrackTimestamps = newPendingTimestamps;
-		}
-
-		// close resources that are not visited
-		for (const peerConnection of this._peerConnections.values()) {
-			if (!peerConnection.visited) {
-				peerConnection.close();
-
-				continue;
-			}
-
-			for (const track of peerConnection.inboundAudioTracks.values()) {
-				if (!track.visited) {
-					track.close();
-
-					continue;
-				}
-
-				track.visited = false;
-			}
-			for (const track of peerConnection.inboundVideoTracks.values()) {
-				if (!track.visited) {
-					track.close();
-
-					continue;
-				}
-
-				track.visited = false;
-			}
-			for (const track of peerConnection.outboundAudioTracks.values()) {
-				if (!track.visited) {
-					track.close();
-
-					continue;
-				}
-
-				track.visited = false;
-			}
-			for (const dataChannel of peerConnection.dataChannels.values()) {
-				if (!dataChannel.visited) {
-					dataChannel.close();
-
-					continue;
-				}
-
-				dataChannel.visited = false;
-			}
-
-			peerConnection.visited = false;
-		}
-
-		// update metrics
-		const wasUsingTURN = this.usingTURN;
-		const elapsedTimeInMs = now - this.updated;
-
-		this.usingTURN = false;
 		this.availableIncomingBitrate = 0;
 		this.availableOutgoingBitrate = 0;
+		this.deltaDataChannelBytesReceived = 0;
+		this.deltaDataChannelBytesSent = 0;
+		this.deltaDataChannelMessagesReceived = 0;
+		this.deltaDataChannelMessagesSent = 0;
 		this.deltaInboundPacketsLost = 0;
 		this.deltaInboundPacketsReceived = 0;
 		this.deltaOutboundPacketsSent = 0;
@@ -1034,138 +200,589 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.deltaReceivedVideoBytes = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
-		this.deltaDataChannelBytesReceived = 0;
-		this.deltaDataChannelBytesSent = 0;
-		
-		this.outboundAudioBitrate = 0;
-		this.outboundVideoBitrate = 0;
-		this.inboundAudioBitrate = 0;
-		this.inboundVideoBitrate = 0;
-		let sumRttInMs = 0;
-		let anyPeerConnectionUsingTurn = false;
+		this.deltaTransportReceivedBytes = 0;
+		this.deltaTransportSentBytes = 0;
+		this.deltaRttLt50Measurements = 0;
+		this.deltaRttLt150Measurements = 0;
+		this.deltaRttLt300Measurements = 0;
+		this.deltaRttGtOrEq300Measurements = 0;
+		this.deltaNumberOfIssues = 0;
 
-		let minPcScore: number | undefined;
-		let maxPcScore: number | undefined;
-		let numberOfScoredPeerConnections = 0;
+		this.numberOfDataChannels = 0;
+		this.numberOfInboundRtpStreams = 0;
+		this.numberOfInbundTracks = 0;
+		this.numberOfOutboundRtpStreams = 0;
+		this.numberOfOutboundTracks = 0;
+		this.usingTURN = false;
+		this.usingTCP = false;
+		this.currentMinRttInMs = undefined;
+		this.currentMaxRttInMs = undefined;
 
-		for (const peerConnection of this._peerConnections.values()) {
-			if (peerConnection.closed) continue;
+		this._mergeInjections(sample);
 
-			peerConnection.updateMetrics();
+		const clientEventsPostBuffer: ClientEvent[] = [];
+
+		for (const clientEvent of sample.clientEvents ?? []) {
+			this._processClientEvent(clientEvent, clientEventsPostBuffer);
+
+			this.call.observer.emit('client-event', this, clientEvent);
+		}
+
+		for (const metaData of sample.clientMetaItems ?? []) {
+			this.addMetadata(metaData);
+		}
+
+		for (const issue of sample.clientIssues ?? []) {
+			this.addIssue(issue);
+
+			++this.deltaNumberOfIssues;
+		}
+
+		for (const extensionStat of sample.extensionStats ?? []) {
+			this.addExtensionStats(extensionStat);
+		}
+
+		for (const pcSample of sample.peerConnections ?? []) {
+			const observedPeerConnection = this._updatePeerConnection(pcSample);
+
+			if (!observedPeerConnection) continue;
+
+			this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
+			this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
+			this.deltaDataChannelMessagesReceived += observedPeerConnection.deltaDataChannelMessagesReceived;
+			this.deltaDataChannelMessagesSent += observedPeerConnection.deltaDataChannelMessagesSent;
+			this.deltaInboundPacketsLost += observedPeerConnection.deltaInboundPacketsLost;
+			this.deltaInboundPacketsReceived += observedPeerConnection.deltaInboundPacketsReceived;
+			this.deltaOutboundPacketsSent += observedPeerConnection.deltaOutboundPacketsSent;
+			this.deltaReceivedAudioBytes += observedPeerConnection.deltaReceivedAudioBytes;
+			this.deltaReceivedVideoBytes += observedPeerConnection.deltaReceivedVideoBytes;
+			this.deltaSentAudioBytes += observedPeerConnection.deltaSentAudioBytes;
+			this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
+			this.deltaTransportReceivedBytes += observedPeerConnection.deltaTransportReceivedBytes;
+			this.deltaTransportSentBytes += observedPeerConnection.deltaTransportSentBytes;
 			
-			this.deltaInboundPacketsLost += peerConnection.deltaInboundPacketsLost;
-			this.deltaInboundPacketsReceived += peerConnection.deltaInboundPacketsReceived;
-			this.deltaOutboundPacketsSent += peerConnection.deltaOutboundPacketsSent;
-			this.deltaReceivedAudioBytes += peerConnection.deltaReceivedAudioBytes;
-			this.deltaReceivedVideoBytes += peerConnection.deltaReceivedVideoBytes;
-			this.deltaSentAudioBytes += peerConnection.deltaSentAudioBytes;
-			this.deltaSentVideoBytes += peerConnection.deltaSentVideoBytes;
-			this.deltaDataChannelBytesReceived += peerConnection.deltaDataChannelBytesReceived;
-			this.deltaDataChannelBytesSent += peerConnection.deltaDataChannelBytesSent;
+			this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
+			this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
 
-			this.availableIncomingBitrate += peerConnection.availableIncomingBitrate ?? 0;
-			this.availableOutgoingBitrate += peerConnection.availableOutgoingBitrate ?? 0;
+			this.numberOfDataChannels += observedPeerConnection.observedDataChannels.size;
+			this.numberOfInbundTracks += observedPeerConnection.observedInboundTracks.size;
+			this.numberOfOutboundRtpStreams += observedPeerConnection.observedOutboundRtps.size;
+			this.numberOfOutboundTracks += observedPeerConnection.observedOutboundTracks.size;
+			this.numberOfInboundRtpStreams += observedPeerConnection.observedInboundRtps.size;
 
-			sumRttInMs += peerConnection.avgRttInMs ?? 0;
+			if (observedPeerConnection.usingTURN) {
+				this.usingTURN = true;
+			}
+			if (observedPeerConnection.usingTCP) {
+				this.usingTCP = true;
+			}
 
-			anyPeerConnectionUsingTurn ||= peerConnection.usingTURN;
+			if (observedPeerConnection.currentRttInMs) {
+				if (this.currentMinRttInMs === undefined || observedPeerConnection.currentRttInMs < this.currentMinRttInMs) {
+					this.currentMinRttInMs = observedPeerConnection.currentRttInMs;
+				}
+				if (this.currentMaxRttInMs === undefined || observedPeerConnection.currentRttInMs > this.currentMaxRttInMs) {
+					this.currentMaxRttInMs = observedPeerConnection.currentRttInMs;
+				}
+				if (observedPeerConnection.currentRttInMs < 50) {
+					this.deltaRttLt50Measurements += 1;
+				} else if (observedPeerConnection.currentRttInMs < 150) {
+					this.deltaRttLt150Measurements += 1;
+				} else if (observedPeerConnection.currentRttInMs < 300) {
+					this.deltaRttLt300Measurements += 1;
+				} else if (300 <= observedPeerConnection.currentRttInMs) {
+					this.deltaRttGtOrEq300Measurements += 1;
+				}
 
-			if (peerConnection.score) {
-				if (minPcScore === undefined || peerConnection.score.score < minPcScore) minPcScore = peerConnection.score.score;
-				if (maxPcScore === undefined || peerConnection.score.score > maxPcScore) maxPcScore = peerConnection.score.score;
-
-				++numberOfScoredPeerConnections;
+				sumOfRtts += observedPeerConnection.currentRttInMs;
+				++numberOfRttMeasurements;
 			}
 		}
 
-		this.score = {
-			score: minPcScore ?? -1,
-			remarks: [ {
-				severity: 'none',
-				text: `Min and max score of all peer connections: ${minPcScore}, ${maxPcScore}, number of PeerConnections with scores: ${numberOfScoredPeerConnections}`,
-			} ],
-			timestamp: sample.timestamp,
-		};
-		this.emit('score', this.score);
+		for (const clientEvent of clientEventsPostBuffer) {
+			this._processClientEvent(clientEvent);
+		}
 
-		this.usingTURN = anyPeerConnectionUsingTurn === true;
-		
-		if (wasUsingTURN !== this.usingTURN) this.emit('usingturn', this.usingTURN);
+		// emit new attachments?
+		this.attachments = sample.attachments;
 
-		this.totalSentBytes += this.deltaSentAudioBytes + this.deltaSentVideoBytes;
-		this.totalReceivedBytes += this.deltaReceivedAudioBytes + this.deltaReceivedVideoBytes;
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
+		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
+		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
+		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
 		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
-		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;	
+		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
 		this.totalSentAudioBytes += this.deltaSentAudioBytes;
 		this.totalSentVideoBytes += this.deltaSentVideoBytes;
-		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
-		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
-		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
-		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
-		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
-		
-		this.outboundAudioBitrate = (this.deltaSentAudioBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
-		this.outboundVideoBitrate = (this.deltaSentVideoBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
-		this.inboundAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
-		this.inboundVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (Math.max(elapsedTimeInMs, 1) / 1000);
+		this.totalReceivedBytes += this.deltaTransportReceivedBytes;
+		this.totalSentBytes += this.deltaTransportSentBytes;
+		this.totalRttLt50Measurements += this.deltaRttLt50Measurements;
+		this.totalRttLt150Measurements += this.deltaRttLt150Measurements;
+		this.totalRttLt300Measurements += this.deltaRttLt300Measurements;
+		this.totalRttGtOrEq300Measurements += this.deltaRttGtOrEq300Measurements;
+		this.totalNumberOfIssues += this.deltaNumberOfIssues;
 
-		this.avgRttInMs = this._peerConnections.size ? sumRttInMs / this._peerConnections.size : undefined;
-		
-		// to make sure when sample is emitted it can be associated to this client
-		sample.clientId = this.clientId;
+		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
+		this.receivingVideoBitrate = (this.totalReceivedVideoBytes * 8) / (elapsedInSeconds);
+		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
+		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / (elapsedInSeconds);
+		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
-		this.updated = now;
-		this.lastStatsTimestamp = sample.timestamp;
-		this.emit('update', {
+		this.calculatedScore.value = sample.score;
+		this.detectors.update();
+
+		this.lastSampleTimestamp = sample.timestamp;
+		// emit update
+		this.emit('update', 
 			sample,
-			elapsedTimeInMs,
-		});
+			now - this.updated,
+		);
+		this.updated = now;
+
+		// if result changed after update
+		if (this.calculatedScore.value) {
+			this.totalScoreSum += this.calculatedScore.value;
+			++this.numberOfScoreMeasurements;
+		}
 	}
 
-	private _addAndEmitIssue(issue: ClientIssue) {
-		this.issues.push(issue);
-
-		if (issue.peerConnectionId) {
-			const peerConnection = this._peerConnections.get(issue.peerConnectionId);
-
-			if (peerConnection) {
-				
-				if (issue.trackId) {
-					const track = peerConnection.inboundAudioTracks.get(issue.trackId) ?? peerConnection.inboundVideoTracks.get(issue.trackId);
-
-					if (track) track.ωpendingIssuesForScores.push(issue);
-				} else {
-					peerConnection.ωpendingIssuesForScores.push(issue);
+	private _processClientEvent(event: ClientEvent, postBuffer?: ClientEvent[]) {
+		// eslint-disable-next-line no-console
+		// console.warn('ClientEvent', event);
+		switch (event.type) {
+			case ClientEventTypes.CLIENT_JOINED: {
+				if (event.timestamp) {
+					if (!this.joinedAt) {
+						this.joinedAt = event.timestamp;
+						this.emit('joined');
+					} else if (this.joinedAt < event.timestamp) {
+						this.emit('rejoined', event.timestamp);
+					} else {
+						this.joinedAt = event.timestamp;
+						logger.warn(`Client ${this.clientId} joinedAt timestamp was updated to ${event.timestamp}. the joined event will not be emitted.`);
+					}
 				}
+				logger.debug('Client %s joined at %o', this.clientId, event);
+				break;
+			}
+			case ClientEventTypes.CLIENT_LEFT: {
+				if (event.timestamp) {
+					if (!this.leftAt) {
+						this.leftAt = event.timestamp;
+						this.emit('left');
+					} else {
+						logger.warn(`Client ${this.clientId} leftAt timestamp was already set`);
+					}
+
+				}
+				logger.debug('Client %s left at %o', this.clientId, event);
+				break;
+			}
+			case ClientEventTypes.PEER_CONNECTION_OPENED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.openedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_OPENED event without a corresponding observedPeerConnection: %o', event);
+					}
+					
+				}
+				break;
+			}
+			case ClientEventTypes.PEER_CONNECTION_CLOSED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.closedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_CLOSED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_ADDED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId) ?? observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedTrack) {
+						observedTrack.addedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_ADDED event without a corresponding observedPeerConnection or observedTrack: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_REMOVED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId) ?? observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedTrack) {
+						observedTrack.removedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_REMOVED event without a corresponding observedPeerConnection or observedTrack: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.DATA_CHANNEL_OPEN: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.dataChannelId && typeof payload.dataChannelId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedDataChannel = observedPeerConnection?.observedDataChannels.get(payload.dataChannelId);
+
+					if (observedDataChannel) {
+						observedDataChannel.addedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received DATA_CHANNEL_OPENED event without a corresponding observedPeerConnection or observedDataChannel: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.DATA_CHANNEL_CLOSED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.dataChannelId && typeof payload.dataChannelId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedDataChannel = observedPeerConnection?.observedDataChannels.get(payload.dataChannelId);
+
+					if (observedDataChannel) {
+						observedDataChannel.removedAt = event.timestamp;
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received DATA_CHANNEL_CLOSE event without a corresponding observedPeerConnection or observedDataChannel: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_MUTED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedPeerConnection) {
+						if (observedInboundTrack) {
+							observedInboundTrack.muted = true;
+							observedPeerConnection?.emit('muted-inbound-track', observedInboundTrack);
+						} else if (observedOutboundTrack) {
+							observedOutboundTrack.muted = true;
+							observedPeerConnection?.emit('muted-outbound-track', observedOutboundTrack);
+						}
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_MUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
+					}
+				}
+
+				break;
+			}
+			case ClientEventTypes.MEDIA_TRACK_UNMUTED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
+
+					if (observedPeerConnection) {
+						if (observedInboundTrack) {
+							observedInboundTrack.muted = false;
+							observedPeerConnection?.emit('unmuted-inbound-track', observedInboundTrack);
+						} else if (observedOutboundTrack) {
+							observedOutboundTrack.muted = false;
+							observedPeerConnection?.emit('unmuted-outbound-track', observedOutboundTrack);
+						}
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received MEDIA_TRACK_UNMUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.ICE_CONNECTION_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.iceConnectionState && typeof payload.iceConnectionState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.iceConnectionState = payload.iceConnectionState;
+						observedPeerConnection.emit('iceconnectionstatechange', {
+							state: payload.iceConnectionState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received ICE_CONNECTION_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.ICE_GATHERING_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.iceGatheringState && typeof payload.iceGatheringState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.iceGatheringState = payload.iceGatheringState;
+						observedPeerConnection.emit('icegatheringstatechange', {
+							state: payload.iceGatheringState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received ICE_GATHERING_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+			case ClientEventTypes.PEER_CONNECTION_STATE_CHANGED: {
+				const payload = parseJsonAs<Record<string, unknown>>(event.payload);
+
+				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.peerConnectionState && typeof payload.peerConnectionState === 'string') {
+					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
+
+					if (observedPeerConnection) {
+						observedPeerConnection.connectionState = payload.peerConnectionState;
+						observedPeerConnection.emit('connectionstatechange', {
+							state: payload.peerConnectionState,
+						});
+					} else if (postBuffer) {
+						postBuffer.push(event);
+					} else {
+						logger.warn('Received PEER_CONNECTION_STATE_CHANGED event without a corresponding observedPeerConnection: %o', event);
+					}
+				}
+				break;
+			}
+		}
+		
+		this.emit('clientEvent', event);
+	}
+
+	public injectMetaData(metaData: ClientMetaData) {
+		if (this.closed) return;
+		
+		if (!this._injections.clientMetaItems) this._injections.clientMetaItems = [];
+
+		this._injections.clientMetaItems.push(metaData);
+	}
+
+	public injectEvent(event: ClientEvent) {
+		if (this.closed) return;
+
+		if (!this._injections.clientEvents) this._injections.clientEvents = [];
+
+		this._injections.clientEvents.push(event);
+	}
+
+	public injectIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		if (!this._injections.clientIssues) this._injections.clientIssues = [];
+
+		this._injections.clientIssues.push(issue);
+	}
+
+	public injectExtensionStat(stat: ExtensionStat) {
+		if (this.closed) return;
+
+		if (!this._injections.extensionStats) this._injections.extensionStats = [];
+
+		this._injections.extensionStats.push(stat);
+	}
+
+	public injectAttachment(key: string, value: unknown) {
+		if (this.closed) return;
+
+		if (!this._injections.attachments) this._injections.attachments = {};
+
+		this._injections.attachments[key] = value;
+		
+	}
+
+	public addMetadata(metadata: ClientMetaData) {
+		if (this.closed) return;
+		
+		switch (metadata.type) {
+			case ClientMetaTypes.BROWSER: {
+				this.browser = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.ENGINE: {
+				this.engine = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.PLATFORM: {
+				this.platform = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.OPERATION_SYSTEM: {
+				this.operationSystem = parseJsonAs(metadata.payload);
+				break;
 			}
 		}
 
+		this.call.observer.emit('client-metadata', this, metadata);
+	}
+
+	public addIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
 		this.emit('issue', issue);
+		this.call.observer.emit('client-issue', this, issue);
 	}
 
-	private _createPeerConnection(peerConnectionId: string, label?: string): ObservedPeerConnection {
-		const result = new ObservedPeerConnection({
-			peerConnectionId,
-			label,
-		}, this);
+	public addExtensionStats(stats: ExtensionStat) {
+		this.call.observer.emit('client-extension-stats', this, stats);
+		this.emit('extensionStats', stats);
+	}
 
-		const onNewSelectedCandidatePair = ({ localCandidate, remoteCandidate }: { localCandidate: IceLocalCandidate, remoteCandidate: IceRemoteCandidate }) => {
-			this.emit('selectedcandidatepair', {
-				peerConnection: result,
-				localCandidate,
-				remoteCandidate,
+	private _updatePeerConnection(sample: PeerConnectionSample): ObservedPeerConnection | undefined {
+		let observedPeerConnection = this.observedPeerConnections.get(sample.peerConnectionId);
+
+		if (!observedPeerConnection) {
+			if (!sample.peerConnectionId) {
+				return (logger.warn(
+					`ObservedClient received an invalid PeerConnectionSample (missing peerConnectionId field). ClientId: ${this.clientId}, CallId: ${this.call.callId}`,
+					sample
+				), void 0);
+			}
+
+			observedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
+
+			observedPeerConnection.once('close', () => {
+				this.observedPeerConnections.delete(sample.peerConnectionId);
 			});
-		};
+			this.observedPeerConnections.set(sample.peerConnectionId, observedPeerConnection);
+			
+			this.emit('newpeerconnection', observedPeerConnection);
+		}
 
-		result.once('close', () => {
-			result.ICE.off('new-selected-candidate-pair', onNewSelectedCandidatePair);
-			this._peerConnections.delete(peerConnectionId);
-		});
-		result.ICE.on('new-selected-candidate-pair', onNewSelectedCandidatePair);
-		this._peerConnections.set(peerConnectionId, result);
+		observedPeerConnection.accept(sample);
 
-		this.emit('newpeerconnection', result);
-
-		return result;
+		return observedPeerConnection;
 	}
+
+	private _mergeInjections(sample: ClientSample): ClientSample {
+		if (this.closed) return sample;
+
+		if (this._injections.clientEvents) {
+			if (!sample.clientEvents) sample.clientEvents = [];
+			sample.clientEvents.push(...this._injections.clientEvents);
+			
+			this._injections.clientEvents = undefined;
+		}
+
+		if (this._injections.clientIssues) {
+			if (!sample.clientIssues) sample.clientIssues = [];
+			sample.clientIssues.push(...this._injections.clientIssues);
+			
+			this._injections.clientIssues = undefined;
+		}
+
+		if (this._injections.extensionStats) {
+			if (!sample.extensionStats) sample.extensionStats = [];
+			sample.extensionStats.push(...this._injections.extensionStats);
+			
+			this._injections.extensionStats = undefined;
+		}
+
+		if (this._injections.attachments) {
+			if (!sample.attachments) sample.attachments = {};
+			Object.assign(sample.attachments, this._injections.attachments);
+			
+			this._injections.attachments = undefined;
+		}
+
+		if (this._injections.clientMetaItems) {
+			if (!sample.clientMetaItems) sample.clientMetaItems = [];
+			sample.clientMetaItems.push(...this._injections.clientMetaItems);
+			
+			this._injections.clientMetaItems = undefined;
+		}
+
+		return sample;
+	}
+
+	// public resetSummaryMetrics() {
+	// 	this.totalDataChannelBytesReceived = 0;
+	// 	this.totalDataChannelBytesSent = 0;
+	// 	this.totalDataChannelMessagesReceived = 0;
+	// 	this.totalDataChannelMessagesSent = 0;
+	// 	this.totalInboundPacketsLost = 0;
+	// 	this.totalInboundPacketsReceived = 0;
+	// 	this.totalOutboundPacketsSent = 0;
+	// 	this.totalReceivedAudioBytes = 0;
+	// 	this.totalReceivedVideoBytes = 0;
+	// 	this.totalSentAudioBytes = 0;
+	// 	this.totalSentVideoBytes = 0;
+	// 	this.totalSentBytes = 0;
+	// 	this.totalReceivedBytes = 0;
+		
+	// 	this.totalNumberOfIssues = 0;
+		
+	// 	this.totalScoreSum = 0;
+	// 	this.numberOfScoreMeasurements = 0;
+	// }
+
+	// public createSummary(): ObservedClientSummary {
+	// 	return {
+	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
+	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
+	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
+	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
+	// 		totalDataChannelBytesReceived: this.totalDataChannelBytesReceived,
+	// 		totalDataChannelBytesSent: this.totalDataChannelBytesSent,
+	// 		totalDataChannelMessagesReceived: this.totalDataChannelMessagesReceived,
+	// 		totalDataChannelMessagesSent: this.totalDataChannelMessagesSent,
+	// 		totalInboundPacketsLost: this.totalInboundPacketsLost,
+	// 		totalInboundPacketsReceived: this.totalInboundPacketsReceived,
+	// 		totalOutboundPacketsSent: this.totalOutboundPacketsSent,
+	// 		totalReceivedAudioBytes: this.totalReceivedAudioBytes,
+	// 		totalReceivedVideoBytes: this.totalReceivedVideoBytes,
+	// 		totalSentAudioBytes: this.totalSentAudioBytes,
+	// 		totalSentVideoBytes: this.totalSentVideoBytes,
+	// 		totalSentBytes: this.totalSentBytes,
+	// 		totalReceivedBytes: this.totalReceivedBytes,
+			
+	// 		numberOfIssues: this.totalNumberOfIssues,
+
+	// 		totalScoreSum: this.totalScoreSum,
+	// 		numberOfScoreMeasurements: this.numberOfScoreMeasurements,
+	// 	};
+	// }
 }

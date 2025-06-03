@@ -2,9 +2,9 @@
 	"compileOnSave": true,
 	"compilerOptions":
 	{
-		"lib": [ "es2020" ],
-		"target": "es6",
-		"module": "commonjs",
+		"lib": [ "ES2020", "dom" ],
+		"target": "ESNext",
+		"module": "CommonJS",
 		"moduleResolution": "node",
 		"esModuleInterop": true,
 		"strict": true,
