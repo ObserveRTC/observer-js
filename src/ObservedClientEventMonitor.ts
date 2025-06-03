@@ -1,5 +1,5 @@
 import { ObservedCertificate } from './ObservedCertificate';
-import { ObservedClient } from './ObservedClient';
+import { ObservedClient, ObservedClientEvents } from './ObservedClient';
 import { ObservedCodec } from './ObservedCodec';
 import { ObservedDataChannel } from './ObservedDataChannel';
 import { ObservedIceCandidate } from './ObservedIceCandidate';
@@ -14,10 +14,10 @@ import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 
-export class ObservedClientEventMonitor<Context> {
+export class ObservedClientEventMonitor<AppContext, ClientAppData extends Record<string, unknown> = Record<string, unknown>> {
 	public constructor(
-		public readonly observedClient: ObservedClient,
-		public readonly context: Context,
+		public readonly observedClient: ObservedClient<ClientAppData>,
+		public readonly context: AppContext,
 	) {
 		this._onPeerConnconnectionAdded = this._onPeerConnconnectionAdded.bind(this);
 		this._onPeerConnectionRemoved = this._onPeerConnectionRemoved.bind(this);
@@ -52,6 +52,8 @@ export class ObservedClientEventMonitor<Context> {
 		this._onClientLeft = this._onClientLeft.bind(this);
 		this._onUserMediaError = this._onUserMediaError.bind(this);
 		this._onUsingTurn = this._onUsingTurn.bind(this);
+		this._onClientUpdated = this._onClientUpdated.bind(this);
+		this._onClientExtensionStats = this._onClientExtensionStats.bind(this);
 
 		this.observedClient.on('newpeerconnection', this._onPeerConnconnectionAdded);
 		this.observedClient.on('issue', this._onClientIssue);
@@ -61,11 +63,17 @@ export class ObservedClientEventMonitor<Context> {
 		this.observedClient.on('rejoined', this._onClientJoined);
 		this.observedClient.on('usermediaerror', this._onUserMediaError);
 		this.observedClient.on('usingturn', this._onUsingTurn);
+		this.observedClient.on('update', this._onClientUpdated);
 		
 		this.observedClient.once('close', this._onClientClosed);
 	}
 
-	public onClientClosed?: (client: ObservedClient, ctx: Context) => void;
+	public onClientUpdated?: (client: ObservedClient, event: ObservedClientEvents['update'][0], ctx: AppContext) => void;
+	private _onClientUpdated(...args: ObservedClientEvents['update']) {
+		this.onClientUpdated?.(this.observedClient, args[0], this.context);
+	}
+
+	public onClientClosed?: (client: ObservedClient, ctx: AppContext) => void;
 	private _onClientClosed() {
 		this.onClientClosed?.(this.observedClient, this.context);
 
@@ -80,7 +88,7 @@ export class ObservedClientEventMonitor<Context> {
 
 	}
 
-	public onPeerConnectionAdded?: (peerConnection: ObservedPeerConnection, ctx: Context) => void;
+	public onPeerConnectionAdded?: (peerConnection: ObservedPeerConnection, ctx: AppContext) => void;
 	private _onPeerConnconnectionAdded(peerConnection: ObservedPeerConnection) {
 		this.onPeerConnectionAdded?.(peerConnection, this.context);
 
@@ -113,7 +121,7 @@ export class ObservedClientEventMonitor<Context> {
 
 	}
 
-	public onPeerConnectionRemoved?: (peerConnection: ObservedPeerConnection, ctx: Context) => void;
+	public onPeerConnectionRemoved?: (peerConnection: ObservedPeerConnection, ctx: AppContext) => void;
 	private _onPeerConnectionRemoved(peerConnection: ObservedPeerConnection) {
 		this.onPeerConnectionRemoved?.(peerConnection, this.context);
 
@@ -144,157 +152,157 @@ export class ObservedClientEventMonitor<Context> {
 
 	}
     
-	public onCertificateAdded?: (certificate: ObservedCertificate, ctx: Context) => void;
+	public onCertificateAdded?: (certificate: ObservedCertificate, ctx: AppContext) => void;
 	private _onCertificateAdded(certificate: ObservedCertificate) {
 		this.onCertificateAdded?.(certificate, this.context);
 	}
 
-	public onCertificateRemoved?: (certificate: ObservedCertificate, ctx: Context) => void;
+	public onCertificateRemoved?: (certificate: ObservedCertificate, ctx: AppContext) => void;
 	private _onCertificateRemoved(certificate: ObservedCertificate) {
 		this.onCertificateRemoved?.(certificate, this.context);
 	}
 
-	public onInboundTrackAdded?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
+	public onInboundTrackAdded?: (inboundTrack: ObservedInboundTrack, ctx: AppContext) => void;
 	private _onInboundTrackAdded(inboundTrack: ObservedInboundTrack) {
 		this.onInboundTrackAdded?.(inboundTrack, this.context);
 	}
 
-	public onInboundTrackRemoved?: (inboundTrack: ObservedInboundTrack, ctx: Context) => void;
+	public onInboundTrackRemoved?: (inboundTrack: ObservedInboundTrack, ctx: AppContext) => void;
 	private _onInboundTrackRemoved(inboundTrack: ObservedInboundTrack) {
 		this.onInboundTrackRemoved?.(inboundTrack, this.context);
 	}
 
-	public onOutboundTrackAdded?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
+	public onOutboundTrackAdded?: (outboundTrack: ObservedOutboundTrack, ctx: AppContext) => void;
 	private _onOutboundTrackAdded(outboundTrack: ObservedOutboundTrack) {
 		this.onOutboundTrackAdded?.(outboundTrack, this.context);
 	}
 
-	public onOutboundTrackRemoved?: (outboundTrack: ObservedOutboundTrack, ctx: Context) => void;
+	public onOutboundTrackRemoved?: (outboundTrack: ObservedOutboundTrack, ctx: AppContext) => void;
 	private _onOutboundTrackRemoved(outboundTrack: ObservedOutboundTrack) {
 		this.onOutboundTrackRemoved?.(outboundTrack, this.context);
 	}
 
-	public onInboundRtpAdded?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
+	public onInboundRtpAdded?: (inboundRtp: ObservedInboundRtp, ctx: AppContext) => void;
 	private _onInboundRtpAdded(inboundRtp: ObservedInboundRtp) {
 		this.onInboundRtpAdded?.(inboundRtp, this.context);
 	}
 
-	public onInboundRtpRemoved?: (inboundRtp: ObservedInboundRtp, ctx: Context) => void;
+	public onInboundRtpRemoved?: (inboundRtp: ObservedInboundRtp, ctx: AppContext) => void;
 	private _onInboundRtpRemoved(inboundRtp: ObservedInboundRtp) {
 		this.onInboundRtpRemoved?.(inboundRtp, this.context);
 	}
 
-	public onOutboundRtpAdded?: (outboundRtp: ObservedOutboundRtp, ctx: Context) => void;
+	public onOutboundRtpAdded?: (outboundRtp: ObservedOutboundRtp, ctx: AppContext) => void;
 	private _onOutboundRtpAdded(outboundRtp: ObservedOutboundRtp) {
 		this.onOutboundRtpAdded?.(outboundRtp, this.context);
 	}
 
-	public onOutboundRtpRemoved?: (outboundRtp: ObservedOutboundRtp, ctx: Context) => void;
+	public onOutboundRtpRemoved?: (outboundRtp: ObservedOutboundRtp, ctx: AppContext) => void;
 	private _onOutboundRtpRemoved(outboundRtp: ObservedOutboundRtp) {
 		this.onOutboundRtpRemoved?.(outboundRtp, this.context);
 	}
 
-	public onDataChannelAdded?: (dataChannel: ObservedDataChannel, ctx: Context) => void;
+	public onDataChannelAdded?: (dataChannel: ObservedDataChannel, ctx: AppContext) => void;
 	private _onDataChannelAdded(dataChannel: ObservedDataChannel) {
 		this.onDataChannelAdded?.(dataChannel, this.context);
 	}
 
-	public onDataChannelRemoved?: (dataChannel: ObservedDataChannel, ctx: Context) => void;
+	public onDataChannelRemoved?: (dataChannel: ObservedDataChannel, ctx: AppContext) => void;
 	private _onDataChannelRemoved(dataChannel: ObservedDataChannel) {
 		this.onDataChannelRemoved?.(dataChannel, this.context);
 	}
 
-	public onAddedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
+	public onAddedIceTransport?: (iceTransport: ObservedIceTransport, ctx: AppContext) => void;
 	private _onAddedIceTransport(iceTransport: ObservedIceTransport) {
 		this.onAddedIceTransport?.(iceTransport, this.context);
 	}
 
-	public onRemovedIceTransport?: (iceTransport: ObservedIceTransport, ctx: Context) => void;
+	public onRemovedIceTransport?: (iceTransport: ObservedIceTransport, ctx: AppContext) => void;
 	private _onRemovedIceTransport(iceTransport: ObservedIceTransport) {
 		this.onRemovedIceTransport?.(iceTransport, this.context);
 	}
 
-	public onIceCandidateAdded?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
+	public onIceCandidateAdded?: (iceCandidate: ObservedIceCandidate, ctx: AppContext) => void;
 	private _onIceCandidateAdded(iceCandidate: ObservedIceCandidate) {
 		this.onIceCandidateAdded?.(iceCandidate, this.context);
 	}
 
-	public onIceCandidateRemoved?: (iceCandidate: ObservedIceCandidate, ctx: Context) => void;
+	public onIceCandidateRemoved?: (iceCandidate: ObservedIceCandidate, ctx: AppContext) => void;
 	private _onIceCandidateRemoved(iceCandidate: ObservedIceCandidate) {
 		this.onIceCandidateRemoved?.(iceCandidate, this.context);
 	}
 
-	public onAddedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
+	public onAddedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: AppContext) => void;
 	private _onAddedIceCandidatePair(candidatePair: ObservedIceCandidatePair) {
 		this.onAddedIceCandidatePair?.(candidatePair, this.context);
 	}
 
-	public onRemovedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: Context) => void;
+	public onRemovedIceCandidatePair?: (candidatePair: ObservedIceCandidatePair, ctx: AppContext) => void;
 	private _onRemovedIceCandidatePair(candidatePair: ObservedIceCandidatePair) {
 		this.onRemovedIceCandidatePair?.(candidatePair, this.context);
 	}
 
-	public onAddedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
+	public onAddedMediaCodec?: (codec: ObservedCodec, ctx: AppContext) => void;
 	private _onAddedMediaCodec(codec: ObservedCodec) {
 		this.onAddedMediaCodec?.(codec, this.context);
 	}
 
-	public onRemovedMediaCodec?: (codec: ObservedCodec, ctx: Context) => void;
+	public onRemovedMediaCodec?: (codec: ObservedCodec, ctx: AppContext) => void;
 	private _onRemovedMediaCodec(codec: ObservedCodec) {
 		this.onRemovedMediaCodec?.(codec, this.context);
 	}
 
-	public onAddedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
+	public onAddedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: AppContext) => void;
 	private _onAddedMediaPlayout(mediaPlayout: ObservedMediaPlayout) {
 		this.onAddedMediaPlayout?.(mediaPlayout, this.context);
 	}
 
-	public onRemovedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: Context) => void;
+	public onRemovedMediaPlayout?: (mediaPlayout: ObservedMediaPlayout, ctx: AppContext) => void;
 	private _onRemovedMediaPlayout(mediaPlayout: ObservedMediaPlayout) {
 		this.onRemovedMediaPlayout?.(mediaPlayout, this.context);
 	}
 
-	public onMediaSourceAdded?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
+	public onMediaSourceAdded?: (mediaSource: ObservedMediaSource, ctx: AppContext) => void;
 	private _onMediaSourceAdded(mediaSource: ObservedMediaSource) {
 		this.onMediaSourceAdded?.(mediaSource, this.context);
 	}
 
-	public onMediaSourceRemoved?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
+	public onMediaSourceRemoved?: (mediaSource: ObservedMediaSource, ctx: AppContext) => void;
 	private _onMediaSourceRemoved(mediaSource: ObservedMediaSource) {
 		this.onMediaSourceRemoved?.(mediaSource, this.context);
 	}
 
-	public onClientIssue?: (issue: ClientIssue, ctx: Context) => void;
+	public onClientIssue?: (issue: ClientIssue, ctx: AppContext) => void;
 	private _onClientIssue(issue: ClientIssue) {
 		this.onClientIssue?.(issue, this.context);
 	}
 
-	public onClientMetadata?: (metadata: ClientMetaData, ctx: Context) => void;
+	public onClientMetadata?: (metadata: ClientMetaData, ctx: AppContext) => void;
 	private _onClientMetadata(metadata: ClientMetaData) {
 		this.onClientMetadata?.(metadata, this.context);
 	}
 
-	public onClientExtensionStats?: (extensionStats: ExtensionStat, ctx: Context) => void;
+	public onClientExtensionStats?: (extensionStats: ExtensionStat, ctx: AppContext) => void;
 	private _onClientExtensionStats(extensionStats: ExtensionStat) {
 		this.onClientExtensionStats?.(extensionStats, this.context);
 	}
 
-	public onClientJoined?: (client: ObservedClient, ctx: Context) => void;
+	public onClientJoined?: (client: ObservedClient, ctx: AppContext) => void;
 	private _onClientJoined() {
 		this.onClientJoined?.(this.observedClient, this.context);
 	}
 
-	public onClientLeft?: (client: ObservedClient, ctx: Context) => void;
+	public onClientLeft?: (client: ObservedClient, ctx: AppContext) => void;
 	private _onClientLeft() {
 		this.onClientLeft?.(this.observedClient, this.context);
 	}
 
-	public onUserMediaError?: (error: string, observedClient: ObservedClient, ctx: Context) => void;
+	public onUserMediaError?: (error: string, observedClient: ObservedClient, ctx: AppContext) => void;
 	private _onUserMediaError(error: string) {
 		this.onUserMediaError?.(error, this.observedClient, this.context);
 	}
 
-	public onUsingTurn?: (client: ObservedClient, ctx: Context) => void;
+	public onUsingTurn?: (client: ObservedClient, ctx: AppContext) => void;
 	private _onUsingTurn() {
 		this.onUsingTurn?.(this.observedClient, this.context);
 	}

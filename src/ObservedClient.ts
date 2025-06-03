@@ -19,12 +19,7 @@ export type ObservedClientSettings<AppData extends Record<string, unknown> = Rec
 };
 
 export type ObservedClientEvents = {
-	update: [
-		{
-			sample: ClientSample;
-			elapsedTimeInMs: number;
-		}
-	];
+	update: [sample: ClientSample, elapsedTimeInMs: number];
 	close: [];
 	joined: [];
 	issue: [ClientIssue];
@@ -341,10 +336,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.lastSampleTimestamp = sample.timestamp;
 		// emit update
-		this.emit('update', {
+		this.emit('update', 
 			sample,
-			elapsedTimeInMs: now - this.updated,
-		});
+			now - this.updated,
+		);
 		this.updated = now;
 
 		// if result changed after update

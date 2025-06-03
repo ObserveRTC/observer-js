@@ -113,10 +113,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		}
 		switch (settings.updatePolicy) {
 			case 'update-on-any-client-updated':
-				this.updater = new OnAllClientCallUpdater(this);	
+				this.updater = new OnAnyClientCallUpdater(this);	
 				break;
 			case 'update-when-all-client-updated':
-				this.updater = new OnAnyClientCallUpdater(this);	
+				this.updater = new OnAllClientCallUpdater(this);	
 				break;
 			case 'update-on-interval': 
 				if (!settings.updateIntervalInMs) {

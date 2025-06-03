@@ -190,7 +190,7 @@ export class ObserverEventMonitor<Context> {
 		const onClientExtensionStats = (extensionStats: ExtensionStat) => this._onClientExtensionStats(observedClient, extensionStats);
 		const onUsingTurn = (usingTurn: boolean) => this._onUsingTurn(observedClient, usingTurn);
 		const onUserMediaError = (error: string) => this._onUserMediaError(observedClient, error);
-		const onClientUpdated = (...args: ObservedClientEvents['update']) => this.onClientUpdated?.(observedClient, args[0].sample, this.context);
+		const onClientUpdated = (...args: ObservedClientEvents['update']) => this.onClientUpdated?.(observedClient, args[0], this.context);
 		const onClientEvent = (event: ClientEvent) => this.onClientEvent?.(observedClient, event, this.context);
 
 		observedClient.once('close', () => {
