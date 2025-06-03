@@ -17,9 +17,9 @@ const logger = createLogger('Observer');
 export type ObserverEvents = {
 	'client-event': [ObservedClient, ClientEvent];
 	'call-updated': [ObservedCall],
-	'client-issue': [ObservedClient, ClientIssue],
-	'client-metadata': [ObservedClient, ClientMetaData],
-	'client-extension-stats': [ObservedClient, ExtensionStat],
+	'client-issue': [ObservedClient, ClientIssue];
+	'client-metadata': [ObservedClient, ClientMetaData];
+	'client-extension-stats': [ObservedClient, ExtensionStat];
 	'newcall': [ObservedCall],
 	'update': [],
 	'close': [],
@@ -79,34 +79,27 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.setMaxListeners(Infinity);
 		this.update = this.update.bind(this);
 
-		if (this.config.updateIntervalInMs) {
-			if (this.config.updatePolicy && this.config.updatePolicy !== 'update-on-interval') {
-				throw new Error('update policy must be update-on-interval if updateIntervalInMs is set in config');
-			}
-			this._timer = setInterval(this.update.bind(this), this.config.updateIntervalInMs);
-		}
+		const currentUpdatePolicy = (config?.updatePolicy) ?? 'update-when-all-call-updated';
 
-		if (this.config.updateIntervalInMs) {
-			if (this.config.updatePolicy !== 'update-on-interval') {
-				throw new Error('updatePolicy must be update-on-interval if updateIntervalInMs is set in config');
-			}
-		}
-		switch (this.config.updatePolicy) {
+		switch (currentUpdatePolicy) {
 			case 'update-on-any-call-updated':
-				this.updater = new OnAllCallObserverUpdater(this);	
+				this.updater = new OnAnyCallObserverUpdater(this);
 				break;
 			case 'update-when-all-call-updated':
-				this.updater = new OnAnyCallObserverUpdater(this);	
+				this.updater = new OnAllCallObserverUpdater(this);
 				break;
-			case 'update-on-interval': 
-				if (!this.config.updateIntervalInMs) {
+			case 'update-on-interval': {
+				const interval = config?.updateIntervalInMs;
+
+				if (!interval) {
 					throw new Error('updateIntervalInMs setting in config must be set if updatePolicy is update-on-interval');
 				}
 				this.updater = new OnIntervalUpdater(
-					this.config.updateIntervalInMs,
+					interval,
 					this.update.bind(this),
 				);
 				break;
+			}
 		}
 		
 		this.detectors = new Detectors();
