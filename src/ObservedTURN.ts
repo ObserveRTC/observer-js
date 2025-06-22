@@ -34,6 +34,7 @@ export class ObservedTURN extends EventEmitter {
 	public constructor(
 	) {
 		super();
+		this.setMaxListeners(Infinity);
 	}
 
 	public update() {

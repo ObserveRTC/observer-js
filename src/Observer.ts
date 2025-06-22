@@ -68,8 +68,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		return this.observedCalls.size;
 	}
 
-	private _timer?: ReturnType<typeof setInterval>;
-
 	public constructor(public readonly config: ObserverConfig<AppData> = {
 		updatePolicy: 'update-when-all-call-updated',
 		updateIntervalInMs: undefined,
@@ -154,8 +152,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return logger.debug('Attempted to close twice');
 		}
 		this.closed = true;
-		clearInterval(this._timer);
-		this._timer = undefined;
 
 		this.observedCalls.forEach((call) => call.close());
 		
