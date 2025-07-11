@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { IceCandidatePairStats } from './schema/ClientSample';
+import { IceCandidatePairStats } from '../schema/ClientSample';
 
 export class ObservedIceCandidatePair implements IceCandidatePairStats {
 	private _visited = false;

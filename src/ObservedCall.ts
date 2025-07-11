@@ -11,6 +11,9 @@ import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
 import { ObservedCallEventMonitor } from './ObservedCallEventMonitor';
+import { createLogger } from './common/logger';
+
+const logger = createLogger('ObservedCall');
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
@@ -18,6 +21,7 @@ export type ObservedCallSettings<AppData extends Record<string, unknown> = Recor
 	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu',
 	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'update-on-interval',
 	updateIntervalInMs?: number,
+	maxIdleIfEmptyMs?: number,
 };
 
 export type ObservedCallEvents = {
@@ -86,13 +90,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public endedAt?: number;
 	public closedAt?: number;
 
-	private _callStartedEvent: {
-		emitted: boolean,
-		timer?: ReturnType<typeof setTimeout>,
-	};
-	private _callEndedEvent: {
-		emitted: boolean
-	};
+	public maxIdleIfEmptyMs?: number;
+	private _autoCloseTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
 		settings: ObservedCallSettings<AppData>,
@@ -104,6 +103,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.callId = settings.callId;
 		this.appData = settings.appData ?? {} as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
+		this.maxIdleIfEmptyMs = settings.maxIdleIfEmptyMs;
 		this.detectors = new Detectors();
 		
 		if (settings.updateIntervalInMs) {
@@ -133,13 +133,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			case 'mediasoup-sfu':
 				break;
 		}
-
-		this._callStartedEvent = {
-			emitted: false,
-		};
-		this._callEndedEvent = {
-			emitted: false,
-		};
 	}
 
 	public get numberOfClients() {
@@ -198,6 +191,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
+
+				this._createAutoClose();
 			}
 			++this.totalRemovedClients;
 		});
@@ -213,6 +208,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		if (wasEmpty) {
 			this.emit('not-empty');
+
+			clearTimeout(this._autoCloseTimer);
+			this._autoCloseTimer = undefined;
 		}
 		
 		return result;
@@ -287,6 +285,19 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (!client.leftAt) return;
 
 		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
+	}
+
+	private _createAutoClose() {
+		if (this.closed) return;
+		if (this.maxIdleIfEmptyMs === undefined || this.maxIdleIfEmptyMs < 1) return;
+
+		this._autoCloseTimer = setTimeout(() => {
+			if (this.closed) return;
+			if (this.observedClients.size > 0) return;
+
+			logger.debug(`Call ${this.callId} is empty for ${this.maxIdleIfEmptyMs}ms, closing...`);
+			this.close();
+		}, this.maxIdleIfEmptyMs);
 	}
 
 	// public resetSummaryMetrics() {

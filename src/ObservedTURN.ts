@@ -1,5 +1,5 @@
 import { EventEmitter } from 'stream';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
+import { ObservedPeerConnection } from './webrtc/ObservedPeerConnection';
 import { ObservedTurnServer } from './ObservedTurnServer';
 import { createLogger } from './common/logger';
 

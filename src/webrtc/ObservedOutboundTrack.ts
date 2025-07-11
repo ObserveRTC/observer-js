@@ -1,7 +1,7 @@
-import { CalculatedScore } from './scores/CalculatedScore';
-import { MediaKind } from './common/types';
-import { OutboundTrackSample } from './schema/ClientSample';
-import { Detectors } from './detectors/Detectors';
+import { CalculatedScore } from '../scores/CalculatedScore';
+import { MediaKind } from '../common/types';
+import { OutboundTrackSample } from '../schema/ClientSample';
+import { Detectors } from '../detectors/Detectors';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedMediaSource } from './ObservedMediaSource';

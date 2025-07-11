@@ -1,6 +1,6 @@
-import { MediaKind } from './common/types';
+import { MediaKind } from '../common/types';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { InboundRtpStats } from './schema/ClientSample';
+import { InboundRtpStats } from '../schema/ClientSample';
 
 export class ObservedInboundRtp implements InboundRtpStats {
 	public appData?: Record<string, unknown>;

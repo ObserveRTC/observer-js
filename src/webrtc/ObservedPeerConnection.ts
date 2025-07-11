@@ -1,9 +1,8 @@
 import { EventEmitter } from 'events';
-import { ObservedClient } from './ObservedClient';
-import { CertificateStats, CodecStats, DataChannelStats, IceCandidateStats, InboundRtpStats, InboundTrackSample, MediaPlayoutStats, MediaSourceStats, OutboundRtpStats, OutboundTrackSample, PeerConnectionSample, PeerConnectionTransportStats, RemoteInboundRtpStats, RemoteOutboundRtpStats } from './schema/ClientSample';
+import { ObservedClient } from '../ObservedClient';
 import { ObservedInboundRtp } from './ObservedInboundRtp';
-import { createLogger } from './common/logger';
-import { MediaKind } from './common/types';
+import { createLogger } from '../common/logger';
+import { MediaKind } from '../common/types';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedCertificate } from './ObservedCertificate';
 import { ObservedCodec } from './ObservedCodec';
@@ -18,9 +17,26 @@ import { ObservedRemoteInboundRtp } from './ObservedRemoteInboundRtp';
 import { ObservedRemoteOutboundRtp } from './ObservedRemoteOutboundRtp';
 import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
-import { CalculatedScore } from './scores/CalculatedScore';
-import { ObservedTurnServer } from './ObservedTurnServer';
-import { getMedian } from './common/utils';
+import { CalculatedScore } from '../scores/CalculatedScore';
+import { ObservedTurnServer } from '../ObservedTurnServer';
+import { getMedian } from '../common/utils';
+import { 
+	CertificateStats, 
+	CodecStats, 
+	DataChannelStats, 
+	IceCandidateStats, 
+	InboundRtpStats, 
+	InboundTrackSample, 
+	MediaPlayoutStats, 
+	MediaSourceStats, 
+	OutboundRtpStats, 
+	OutboundTrackSample, 
+	PeerConnectionSample, 
+	PeerConnectionTransportStats, 
+	RemoteInboundRtpStats, 
+	RemoteOutboundRtpStats 
+} from '../schema/ClientSample';
+
 
 const logger = createLogger('ObservedPeerConnection');
 

@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { CodecStats } from './schema/ClientSample';
+import { CodecStats } from '../schema/ClientSample';
 
 export class ObservedCodec implements CodecStats {
 	private _visited = false;

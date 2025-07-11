@@ -1,5 +1,5 @@
-import { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
+import { ObservedIceCandidatePair } from './webrtc/ObservedIceCandidatePair';
+import { ObservedPeerConnection } from './webrtc/ObservedPeerConnection';
 import { ObservedTURN } from './ObservedTURN';
 
 export class ObservedTurnServer {

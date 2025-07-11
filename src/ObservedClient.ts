@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
+import { ObservedPeerConnection } from './webrtc/ObservedPeerConnection';
 import { createLogger } from './common/logger';
 // eslint-disable-next-line camelcase
 import { ClientEvent, ClientMetaData, ClientSample, PeerConnectionSample, ClientIssue, ExtensionStat } from './schema/ClientSample';
@@ -15,6 +15,7 @@ const logger = createLogger('ObservedClient');
 
 export type ObservedClientSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	clientId: string;
+	maxIdleTimeMs?: number;
 	appData?: AppData;
 };
 
@@ -44,14 +45,12 @@ export declare interface ObservedClient {
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly detectors: Detectors;
 
-	public readonly clientId: string;
 	public readonly observedPeerConnections = new Map<string, ObservedPeerConnection>();
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
 		value: undefined,
 	};
 
-	public appData: AppData;
 	public attachments?: Record<string, unknown>;
 
 	public updated = Date.now();
@@ -135,15 +134,25 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public issues: ClientIssue[] = [];
 
 	private _injections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
+	private _autoCloseTimer?: ReturnType<typeof setTimeout>;
 
-	public constructor(settings: ObservedClientSettings<AppData>, public readonly call: ObservedCall) {
+	public constructor(
+		public readonly settings: ObservedClientSettings<AppData>, 
+		public readonly call: ObservedCall
+	) {
 		super();
 		this.setMaxListeners(Infinity);
+		this._createAutoClose();
 
-		this.clientId = settings.clientId;
-		this.appData = settings.appData ?? {} as AppData;
-		
 		this.detectors = new Detectors();
+	}
+
+	public get clientId() {	
+		return this.settings.clientId;
+	}
+
+	public get appData(): AppData {
+		return this.settings.appData ?? {} as AppData;
 	}
 	
 	public get numberOfPeerConnections() {
@@ -176,8 +185,22 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.emit('close');
 	}
 
+	private _createAutoClose() {
+		if (this.closed) return;
+		if (this.settings.maxIdleTimeMs === undefined || this.settings.maxIdleTimeMs < 1) return;
+
+		this._autoCloseTimer = setTimeout(() => {
+			if (this.closed) return;
+
+			logger.debug(`Client ${this.clientId} is idle for ${this.settings.maxIdleTimeMs}ms, closing...`);
+			this.close();
+		}, this.settings.maxIdleTimeMs);
+	}
+
 	public accept(sample: ClientSample): void {
 		if (this.closed) throw new Error(`Client ${this.clientId} is closed`);
+		
+		this._createAutoClose();
 
 		const now = Date.now();
 		const elapsedInMs = now - this.updated;

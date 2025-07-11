@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { IceTransportStats } from './schema/ClientSample';
+import { IceTransportStats } from '../schema/ClientSample';
 
 export class ObservedIceTransport implements IceTransportStats {
 	private _visited = false;

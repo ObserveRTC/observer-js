@@ -1,5 +1,5 @@
-import { ObservedInboundTrack } from '../ObservedInboundTrack';
-import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
+import { ObservedInboundTrack } from '../webrtc/ObservedInboundTrack';
+import { ObservedOutboundTrack } from '../webrtc/ObservedOutboundTrack';
 
 export interface RemoteTrackResolver {
 	resolveRemoteOutboundTrack(

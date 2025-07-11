@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { DataChannelStats } from './schema/ClientSample';
+import { DataChannelStats } from '../schema/ClientSample';
 
 export type ObservedDataChannelState = 'connecting' | 'open' | 'closing' | 'closed';
 

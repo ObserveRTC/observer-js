@@ -1,6 +1,6 @@
-import { MediaKind } from './common/types';
+import { MediaKind } from '../common/types';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { MediaSourceStats } from './schema/ClientSample';
+import { MediaSourceStats } from '../schema/ClientSample';
 
 export class ObservedMediaSource implements MediaSourceStats {
 	private _visited = false;

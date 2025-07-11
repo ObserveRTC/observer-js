@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { PeerConnectionTransportStats } from './schema/ClientSample';
+import { PeerConnectionTransportStats } from '../schema/ClientSample';
 
 export class ObservedPeerConnectionTransport implements PeerConnectionTransportStats {
 	private _visited = false;

@@ -1,7 +1,7 @@
 import { ObservedCall } from '../ObservedCall';
 import { ObservedCallEventMonitor } from '../ObservedCallEventMonitor';
-import { ObservedInboundTrack } from '../ObservedInboundTrack';
-import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
+import { ObservedInboundTrack } from '../webrtc/ObservedInboundTrack';
+import { ObservedOutboundTrack } from '../webrtc/ObservedOutboundTrack';
 import { RemoteTrackResolver } from './RemoteTrackResolver';
 
 export class MediasoupRemoteTrackResolver implements RemoteTrackResolver {

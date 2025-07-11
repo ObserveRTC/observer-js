@@ -1,17 +1,17 @@
-import { ObservedCertificate } from './ObservedCertificate';
+import { ObservedCertificate } from './webrtc/ObservedCertificate';
 import { ObservedClient, ObservedClientEvents } from './ObservedClient';
-import { ObservedCodec } from './ObservedCodec';
-import { ObservedDataChannel } from './ObservedDataChannel';
-import { ObservedIceCandidate } from './ObservedIceCandidate';
-import { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
-import { ObservedIceTransport } from './ObservedIceTransport';
-import { ObservedInboundRtp } from './ObservedInboundRtp';
-import { ObservedInboundTrack } from './ObservedInboundTrack';
-import { ObservedMediaPlayout } from './ObservedMediaPlayout';
-import { ObservedMediaSource } from './ObservedMediaSource';
-import { ObservedOutboundRtp } from './ObservedOutboundRtp';
-import { ObservedOutboundTrack } from './ObservedOutboundTrack';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
+import { ObservedCodec } from './webrtc/ObservedCodec';
+import { ObservedDataChannel } from './webrtc/ObservedDataChannel';
+import { ObservedIceCandidate } from './webrtc/ObservedIceCandidate';
+import { ObservedIceCandidatePair } from './webrtc/ObservedIceCandidatePair';
+import { ObservedIceTransport } from './webrtc/ObservedIceTransport';
+import { ObservedInboundRtp } from './webrtc/ObservedInboundRtp';
+import { ObservedInboundTrack } from './webrtc/ObservedInboundTrack';
+import { ObservedMediaPlayout } from './webrtc/ObservedMediaPlayout';
+import { ObservedMediaSource } from './webrtc/ObservedMediaSource';
+import { ObservedOutboundRtp } from './webrtc/ObservedOutboundRtp';
+import { ObservedOutboundTrack } from './webrtc/ObservedOutboundTrack';
+import { ObservedPeerConnection } from './webrtc/ObservedPeerConnection';
 import { ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 
 export class ObservedClientEventMonitor<AppContext, ClientAppData extends Record<string, unknown> = Record<string, unknown>> {

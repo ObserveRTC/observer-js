@@ -1,6 +1,6 @@
-import { MediaKind } from './common/types';
+import { MediaKind } from '../common/types';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { OutboundRtpStats, QualityLimitationDurations } from './schema/ClientSample';
+import { OutboundRtpStats, QualityLimitationDurations } from '../schema/ClientSample';
 
 export class ObservedOutboundRtp implements OutboundRtpStats {
 	private _visited = false;

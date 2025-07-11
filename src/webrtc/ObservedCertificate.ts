@@ -1,5 +1,5 @@
 import { ObservedPeerConnection } from './ObservedPeerConnection';
-import { CertificateStats } from './schema/ClientSample';
+import { CertificateStats } from '../schema/ClientSample';
 
 export class ObservedCertificate implements CertificateStats {
 	public appData?: Record<string, unknown>;
