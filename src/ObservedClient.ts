@@ -10,6 +10,7 @@ import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
+import { clear } from 'console';
 
 const logger = createLogger('ObservedClient');
 
@@ -188,6 +189,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _createAutoClose() {
 		if (this.closed) return;
 		if (this.settings.maxIdleTimeMs === undefined || this.settings.maxIdleTimeMs < 1) return;
+
+		clearTimeout(this._autoCloseTimer);
 
 		this._autoCloseTimer = setTimeout(() => {
 			if (this.closed) return;
