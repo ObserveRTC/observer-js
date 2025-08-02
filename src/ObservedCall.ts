@@ -79,16 +79,32 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public maxNumberOfClients = 0;
 	public deltaNumberOfIssues = 0;
 
+	public deltaDataChannelBytesReceived = 0;
+	public deltaDataChannelBytesSent = 0;
+	public deltaDataChannelMessagesReceived = 0;
+	public deltaDataChannelMessagesSent = 0;
+	public deltaInboundPacketsLost = 0;
+	public deltaInboundPacketsReceived = 0;
+	public deltaOutboundPacketsSent = 0;
+	public deltaReceivedAudioBytes = 0;
+	public deltaReceivedVideoBytes = 0;
+	public deltaSentAudioBytes = 0;
+	public deltaSentVideoBytes = 0;
+	public deltaTransportReceivedBytes = 0;
+	public deltaTransportSentBytes = 0;
+
 	public deltaRttLt50Measurements = 0;
 	public deltaRttLt150Measurements = 0;
 	public deltaRttLt300Measurements = 0;
 	public deltaRttGtOrEq300Measurements = 0;
+
 
 	public appData: AppData;
 	public closed = false;
 	public startedAt?: number;
 	public endedAt?: number;
 	public closedAt?: number;
+	public lastClientTimestamp = 0;
 
 	public maxIdleIfEmptyMs?: number;
 	private _autoCloseTimer?: ReturnType<typeof setTimeout>;
@@ -228,6 +244,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.numberOfPeerConnections = 0;
 		this.numberOfDataChannels = 0;
 
+
 		for (const client of this.observedClients.values()) {
 			this.numberOfInboundRtpStreams += client.numberOfInboundRtpStreams;
 			this.numberOfOutboundRtpStreams += client.numberOfOutboundRtpStreams;
@@ -238,6 +255,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.detectors.update();
 		this.scoreCalculator.update();
 
+		this.lastClientTimestamp = Math.max(...Array.from(this.observedClients.values()).map(c => c.lastSampleTimestamp ?? 0));
+
 		this.emit('update');
 
 		this.deltaNumberOfIssues = 0;
@@ -245,6 +264,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.deltaRttLt150Measurements = 0;
 		this.deltaRttLt300Measurements = 0;
 		this.deltaRttGtOrEq300Measurements = 0;
+		
+		this.deltaDataChannelBytesReceived = 0;
+		this.deltaDataChannelBytesSent = 0;
+		this.deltaDataChannelMessagesReceived = 0;
+		this.deltaDataChannelMessagesSent = 0;
+		this.deltaInboundPacketsLost = 0;
+		this.deltaInboundPacketsReceived = 0;
+		this.deltaOutboundPacketsSent = 0;
+		this.deltaReceivedAudioBytes = 0;
+		this.deltaReceivedVideoBytes = 0;
+		this.deltaSentAudioBytes = 0;
+		this.deltaSentVideoBytes = 0;
+		this.deltaTransportReceivedBytes = 0;
+		this.deltaTransportSentBytes = 0;
 	}
 
 	private _onClientUpdate(client: ObservedClient) {
@@ -261,6 +294,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.deltaRttLt150Measurements += client.deltaRttLt150Measurements;
 		this.deltaRttLt300Measurements += client.deltaRttLt300Measurements;
 		this.deltaRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
+
+
 
 		this.totalRttLt50Measurements += client.deltaRttLt50Measurements;
 		this.totalRttLt150Measurements += client.deltaRttLt150Measurements;

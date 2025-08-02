@@ -11,6 +11,7 @@ import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
 import { clear } from 'console';
+import { ParsedUserAgent } from './common/types';
 
 const logger = createLogger('ObservedClient');
 
@@ -679,6 +680,34 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			case ClientMetaTypes.OPERATION_SYSTEM: {
 				this.operationSystem = parseJsonAs(metadata.payload);
 				break;
+			}
+			case 'USER_AGENT_DATA': {
+				try {
+					const userAgentData = parseJsonAs<ParsedUserAgent>(metadata.payload);
+					if (userAgentData) {
+						if (this.operationSystem === undefined) {
+							this.operationSystem = {
+								name: userAgentData.os.name.toLowerCase(),
+								version: userAgentData.os.version,
+							};
+						}
+						if (this.engine === undefined) {
+							this.engine = {
+								name: userAgentData.engine.name.toLowerCase(),
+								version: userAgentData.engine.version,
+							};
+						}
+						if (this.browser === undefined) {
+							this.browser = {
+								name: userAgentData.browser.name.toLowerCase(),
+								version: userAgentData.browser.version,
+							};
+						}
+					}
+					
+				} catch (error) {
+					logger.warn('Failed to parse USER_AGENT_DATA metadata: %o', error);
+				}
 			}
 		}
 
