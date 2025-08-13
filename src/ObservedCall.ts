@@ -98,7 +98,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public deltaRttLt300Measurements = 0;
 	public deltaRttGtOrEq300Measurements = 0;
 
-
 	public appData: AppData;
 	public closed = false;
 	public startedAt?: number;
@@ -244,7 +243,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.numberOfPeerConnections = 0;
 		this.numberOfDataChannels = 0;
 
-
 		for (const client of this.observedClients.values()) {
 			this.numberOfInboundRtpStreams += client.numberOfInboundRtpStreams;
 			this.numberOfOutboundRtpStreams += client.numberOfOutboundRtpStreams;
@@ -255,7 +253,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.detectors.update();
 		this.scoreCalculator.update();
 
-		this.lastClientTimestamp = Math.max(...Array.from(this.observedClients.values()).map(c => c.lastSampleTimestamp ?? 0));
+		this.lastClientTimestamp = Math.max(...Array.from(this.observedClients.values()).map((c) => c.lastSampleTimestamp ?? 0));
 
 		this.emit('update');
 
@@ -294,8 +292,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.deltaRttLt150Measurements += client.deltaRttLt150Measurements;
 		this.deltaRttLt300Measurements += client.deltaRttLt300Measurements;
 		this.deltaRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
-
-
 
 		this.totalRttLt50Measurements += client.deltaRttLt50Measurements;
 		this.totalRttLt150Measurements += client.deltaRttLt150Measurements;
