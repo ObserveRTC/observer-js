@@ -177,6 +177,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.closed) throw new Error(`Call ${this.callId} is closed`);
 		if (this.observedClients.has(settings.clientId)) throw new Error(`Client with id ${settings.clientId} already exists`);
 
+		if (!settings.closeClientIfIdleForMs) {
+			settings.closeClientIfIdleForMs = this.observer.config.closeClientIfIdleForMs;
+		}
+
 		const result = new ObservedClient<ClientAppData>(settings, this);
 		const wasEmpty = this.observedClients.size === 0;
 		const onUpdate = () => this._onClientUpdate(result);

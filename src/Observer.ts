@@ -31,6 +31,8 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'],
 	defaultCallUpdateIntervalInMs?: number,
 	appData?: AppData,
+	closeClientIfIdleForMs?: number,
+	closeCallIfEmptyForMs?: number,
 }
 
 export declare interface Observer {
@@ -125,6 +127,10 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			settings.updatePolicy = this.config.defaultCallUpdatePolicy;
 			settings.updateIntervalInMs = this.config.defaultCallUpdateIntervalInMs;
 		}
+		if (!settings.closeCallIfEmptyForMs) {
+			settings.closeCallIfEmptyForMs = this.config.closeCallIfEmptyForMs;
+		}
+		
 		const observedCall = new ObservedCall(settings, this);
 		const onCallUpdated = () => this._onObservedCallUpdated(observedCall);
 
