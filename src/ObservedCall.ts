@@ -15,9 +15,10 @@ import { ObservedCallEventMonitor } from './ObservedCallEventMonitor';
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
 	appData?: AppData;
-	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu',
+	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none',
 	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'update-on-interval',
 	updateIntervalInMs?: number,
+	closeCallIfEmptyForMs?: number,
 };
 
 export type ObservedCallEvents = {
@@ -86,13 +87,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public endedAt?: number;
 	public closedAt?: number;
 
-	private _callStartedEvent: {
-		emitted: boolean,
-		timer?: ReturnType<typeof setTimeout>,
-	};
-	private _callEndedEvent: {
-		emitted: boolean
-	};
+	public readonly settings: Pick<ObservedCallSettings, 'closeCallIfEmptyForMs'>;
+	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
 		settings: ObservedCallSettings<AppData>,
@@ -134,11 +130,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				break;
 		}
 
-		this._callStartedEvent = {
-			emitted: false,
-		};
-		this._callEndedEvent = {
-			emitted: false,
+		this.settings = {
+			closeCallIfEmptyForMs: settings.closeCallIfEmptyForMs,
 		};
 	}
 
@@ -198,6 +191,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
+
+				if (this.settings.closeCallIfEmptyForMs) {
+					this.closeTimer = setTimeout(() => {
+						this.close();
+					}, this.settings.closeCallIfEmptyForMs);
+				}
 			}
 			++this.totalRemovedClients;
 		});
@@ -208,6 +207,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.observedClients.set(settings.clientId, result);
 		this.maxNumberOfClients = Math.max(this.maxNumberOfClients, this.observedClients.size);
+
+		if (this.closeTimer) {
+			clearTimeout(this.closeTimer);
+			this.closeTimer = undefined;
+		}
 
 		this.emit('newclient', result);
 

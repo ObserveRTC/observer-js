@@ -16,6 +16,7 @@ const logger = createLogger('ObservedClient');
 export type ObservedClientSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	clientId: string;
 	appData?: AppData;
+	closeClientIfIdleForMs?: number;
 };
 
 export type ObservedClientEvents = {
@@ -50,6 +51,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		weight: 1,
 		value: undefined,
 	};
+
+	public readonly settings: Pick<ObservedClientSettings, 'closeClientIfIdleForMs'>;
 
 	public appData: AppData;
 	public attachments?: Record<string, unknown>;
@@ -136,6 +139,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	private _injections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
 
+	private closeTimer?: ReturnType<typeof setTimeout>;
+
 	public constructor(settings: ObservedClientSettings<AppData>, public readonly call: ObservedCall) {
 		super();
 		this.setMaxListeners(Infinity);
@@ -144,6 +149,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.appData = settings.appData ?? {} as AppData;
 		
 		this.detectors = new Detectors();
+		this.settings = {
+			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
+		};
 	}
 	
 	public get numberOfPeerConnections() {
@@ -178,6 +186,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public accept(sample: ClientSample): void {
 		if (this.closed) throw new Error(`Client ${this.clientId} is closed`);
+
+		if (this.closeTimer) {
+			clearTimeout(this.closeTimer);
+			this.closeTimer = undefined;
+		}
 
 		const now = Date.now();
 		const elapsedInMs = now - this.updated;
@@ -346,6 +359,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this.calculatedScore.value) {
 			this.totalScoreSum += this.calculatedScore.value;
 			++this.numberOfScoreMeasurements;
+		}
+
+		if (this.settings.closeClientIfIdleForMs !== undefined) {
+			this.closeTimer = setTimeout(() => {
+				this.close();
+			}, this.settings.closeClientIfIdleForMs);
 		}
 	}
 

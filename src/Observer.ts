@@ -132,6 +132,10 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 		if (settings.remoteTrackResolvePolicy === 'mediasoup-sfu') {
 			observedCall.remoteTrackResolver = new MediasoupRemoteTrackResolver(observedCall);
+		} else if (settings.remoteTrackResolvePolicy === 'p2p') {
+			// For future implementation
+		} else if (settings.remoteTrackResolvePolicy === 'none' || !settings.remoteTrackResolvePolicy) {
+			// do nothing
 		}
 
 		observedCall.once('close', () => {
