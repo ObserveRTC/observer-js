@@ -7,6 +7,8 @@ export type InboundAudioTrackReport = {
 		lt020: number;
 		lt050: number;
 		gtOrEq050: number;
+		count: number;
+		sum: number;
 	},
 };
 
@@ -19,6 +21,8 @@ export type InboundVideoTrackReport = {
 		lt020: number;
 		lt050: number;
 		gtOrEq050: number;
+		count: number;
+		sum: number;
 	},
 };
 
@@ -65,7 +69,19 @@ export type ClientReport = {
 		lt150ms: number;
 		lt300ms: number;
 		gtOrEq300ms: number;
+		count: number;
+		sum: number;
 	},
 
-	scoreDistribution: Record<number, number>;
+	scoreDistribution: {
+		'0': number;
+		'1': number;
+		'2': number;
+		'3': number;
+		'4': number;
+		'5': number;
+		
+		count: number;
+		sum: number;
+	}
 }

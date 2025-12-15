@@ -14,6 +14,7 @@ import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { Observer } from './Observer';
+import { TrackReport } from './Reports';
 import { ClientEvent, ClientIssue, ClientMetaData, ClientSample, ExtensionStat } from './schema/ClientSample';
 
 export class ObserverEventMonitor<Context> {
@@ -160,6 +161,8 @@ export class ObserverEventMonitor<Context> {
 	public onMediaSourceRemoved?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
 	public onMediaSourceUpdated?: (mediaSource: ObservedMediaSource, ctx: Context) => void;
 
+	public onTrackReport?: (report: TrackReport, observedClient: ObservedClient, ctx: Context) => void;
+
 	private _onCallAdded(call: ObservedCall) {
 		const onCallEmpty = () => this.onCallEmpty?.(call, this.context);
 		const onCallNotEmpty = () => this.onCallNotEmpty?.(call, this.context);
@@ -192,6 +195,7 @@ export class ObserverEventMonitor<Context> {
 		const onUserMediaError = (error: string) => this._onUserMediaError(observedClient, error);
 		const onClientUpdated = (...args: ObservedClientEvents['update']) => this.onClientUpdated?.(observedClient, args[0], this.context);
 		const onClientEvent = (event: ClientEvent) => this.onClientEvent?.(observedClient, event, this.context);
+		const onTrackReport = (report: TrackReport) => this._onTrackReport(report, observedClient);
 
 		observedClient.once('close', () => {
 			observedClient.off('newpeerconnection', this._onPeerConnconnectionAdded);
@@ -205,6 +209,7 @@ export class ObserverEventMonitor<Context> {
 			observedClient.off('extensionStats', onClientExtensionStats);
 			observedClient.off('update', onClientUpdated);
 			observedClient.off('clientEvent', onClientEvent);
+			observedClient.off('trackreport', onTrackReport);
 		
 			this.onClientClosed?.(observedClient, this.context);
 		});
@@ -220,6 +225,7 @@ export class ObserverEventMonitor<Context> {
 		observedClient.on('extensionStats', onClientExtensionStats);
 		observedClient.on('update', onClientUpdated);
 		observedClient.on('clientEvent', onClientEvent);
+		observedClient.on('trackreport', onTrackReport);
 
 		this.onClientAdded?.(observedClient, this.context);
 	}
@@ -547,5 +553,9 @@ export class ObserverEventMonitor<Context> {
 
 	private _onUsingTurn(observedClient: ObservedClient, usingTurn: boolean) {
 		this.onClientUsingTurn?.(observedClient, usingTurn, this.context);
+	}
+
+	private _onTrackReport(report: TrackReport, observedClient: ObservedClient) {
+		this.onTrackReport?.(report, observedClient, this.context);
 	}
 }

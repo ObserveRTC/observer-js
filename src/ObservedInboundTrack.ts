@@ -45,6 +45,8 @@ export class ObservedInboundTrack implements InboundTrackSample {
 				lt010: 0,
 				lt020: 0,
 				lt050: 0,
+				count: 0,
+				sum: 0,
 			},
 		};
 	}
@@ -93,6 +95,9 @@ export class ObservedInboundTrack implements InboundTrackSample {
 			else if (fl < 0.2) this.report.fractionLostDistribution.lt020 += 1;
 			else if (fl < 0.5) this.report.fractionLostDistribution.lt050 += 1;
 			else this.report.fractionLostDistribution.gtOrEq050 += 1;
+
+			this.report.fractionLostDistribution.count += 1;
+			this.report.fractionLostDistribution.sum += fl;
 		}
 
 		this.detectors.update();

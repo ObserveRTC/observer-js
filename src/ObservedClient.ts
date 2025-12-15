@@ -168,8 +168,19 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				lt50ms: 0,
 				lt150ms: 0,
 				lt300ms: 0,
+				count: 0,
+				sum: 0,
 			},
-			scoreDistribution: {},
+			scoreDistribution: {
+				'0': 0,
+				'1': 0,
+				'2': 0,
+				'3': 0,
+				'4': 0,
+				'5': 0,
+				count: 0,
+				sum: 0,
+			},
 			issues: {},
 			totalAudioBytesReceived: 0,
 			totalVideoBytesReceived: 0,
@@ -333,13 +344,19 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				if (observedPeerConnection.currentRttInMs < 50) {
 					this.deltaRttLt50Measurements += 1;
+					this.report.rttDistribution.lt50ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 150) {
 					this.deltaRttLt150Measurements += 1;
+					this.report.rttDistribution.lt150ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 300) {
 					this.deltaRttLt300Measurements += 1;
+					this.report.rttDistribution.lt300ms += 1;
 				} else if (300 <= observedPeerConnection.currentRttInMs) {
 					this.deltaRttGtOrEq300Measurements += 1;
+					this.report.rttDistribution.gtOrEq300ms += 1;
 				}
+				this.report.rttDistribution.count += 1;
+				this.report.rttDistribution.sum += observedPeerConnection.currentRttInMs;
 
 				sumOfRtts += observedPeerConnection.currentRttInMs;
 				++numberOfRttMeasurements;
@@ -366,10 +383,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.report.totalVideoBytesSent += this.deltaSentVideoBytes;
 		this.report.totalInboundRtpBytesReceived += this.deltaTransportReceivedBytes;
 		this.report.totalOutboundRtpBytesSent += this.deltaTransportSentBytes;
-		this.report.rttDistribution.lt50ms += this.deltaRttLt50Measurements;
-		this.report.rttDistribution.lt150ms += this.deltaRttLt150Measurements;
-		this.report.rttDistribution.lt300ms += this.deltaRttLt300Measurements;
-		this.report.rttDistribution.gtOrEq300ms += this.deltaRttGtOrEq300Measurements;
 		this.report.totalNumberOfIssues += this.deltaNumberOfIssues;
 
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
@@ -379,6 +392,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
 		this.calculatedScore.value = sample.score;
+
+		if (sample.score !== undefined) {
+			const bucket = Math.floor(sample.score).toString() as '0' | '1' | '2' | '3' | '4' | '5';
+
+			this.report.scoreDistribution[bucket] = (this.report.scoreDistribution[bucket] ?? 0) + 1;
+			this.report.scoreDistribution.count += 1;
+			this.report.scoreDistribution.sum += sample.score;
+		}
+		
 		this.detectors.update();
 
 		this.lastSampleTimestamp = sample.timestamp;
