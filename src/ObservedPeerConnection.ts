@@ -128,9 +128,9 @@ export class ObservedPeerConnection extends EventEmitter {
 	public closedAt?: number;
 	public updated = Date.now();
 
-	public connectionState?: string;
-	public iceConnectionState?: string;
-	public iceGatheringState?: string;
+	public connectionState?: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed'; 
+	public iceConnectionState?: 'new' | 'checking' | 'connected' | 'completed' | 'failed' | 'disconnected' | 'closed';
+	public iceGatheringState?: 'new' | 'gathering' | 'complete';
 
 	public availableIncomingBitrate = 0;
 	public availableOutgoingBitrate = 0;
@@ -285,6 +285,22 @@ export class ObservedPeerConnection extends EventEmitter {
 	public close() {
 		if (this.closed) return;
 		this.closed = true;
+
+		this.observedCertificates.forEach((cert) => this.emit('removed-certificate', cert));
+		this.observedCodecs.forEach((codec) => this.emit('removed-codec', codec));
+		this.observedDataChannels.forEach((dc) => this.emit('removed-data-channel', dc));
+		this.observedIceCandidates.forEach((candidate) => this.emit('removed-ice-candidate', candidate));
+		this.observedIceCandidatesPair.forEach((pair) => this.emit('removed-ice-candidate-pair', pair));
+		this.observedIceTransports.forEach((transport) => this.emit('removed-ice-transport', transport));
+		this.observedInboundRtps.forEach((rtp) => this.emit('removed-inbound-rtp', rtp));
+		this.observedInboundTracks.forEach((track) => this.emit('removed-inbound-track', track));
+		this.observedMediaPlayouts.forEach((playout) => this.emit('removed-media-playout', playout));
+		this.observedMediaSources.forEach((source) => this.emit('removed-media-source', source));
+		this.observedOutboundRtps.forEach((rtp) => this.emit('removed-outbound-rtp', rtp));
+		this.observedOutboundTracks.forEach((track) => this.emit('removed-outbound-track', track));
+		this.observedPeerConnectionTransports.forEach((transport) => this.emit('removed-peer-connection-transport', transport));
+		this.observedRemoteInboundRtps.forEach((rtp) => this.emit('removed-remote-inbound-rtp', rtp));
+		this.observedRemoteOutboundRtps.forEach((rtp) => this.emit('removed-remote-outbound-rtp', rtp));
 
 		this.observedCertificates.clear();
 		this.observedCodecs.clear();

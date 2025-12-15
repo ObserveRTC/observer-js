@@ -10,6 +10,9 @@ import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { Detectors } from './detectors/Detectors';
+import { ClientReport, TrackReport } from './Reports';
+import { ObservedInboundTrack } from './ObservedInboundTrack';
+import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 
 const logger = createLogger('ObservedClient');
 
@@ -33,6 +36,8 @@ export type ObservedClientEvents = {
 	clientEvent: [ClientEvent];
 
 	newpeerconnection: [ObservedPeerConnection];
+
+	trackreport: [TrackReport];
 };
 
 export declare interface ObservedClient {
@@ -77,20 +82,24 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
 
-	public totalInboundPacketsLost = 0;
-	public totalInboundPacketsReceived = 0;
-	public totalOutboundPacketsSent = 0;
-	public totalDataChannelBytesSent = 0;
-	public totalDataChannelBytesReceived = 0;
-	public totalDataChannelMessagesSent = 0;
-	public totalDataChannelMessagesReceived = 0;
-	public totalReceivedAudioBytes = 0;
-	public totalReceivedVideoBytes = 0;
-	public totalSentAudioBytes = 0;
-	public totalSentVideoBytes = 0;
-	public totalSentBytes = 0;
-	public totalReceivedBytes = 0;
-
+	// public totalInboundPacketsLost = 0;
+	// public totalInboundPacketsReceived = 0;
+	// public totalOutboundPacketsSent = 0;
+	// public totalDataChannelBytesSent = 0;
+	// public totalDataChannelBytesReceived = 0;
+	// public totalDataChannelMessagesSent = 0;
+	// public totalDataChannelMessagesReceived = 0;
+	// public totalReceivedAudioBytes = 0;
+	// public totalReceivedVideoBytes = 0;
+	// public totalSentAudioBytes = 0;
+	// public totalSentVideoBytes = 0;
+	// public totalSentBytes = 0;
+	// public totalReceivedBytes = 0;
+	// public totalRttLt50Measurements = 0;
+	// public totalRttLt150Measurements = 0;
+	// public totalRttLt300Measurements = 0;
+	// public totalRttGtOrEq300Measurements = 0;
+	
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
 	public deltaSentAudioBytes = 0;
@@ -124,15 +133,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public numberOfOutboundTracks = 0;
 	public numberOfDataChannels = 0;
 
-	public totalRttLt50Measurements = 0;
-	public totalRttLt150Measurements = 0;
-	public totalRttLt300Measurements = 0;
-	public totalRttGtOrEq300Measurements = 0;
 	public deltaNumberOfIssues = 0;
 
 	public totalScoreSum = 0;
 	public numberOfScoreMeasurements = 0;
-	public totalNumberOfIssues = 0;
+	// public totalNumberOfIssues = 0;
+
+	public readonly report: ClientReport;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
@@ -151,6 +158,44 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.detectors = new Detectors();
 		this.settings = {
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
+		};
+
+		this.report = {
+			callId: this.call.callId,
+			clientId: this.clientId,
+			rttDistribution: {
+				gtOrEq300ms: 0,
+				lt50ms: 0,
+				lt150ms: 0,
+				lt300ms: 0,
+				count: 0,
+				sum: 0,
+			},
+			scoreDistribution: {
+				'0': 0,
+				'1': 0,
+				'2': 0,
+				'3': 0,
+				'4': 0,
+				'5': 0,
+				count: 0,
+				sum: 0,
+			},
+			issues: {},
+			totalAudioBytesReceived: 0,
+			totalVideoBytesReceived: 0,
+			totalAudioBytesSent: 0,
+			totalVideoBytesSent: 0,
+			totalDataChannelBytesReceived: 0,
+			totalDataChannelBytesSent: 0,
+			totalDataChannelMessagesReceived: 0,
+			totalDataChannelMessagesSent: 0,
+			totalInboundRtpBytesReceived: 0,
+			totalInboundRtpPacketsLost: 0,
+			totalInboundRtpPacketsReceived: 0,
+			totalOutboundRtpBytesSent: 0,
+			totalOutboundRtpPacketsSent: 0,
+			totalNumberOfIssues: 0,
 		};
 	}
 	
@@ -299,13 +344,19 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				if (observedPeerConnection.currentRttInMs < 50) {
 					this.deltaRttLt50Measurements += 1;
+					this.report.rttDistribution.lt50ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 150) {
 					this.deltaRttLt150Measurements += 1;
+					this.report.rttDistribution.lt150ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 300) {
 					this.deltaRttLt300Measurements += 1;
+					this.report.rttDistribution.lt300ms += 1;
 				} else if (300 <= observedPeerConnection.currentRttInMs) {
 					this.deltaRttGtOrEq300Measurements += 1;
+					this.report.rttDistribution.gtOrEq300ms += 1;
 				}
+				this.report.rttDistribution.count += 1;
+				this.report.rttDistribution.sum += observedPeerConnection.currentRttInMs;
 
 				sumOfRtts += observedPeerConnection.currentRttInMs;
 				++numberOfRttMeasurements;
@@ -319,32 +370,37 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// emit new attachments?
 		this.attachments = sample.attachments;
 
-		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
-		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
-		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
-		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
-		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
-		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
-		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
-		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
-		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
-		this.totalSentAudioBytes += this.deltaSentAudioBytes;
-		this.totalSentVideoBytes += this.deltaSentVideoBytes;
-		this.totalReceivedBytes += this.deltaTransportReceivedBytes;
-		this.totalSentBytes += this.deltaTransportSentBytes;
-		this.totalRttLt50Measurements += this.deltaRttLt50Measurements;
-		this.totalRttLt150Measurements += this.deltaRttLt150Measurements;
-		this.totalRttLt300Measurements += this.deltaRttLt300Measurements;
-		this.totalRttGtOrEq300Measurements += this.deltaRttGtOrEq300Measurements;
-		this.totalNumberOfIssues += this.deltaNumberOfIssues;
+		this.report.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.report.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.report.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
+		this.report.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+		this.report.totalInboundRtpPacketsLost += this.deltaInboundPacketsLost;
+		this.report.totalInboundRtpPacketsReceived += this.deltaInboundPacketsReceived;
+		this.report.totalOutboundRtpPacketsSent += this.deltaOutboundPacketsSent;
+		this.report.totalAudioBytesReceived += this.deltaReceivedAudioBytes;
+		this.report.totalVideoBytesReceived += this.deltaReceivedVideoBytes;
+		this.report.totalAudioBytesSent += this.deltaSentAudioBytes;
+		this.report.totalVideoBytesSent += this.deltaSentVideoBytes;
+		this.report.totalInboundRtpBytesReceived += this.deltaTransportReceivedBytes;
+		this.report.totalOutboundRtpBytesSent += this.deltaTransportSentBytes;
+		this.report.totalNumberOfIssues += this.deltaNumberOfIssues;
 
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
-		this.receivingVideoBitrate = (this.totalReceivedVideoBytes * 8) / (elapsedInSeconds);
+		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (elapsedInSeconds);
 		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
 		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / (elapsedInSeconds);
 		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
 		this.calculatedScore.value = sample.score;
+
+		if (sample.score !== undefined) {
+			const bucket = Math.floor(sample.score).toString() as '0' | '1' | '2' | '3' | '4' | '5';
+
+			this.report.scoreDistribution[bucket] = (this.report.scoreDistribution[bucket] ?? 0) + 1;
+			this.report.scoreDistribution.count += 1;
+			this.report.scoreDistribution.sum += sample.score;
+		}
+		
 		this.detectors.update();
 
 		this.lastSampleTimestamp = sample.timestamp;
@@ -557,7 +613,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
 
 					if (observedPeerConnection) {
-						observedPeerConnection.iceConnectionState = payload.iceConnectionState;
+						observedPeerConnection.iceConnectionState = payload.iceConnectionState as 'new' | 'checking' | 'connected' | 'completed' | 'failed' | 'disconnected' | 'closed';
 						observedPeerConnection.emit('iceconnectionstatechange', {
 							state: payload.iceConnectionState,
 						});
@@ -576,7 +632,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
 
 					if (observedPeerConnection) {
-						observedPeerConnection.iceGatheringState = payload.iceGatheringState;
+						observedPeerConnection.iceGatheringState = payload.iceGatheringState as 'new' | 'gathering' | 'complete';
 						observedPeerConnection.emit('icegatheringstatechange', {
 							state: payload.iceGatheringState,
 						});
@@ -595,7 +651,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
 
 					if (observedPeerConnection) {
-						observedPeerConnection.connectionState = payload.peerConnectionState;
+						observedPeerConnection.connectionState = payload.peerConnectionState as 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed'; 
 						observedPeerConnection.emit('connectionstatechange', {
 							state: payload.peerConnectionState,
 						});
@@ -681,6 +737,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public addIssue(issue: ClientIssue) {
 		if (this.closed) return;
 
+		this.report.issues[issue.type] = (this.report.issues[issue.type] ?? 0) + 1;
+
 		this.emit('issue', issue);
 		this.call.observer.emit('client-issue', this, issue);
 	}
@@ -701,14 +759,32 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				), void 0);
 			}
 
-			observedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
+			const newObservedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
+			const onInboundTrackRemoved = (track: ObservedInboundTrack) => {
+				this.emit('trackreport', {
+					direction: 'inbound',
+					...track.report,
+				});
+			};
+			const onOutboundTrackRemoved = (track: ObservedOutboundTrack) => {
+				this.emit('trackreport', {
+					direction: 'outbound',
+					...track.report,
+				});
+			};
 
-			observedPeerConnection.once('close', () => {
+			newObservedPeerConnection.once('close', () => {
+				newObservedPeerConnection?.off('removed-inbound-track', onInboundTrackRemoved);
+				newObservedPeerConnection?.off('removed-outbound-track', onOutboundTrackRemoved);
 				this.observedPeerConnections.delete(sample.peerConnectionId);
 			});
-			this.observedPeerConnections.set(sample.peerConnectionId, observedPeerConnection);
+			newObservedPeerConnection.on('removed-inbound-track', onInboundTrackRemoved);
+			newObservedPeerConnection.on('removed-outbound-track', onOutboundTrackRemoved);
+			this.observedPeerConnections.set(sample.peerConnectionId, newObservedPeerConnection);
 			
-			this.emit('newpeerconnection', observedPeerConnection);
+			this.emit('newpeerconnection', newObservedPeerConnection);
+
+			observedPeerConnection = newObservedPeerConnection;
 		}
 
 		observedPeerConnection.accept(sample);

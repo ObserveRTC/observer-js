@@ -1,6 +1,6 @@
 {
 	"name": "model-generator-for-observer-js",
-	"version": "1.0.0",
+	"version": "1.0.0-beta.3",
 	"description": "Simple NodeJS to generate Models for observer-js",
 	"main": "index.js",
 	"scripts": {
