@@ -26,7 +26,7 @@ export { ScoreCalculator } from './scores/ScoreCalculator';
 export { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
 export { ObserverEventMonitor } from './ObserverEventMonitor';
 export { Middleware } from './common/Middleware';
-export {
+export type {
 	TrackReport,
 	ClientReport,
 } from './Reports';
