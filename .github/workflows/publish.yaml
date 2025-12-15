@@ -1,5 +1,4 @@
 name: Publish
-
 on:
   push:
     branches:
@@ -9,23 +8,16 @@ on:
     branches:
       - master
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
         with:
           node-version: 20
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Install
-        run: yarn --frozen-lockfile
+        run: yarn
 
       - name: Build
         run: yarn build
@@ -34,12 +26,12 @@ jobs:
         run: yarn test --detectOpenHandles --forceExit
 
       - name: Setup Custom Contexts
-        id: job_context
         shell: bash
         run: |
-          echo "branch=$(echo ${GITHUB_REF##*/})" >> $GITHUB_OUTPUT
-          echo "version=$(jq -r .version < package.json)" >> $GITHUB_OUTPUT
-          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "##[set-output name=branch;]$(echo ${GITHUB_REF##*/})"
+          echo "##[set-output name=version;]$(cat ./package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')"
+          echo "##[set-output name=short_sha;]$(git rev-parse --short HEAD)"
+        id: job_context
 
       - name: Make snapshot version
         if: steps.job_context.outputs.branch != 'master'
@@ -49,10 +41,15 @@ jobs:
       - name: Publish package to latest
         if: steps.job_context.outputs.branch == 'master'
         run: |
+          npm config set //registry.npmjs.org/:_authToken ${NPM_TOKEN}
           npm publish --ignore-scripts --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish package to branch-tag
         if: steps.job_context.outputs.branch != 'master'
         run: |
-          npm publish --ignore-scripts --access public \
-            --tag $(echo "develop-${{ steps.job_context.outputs.version }}-rc" | sed 's/[.]//g')
+          npm config set //registry.npmjs.org/:_authToken ${NPM_TOKEN}
+          npm publish --ignore-scripts --access public  --tag $(echo "develop-${{ steps.job_context.outputs.version }}-rc" | sed 's/[.]//g')
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
