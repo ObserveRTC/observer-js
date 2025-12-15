@@ -52,21 +52,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public totalAddedClients = 0;
 	public totalRemovedClients = 0;
 
-	public totalClientsReceivedAudioBytes = 0;
-	public totalClientsReceivedVideoBytes = 0;
-	public totalClientsReceivedDataChannelBytes = 0;
-	public totalClientsReceivedBytes = 0;
-
-	public totalClientsSentAudioBytes = 0;
-	public totalClientsSentDataChannelBytes = 0;
-	public totalClientsSentVideoBytes = 0;
-	public totalClientsSentBytes = 0;
-
-	public totalRttLt50Measurements = 0;
-	public totalRttLt150Measurements = 0;
-	public totalRttLt300Measurements = 0;
-	public totalRttGtOrEq300Measurements = 0;
-
 	public numberOfIssues = 0;
 	public numberOfPeerConnections = 0;
 	public numberOfInboundRtpStreams = 0;
@@ -76,10 +61,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public maxNumberOfClients = 0;
 	public deltaNumberOfIssues = 0;
 
-	public deltaRttLt50Measurements = 0;
-	public deltaRttLt150Measurements = 0;
-	public deltaRttLt300Measurements = 0;
-	public deltaRttGtOrEq300Measurements = 0;
+	// public deltaRttLt50Measurements = 0;
+	// public deltaRttLt150Measurements = 0;
+	// public deltaRttLt300Measurements = 0;
+	// public deltaRttGtOrEq300Measurements = 0;
 
 	public appData: AppData;
 	public closed = false;
@@ -251,32 +236,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.emit('update');
 
 		this.deltaNumberOfIssues = 0;
-		this.deltaRttLt50Measurements = 0;
-		this.deltaRttLt150Measurements = 0;
-		this.deltaRttLt300Measurements = 0;
-		this.deltaRttGtOrEq300Measurements = 0;
 	}
 
 	private _onClientUpdate(client: ObservedClient) {
-		this.totalClientsReceivedAudioBytes += client.deltaReceivedAudioBytes;
-		this.totalClientsReceivedVideoBytes += client.deltaReceivedVideoBytes;
-		this.totalClientsReceivedDataChannelBytes += client.deltaDataChannelBytesReceived;
-		this.totalClientsReceivedBytes += client.deltaTransportReceivedBytes;
-		this.totalClientsSentAudioBytes += client.deltaSentAudioBytes;
-		this.totalClientsSentVideoBytes += client.deltaSentVideoBytes;
-		this.totalClientsSentDataChannelBytes += client.deltaDataChannelBytesSent;
-		this.totalClientsSentBytes += client.deltaTransportSentBytes;
-		
-		this.deltaRttLt50Measurements += client.deltaRttLt50Measurements;
-		this.deltaRttLt150Measurements += client.deltaRttLt150Measurements;
-		this.deltaRttLt300Measurements += client.deltaRttLt300Measurements;
-		this.deltaRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
-
-		this.totalRttLt50Measurements += client.deltaRttLt50Measurements;
-		this.totalRttLt150Measurements += client.deltaRttLt150Measurements;
-		this.totalRttLt300Measurements += client.deltaRttLt300Measurements;
-		this.totalRttGtOrEq300Measurements += client.deltaRttGtOrEq300Measurements;
-
 		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
 		this.numberOfIssues += client.deltaNumberOfIssues;
 		

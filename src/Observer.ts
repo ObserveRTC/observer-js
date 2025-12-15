@@ -53,11 +53,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 	public totalAddedCall = 0;
 	public totalRemovedCall = 0;
-	public totalRttLt50Measurements = 0;
-	public totalRttLt150Measurements = 0;
-	public totalRttLt300Measurements = 0;
-	public totalRttGtOrEq300Measurements = 0;
-	public totalClientIssues = 0;
 
 	public numberOfClientsUsingTurn = 0;
 	public numberOfClients = 0;
@@ -217,11 +212,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	}
 
 	private _onObservedCallUpdated(call: ObservedCall) {
-		this.totalRttLt50Measurements += call.deltaRttLt50Measurements;
-		this.totalRttLt150Measurements += call.deltaRttLt150Measurements;
-		this.totalRttLt300Measurements += call.deltaRttLt300Measurements;
-		this.totalRttGtOrEq300Measurements += call.deltaRttGtOrEq300Measurements;
-		this.totalClientIssues += call.deltaNumberOfIssues;
+		call;
 	}
 
 	public createEventMonitor<CTX = unknown>(ctx?: CTX): ObserverEventMonitor<CTX> {
