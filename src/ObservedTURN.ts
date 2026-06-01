@@ -1,4 +1,4 @@
-import { EventEmitter } from 'stream';
+import { EventEmitter } from 'events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedTurnServer } from './ObservedTurnServer';
 import { createLogger } from './common/logger';

@@ -3,39 +3,48 @@
 [![NPM version](https://img.shields.io/npm/v/@observertc/observer-js.svg)](https://www.npmjs.com/package/@observertc/observer-js)
 [![License](https://img.shields.io/npm/l/@observertc/observer-js.svg)](https://github.com/observertc/observer-js/blob/main/LICENSE)
 
-`observer-js` is a **server-side Node.js library for monitoring WebRTC sessions**. A WebRTC
-application (typically an SFU or a signaling/stats backend) feeds it `ClientSample` objects —
-periodic snapshots of each participant's `RTCPeerConnection.getStats()` output plus
-application events — and `observer-js` maintains a live, in-memory model of every call,
-participant, peer connection, and media stream, derives per-interval and cumulative metrics,
-and emits a single, unified stream of typed events the application can react to.
+`observer-js` is a **library for monitoring WebRTC sessions**, for use in **Node.js and the
+browser**. A WebRTC application (typically an SFU, a signaling/stats backend, or a browser
+client) feeds it `ClientSample` objects — periodic snapshots of each participant's
+`RTCPeerConnection.getStats()` output plus application events — and `observer-js` maintains a
+live, in-memory model of every call, participant, peer connection, and media stream, derives
+per-interval and cumulative metrics, and emits a single, unified stream of typed events the
+application can react to.
 
 > **Status:** `1.0.0-beta`. The API described here is current and intended to be implemented
 > against directly. This document is written to be self-sufficient: an engineer (or an AI
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
+> **Packaging at a glance:** the package is **ESM-only**. The core entry
+> (`@observertc/observer-js`) is **import-safe in any environment** — it pulls in no Node
+> built-ins (no `fs`, `stream`, `Buffer`, …), so it bundles cleanly for the browser. Anything
+> that touches the filesystem (the built-in file sink) lives behind the separate, **Node-only**
+> `@observertc/observer-js/sinks` subpath. See [Browser & Node usage](#browser--node-usage).
+
 ---
 
 ## Table of contents
 
 1. [Installation](#installation)
-2. [Mental model](#mental-model)
-3. [Quick start](#quick-start)
-4. [Data flow](#data-flow)
-5. [Entity hierarchy](#entity-hierarchy)
-6. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
-7. [Update policies](#update-policies)
-8. [The event bus](#the-event-bus) ← the core of the API
-9. [API reference](#api-reference)
-10. [Schema types (`ClientSample`)](#schema-types-clientsample)
-11. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
-12. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
-13. [Logging](#logging)
-14. [Error-handling philosophy](#error-handling-philosophy)
-15. [Public exports](#public-exports)
-16. [Development & extension guide](#development--extension-guide)
-17. [Not yet implemented / roadmap](#not-yet-implemented--roadmap)
+2. [Browser & Node usage](#browser--node-usage)
+3. [Mental model](#mental-model)
+4. [Quick start](#quick-start)
+5. [Data flow](#data-flow)
+6. [Entity hierarchy](#entity-hierarchy)
+7. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
+8. [Update policies](#update-policies)
+9. [The event bus](#the-event-bus) ← the core of the API
+10. [API reference](#api-reference)
+11. [Schema types (`ClientSample`)](#schema-types-clientsample)
+12. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
+13. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
+14. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
+15. [Logging](#logging)
+16. [Error-handling philosophy](#error-handling-philosophy)
+17. [Public exports](#public-exports)
+18. [Development & extension guide](#development--extension-guide)
+19. [Not yet implemented / roadmap](#not-yet-implemented--roadmap)
 
 ---
 
@@ -47,13 +56,49 @@ npm install @observertc/observer-js
 yarn add @observertc/observer-js
 ```
 
-Requires **Node.js ≥ 16**. Written in TypeScript; ships type declarations (`lib/index.d.ts`).
-Runtime dependencies: `@bufbuild/protobuf`, `events`, `uuid`. The library does **not** bundle a
-logger or any transport — see [Logging](#logging).
+**ESM-only.** The package ships ES Modules (`import`, not `require()`); use it from ESM code or
+through any modern bundler (Vite, webpack, Rollup, esbuild, Next.js). Requires **Node.js ≥ 16**.
+Written in TypeScript; ships type declarations alongside the build (`dist/index.d.mts`).
+
+Runtime dependencies: `@bufbuild/protobuf`, `events`, `uuid` — all browser-compatible. The
+library does **not** bundle a logger or any transport — see [Logging](#logging).
 
 `ClientSample` and friends are re-exported from this package, and are also published as the
 shared schema in [`@observertc/schemas`](https://github.com/observertc/schemas); samples
 produced on the client (e.g. by `@observertc/client-monitor-js`) conform to the same shape.
+
+---
+
+## Browser & Node usage
+
+The package has **two entry points**, split by environment:
+
+| Import | Environment | Contents |
+|--------|-------------|----------|
+| `@observertc/observer-js` | **Browser + Node** | `Observer` and the whole entity/event API, the `ClientSampleSink` base class, schema types, logger. No Node built-ins — bundles for the browser. |
+| `@observertc/observer-js/sinks` | **Node only** | Concrete sinks that touch the filesystem (`createJsonlFileSinkFactory`, `createJsonlFileSink`) plus the env-agnostic `InMemorySink`. Importing this pulls in `fs` — don't import it in a browser bundle. |
+
+```ts
+// Works in the browser and in Node:
+import { Observer, ClientSample, ClientSampleSink } from '@observertc/observer-js';
+
+// Node-only (filesystem): import lazily / only on the server
+import { createJsonlFileSinkFactory } from '@observertc/observer-js/sinks';
+```
+
+Because the package is ESM and marked `sideEffects: false`, bundlers **tree-shake** it: a
+browser app that only uses `Observer` won't pull the ~50 `Observed*` classes it doesn't
+reference into its bundle.
+
+**Persisting samples in the browser.** The file sink is Node-only by design. In the browser,
+subclass the [`ClientSampleSink`](#sinks-per-client-sample-persistence) base class to send
+samples wherever you like (an HTTP endpoint, IndexedDB, an in-memory buffer) — the base class is
+exported from the core entry and depends only on `events`.
+
+> **Note on `require()`.** Being ESM-only, the package can't be loaded with
+> CommonJS `require('@observertc/observer-js')`. Consume it with `import`, or via a bundler. If
+> you have a CommonJS Node service that must `require()` it, open an issue / ask — a dual
+> ESM+CJS build is a small change.
 
 ---
 
@@ -328,6 +373,7 @@ additional field(s) on top of that scope.
 | Event | Extra | Fires when |
 |-------|-------|-----------|
 | `client-added` | — | a client is created |
+| `client-sink-created` | `{ sink: ClientSampleSink }` | a per-client sink was created (only when `createClientSink` returns one); fires right after `client-added` |
 | `client-updated` | `{ sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext }` | the client processed a sample |
 | `client-closed` | — | the client closed |
 | `client-joined` | — | first `CLIENT_JOINED` event seen |
@@ -400,6 +446,8 @@ type ObserverConfig<AppData = Record<string, unknown>> =
     // (incl. lazily by accept()). appData is application-owned; accept `context` never touches it.
     createCallAppData?: (p: { callId: string; observer: Observer }) => Record<string, unknown>;
     createClientAppData?: (p: { clientId: string; observedCall: ObservedCall }) => Record<string, unknown>;
+    // sink factory — produces a per-client sink that receives every accepted sample (see Sinks).
+    createClientSink?: (p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined;
   };
 ```
 
@@ -475,6 +523,7 @@ Key members:
 
 - `readonly clientId: string`, `appData: AppData`, `readonly call: ObservedCall`
 - `readonly observedPeerConnections: Map<string, ObservedPeerConnection>`
+- `readonly sink?: ClientSampleSink` — the per-client sink (see [Sinks](#sinks-per-client-sample-persistence)), if `createClientSink` is configured; listen on it for `close`/`error`
 - **Injection API** (queue app data to be merged into the next sample processing):
   `injectEvent(ClientEvent)`, `injectIssue(ClientIssue)`, `injectMetaData(ClientMetaData)`,
   `injectExtensionStat(ExtensionStat)`, `injectAttachment(key, value)`
@@ -650,6 +699,113 @@ and `label` into `PeerConnectionSample.attachments` / track `attachments`.
 
 ---
 
+## Sinks (per-client sample persistence)
+
+A **sink** receives the samples a client accepts — for archival, streaming, or later offline
+replay. Each `ObservedClient` gets its **own** sink, produced by the
+`ObserverConfig.createClientSink` factory when the client is created (return `undefined` for no
+sink). The client pushes every accepted sample to its sink, and `end()`s it on close.
+
+### The `ClientSampleSink` base class
+
+`ClientSampleSink` is an **abstract base class** (a typed `EventEmitter`). You create a sink by
+**subclassing it** and implementing `write` and `end`. It is **object-mode**: `write` receives
+the `ClientSample` *object*, so each sink decides how (or whether) to serialize it — JSON line,
+protobuf, a remote POST body, an in-memory push, etc.
+
+```ts
+import { ClientSampleSink, ClientSample } from '@observertc/observer-js';
+
+abstract class ClientSampleSink /* extends EventEmitter */ {
+  abstract write(sample: ClientSample): boolean;   // accept one sample; `false` = backpressure
+  abstract end(): void;                            // flush; emit `close` when the destination is ready
+
+  // typed events (inherited): the listener signature is inferred from the event name
+  on(event: 'close' | 'finish' | 'drain', listener: () => void): this;
+  on(event: 'error', listener: (err: Error) => void): this;
+  // ...and the matching `once` / `off` / `emit`
+}
+```
+
+| Event | Meaning |
+|-------|---------|
+| `close` | the destination is fully written and closed (e.g. a file flushed and its fd closed) — "ready" |
+| `error` | the destination failed |
+| `finish` | `end()` was processed and queued data flushed (before `close`) |
+| `drain` | the buffer drained after backpressure; safe to write more |
+
+The library calls `write(sample)` **synchronously** per accepted sample (it is not awaited),
+`end()`s the sink when the client closes, and attaches an `error` listener so a failing sink
+can't crash the process (it also catches throws from `write`/`end`). The application — which
+created the sink — listens for `close` (destination ready) and `error`. Because `write` isn't
+awaited in the `accept()` hot path, **backpressure and batching are the sink's concern**.
+
+**The core depends only on this base class (which imports only `events`) — never on `fs` or
+`stream` — so importing `@observertc/observer-js` is browser-safe.** Concrete filesystem sinks
+live in the Node-only `@observertc/observer-js/sinks` subpath.
+
+### Built-in sinks (`@observertc/observer-js/sinks`, Node-only)
+
+```ts
+import { Observer } from '@observertc/observer-js';
+import { createJsonlFileSinkFactory } from '@observertc/observer-js/sinks';
+
+const observer = new Observer({
+  // one ./stats/<callId>__<clientId>.jsonl per client
+  createClientSink: createJsonlFileSinkFactory({ directory: './stats' }),
+});
+
+// React when a sink is created for a client:
+observer.on('client-sink-created', ({ observedClient, sink }) => {
+  sink.on('close', () => {
+    // the file is fully flushed and its fd closed — ready to upload, move, etc.
+  });
+});
+```
+
+| Export | Signature | Notes |
+|--------|-----------|-------|
+| `createJsonlFileSinkFactory` | `({ directory, flags?, getFileName?, serializeSample? }) => ClientSampleSinkFactory` | per-client JSONL files; path defaults to `${callId}__${clientId}.jsonl` under `directory` (which **must exist**) |
+| `createJsonlFileSink` | `({ path, flags?, serializeSample? }) => ClientSampleSink` | a single JSONL file; wraps `fs.WriteStream` and re-emits its `close`/`finish`/`drain`/`error` |
+| `JsonlFileSink` | `class extends ClientSampleSink` | the underlying class, if you want to construct it directly |
+| `createInMemorySink` / `InMemorySink` | `(samples?: ClientSample[]) => InMemorySink` | collects the accepted **sample objects** into `.samples: ClientSample[]`; env-agnostic (no `fs`); emits `close` on `end()` |
+
+`serializeSample?: (sample: ClientSample) => string` overrides the default `JSON.stringify` for
+the JSONL sinks (e.g. to redact or reshape before writing).
+
+### Writing your own sink (browser or custom transport)
+
+Subclass `ClientSampleSink` and emit the lifecycle events yourself. This is the path for the
+browser, or any non-file destination:
+
+```ts
+import { ClientSampleSink, ClientSample, ClientSampleSinkFactory } from '@observertc/observer-js';
+
+class HttpSink extends ClientSampleSink {
+  private buffer: ClientSample[] = [];
+  constructor(private readonly url: string) { super(); }
+
+  write(sample: ClientSample): boolean {
+    this.buffer.push(sample);                  // batch; decide your own backpressure
+    return true;
+  }
+  end(): void {
+    fetch(this.url, { method: 'POST', body: JSON.stringify(this.buffer) })
+      .then(() => this.emit('close'))          // signal "destination ready"
+      .catch((err) => this.emit('error', err));
+  }
+}
+
+const createClientSink: ClientSampleSinkFactory = ({ clientId, observedCall }) =>
+  new HttpSink(`/stats/${observedCall.callId}/${clientId}`);
+
+const observer = new Observer({ createClientSink });
+```
+
+`observedClient.sink?` exposes the created sink; the `client-sink-created` event delivers it on
+the bus with full ancestry. `ClientSampleSinkFactory` is
+`(p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined`.
+
 ## Logging
 
 `observer-js` logs through a single, swappable sink. Out of the box it writes `debug` and
@@ -714,6 +870,12 @@ export type { Detector } from './detectors/Detector';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
 
+// sink base class — value export, import-safe everywhere (subclass it for custom/browser sinks):
+export { ClientSampleSink } from './sinks/ClientSampleSink';
+export type { ClientSampleSinkEvents, ClientSampleSinkFactory } from './sinks/ClientSampleSink';
+// concrete sinks are a separate, Node-only entry: "@observertc/observer-js/sinks"
+//   export { createJsonlFileSink, createJsonlFileSinkFactory, JsonlFileSink, InMemorySink, createInMemorySink }
+
 export { Middleware } from './common/Middleware';
 export type { TrackReport, ClientReport } from './Reports';
 ```
@@ -724,17 +886,24 @@ export type { TrackReport, ClientReport } from './Reports';
 
 ```bash
 yarn install
-yarn build       # tsc → lib/
+yarn build       # tsup → dist/ (ESM: index + sinks, with .d.mts types & sourcemaps)
 yarn lint        # eslint -c .eslintrc.json "src/**/*.ts"
 yarn typecheck   # tsc --noEmit
 yarn test        # jest
 ```
 
+The build is driven by [`tsup`](https://tsup.egoist.dev) (config in `tsup.config.ts`): two
+entries (`src/index.ts` → `.`, `src/sinks/index.ts` → `./sinks`), ESM output to `dist/`, code
+splitting on so the shared `ClientSampleSink` base lives in one chunk. CI
+(`.github/workflows/ci.yml`) runs lint + typecheck + **build** + test on every push/PR.
+
 **Project layout** (`src/`): `Observer.ts`, `ObservedCall.ts`, `ObservedClient.ts`,
 `ObservedPeerConnection.ts`, the `Observed*` sub-stat classes, `ObserverEvents.ts` (the typed
 event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `updaters/`
 (update-policy strategies), `utils/` (remote-track resolvers), `common/` (`logger`, `utils`,
-`Middleware`), `schema/` (sample/event/meta types).
+`Middleware`), `schema/` (sample/event/meta types), and `sinks/` (the import-safe
+`ClientSampleSink` base + the Node-only `JsonlFileSink` / `InMemorySink`, re-exported via the
+`@observertc/observer-js/sinks` subpath).
 
 **Conventions to follow when developing further:**
 

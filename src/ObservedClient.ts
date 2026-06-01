@@ -14,6 +14,7 @@ import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
+import type { ClientSampleSink } from './sinks/ClientSampleSink';
 
 const logger = createLogger('ObservedClient');
 
@@ -43,6 +44,9 @@ export declare interface ObservedClient {
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly clientId: string;
 	public readonly observedPeerConnections = new Map<string, ObservedPeerConnection>();
+
+	/** Per-client sink (from `ObserverConfig.createClientSink`), if any. */
+	public readonly sink?: ClientSampleSink;
 
 	/** Ancestry base shared by all Observer-bus events originating at this client. */
 	public readonly eventScope: ObservedClientScope;
@@ -129,8 +133,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.setMaxListeners(Infinity);
 
 		this.eventScope = { observer: call.observer, observedCall: call, observedClient: this };
+		this.sink = call.observer.config.createClientSink?.({ clientId: settings.clientId, observedCall: call });
 		this.clientId = settings.clientId;
-		this.appData = (settings.appData ?? call.observer.config.createClientAppData?.({ clientId: settings.clientId, observedCall: call }) ?? {}) as AppData;
+		this.appData = (settings.appData ?? {}) as AppData;
 
 		this.settings = {
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
@@ -173,6 +178,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			totalOutboundRtpPacketsSent: 0,
 			totalNumberOfIssues: 0,
 		};
+
+		if (this.sink) {
+			const onError = (err: Error) => logger.warn('ClientSampleSink error for client %s: %o', this.clientId, err);
+
+			this.sink.once('close', () => this.sink?.off('error', onError));
+			this.sink.on('error', onError);
+		}
 	}
 
 	public get numberOfPeerConnections() {
@@ -205,6 +217,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.emit('close');
 		this._notify('client-closed', { ...this.eventScope });
+
+		try {
+			this.sink?.end();
+		} catch (err) {
+			logger.warn('ClientSampleSink.end failed for client %s: %o', this.clientId, err);
+		}
 	}
 
 	public accept(sample: ClientSample, context?: AcceptContext): void {
@@ -213,6 +231,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			return;
 		}
+
+		this.sink?.write(sample);
 
 		if (this.closeTimer) {
 			clearTimeout(this.closeTimer);
@@ -224,9 +244,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const elapsedInSeconds = elapsedInMs / 1000;
 		let sumOfRtts = 0;
 		let numberOfRttMeasurements = 0;
-		
+
 		++this.acceptedSamples;
-		
+
 		this.availableIncomingBitrate = 0;
 		this.availableOutgoingBitrate = 0;
 		this.deltaDataChannelBytesReceived = 0;
@@ -298,7 +318,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.deltaSentVideoBytes += observedPeerConnection.deltaSentVideoBytes;
 			this.deltaTransportReceivedBytes += observedPeerConnection.deltaTransportReceivedBytes;
 			this.deltaTransportSentBytes += observedPeerConnection.deltaTransportSentBytes;
-			
+
 			this.availableIncomingBitrate += observedPeerConnection.availableIncomingBitrate;
 			this.availableOutgoingBitrate += observedPeerConnection.availableOutgoingBitrate;
 
@@ -526,7 +546,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					} else {
 						logger.warn('Received PEER_CONNECTION_OPENED event without a corresponding observedPeerConnection: %o', event);
 					}
-					
+
 				}
 				break;
 			}
@@ -619,7 +639,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
-					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId);
 					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
 
 					if (observedPeerConnection) {
@@ -644,7 +664,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 				if (payload?.peerConnectionId && typeof payload.peerConnectionId === 'string' && payload?.trackId && typeof payload.trackId === 'string') {
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
-					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId); 
+					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId);
 					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
 
 					if (observedPeerConnection) {
@@ -775,35 +795,35 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this._injections.clientEvents) {
 			if (!sample.clientEvents) sample.clientEvents = [];
 			sample.clientEvents.push(...this._injections.clientEvents);
-			
+
 			this._injections.clientEvents = undefined;
 		}
 
 		if (this._injections.clientIssues) {
 			if (!sample.clientIssues) sample.clientIssues = [];
 			sample.clientIssues.push(...this._injections.clientIssues);
-			
+
 			this._injections.clientIssues = undefined;
 		}
 
 		if (this._injections.extensionStats) {
 			if (!sample.extensionStats) sample.extensionStats = [];
 			sample.extensionStats.push(...this._injections.extensionStats);
-			
+
 			this._injections.extensionStats = undefined;
 		}
 
 		if (this._injections.attachments) {
 			if (!sample.attachments) sample.attachments = {};
 			Object.assign(sample.attachments, this._injections.attachments);
-			
+
 			this._injections.attachments = undefined;
 		}
 
 		if (this._injections.clientMetaItems) {
 			if (!sample.clientMetaItems) sample.clientMetaItems = [];
 			sample.clientMetaItems.push(...this._injections.clientMetaItems);
-			
+
 			this._injections.clientMetaItems = undefined;
 		}
 

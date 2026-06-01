@@ -9,6 +9,7 @@ import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater';
 import { MediasoupRemoteTrackResolver } from './utils/MediasoupRemoteTrackResolver';
 import type { ObserverEvents, ObserverEventBase } from './ObserverEvents';
+import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 
 const logger = createLogger('Observer');
 
@@ -57,6 +58,13 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 
 	/** Same as `createCallAppData`, for clients. Receives the (already-created) parent call. */
 	createClientAppData?: ClientAppDataFactory,
+
+	/**
+	 * Optional factory invoked when a client is created, producing a per-client sink that
+	 * receives every sample the client accepts (or `undefined` for no sink). The destination
+	 * can be derived from `callId` / `clientId`.
+	 */
+	createClientSink?: ClientSampleSinkFactory,
 }
 
 export declare interface Observer {
@@ -156,6 +164,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			updatePolicy: settings.updatePolicy ?? this.config.defaultCallUpdatePolicy,
 			updateIntervalInMs: settings.updateIntervalInMs ?? this.config.defaultCallUpdateIntervalInMs,
 			closeCallIfEmptyForMs: settings.closeCallIfEmptyForMs ?? this.config.closeCallIfEmptyForMs,
+			appData: settings.appData ?? this.config.createCallAppData?.({ callId: settings.callId, observer: this }),
 		} as ObservedCallSettings<T>;
 
 		const observedCall = new ObservedCall(callSettings, this);
@@ -221,14 +230,20 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		let call = this.getObservedCall(sample.callId);
 
 		if (!call) {
-			call = this.createObservedCall({ callId: sample.callId });
+			call = this.createObservedCall({
+				callId: sample.callId,
+				appData: this.config.createCallAppData?.({ callId: sample.callId, observer: this }),
+			});
 		}
 		if (!call) return;
 
 		let client = call.getObservedClient(sample.clientId);
 
 		if (!client) {
-			client = call.createObservedClient({ clientId: sample.clientId });
+			client = call.createObservedClient({
+				clientId: sample.clientId,
+				appData: this.config.createClientAppData?.({ clientId: sample.clientId, observedCall: call }),
+			});
 		}
 		if (!client) return;
 

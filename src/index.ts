@@ -33,6 +33,11 @@ export { Detectors } from './detectors/Detectors';
 export type { Detector } from './detectors/Detector';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
+// Sink base class — import-safe everywhere (depends only on `events`, never `fs`/`stream`).
+// Subclass it to write a custom (e.g. browser) sink. Concrete Node sinks (file/in-memory)
+// live in the Node-only "@observertc/observer-js/sinks" subpath.
+export { ClientSampleSink } from './sinks/ClientSampleSink';
+export type { ClientSampleSinkEvents, ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 export { Middleware } from './common/Middleware';
 export type {
 	TrackReport,

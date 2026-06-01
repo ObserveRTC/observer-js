@@ -20,6 +20,7 @@ import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
 import type { TrackReport } from './Reports';
+import type { ClientSampleSink } from './sinks/ClientSampleSink';
 
 /**
  * The Observer is the single event bus for the whole hierarchy. Every event
@@ -69,6 +70,7 @@ export type ObserverEvents = {
 
 	// client level
 	'client-added': [ObservedClientScope];
+	'client-sink-created': [ObservedClientScope & { sink: ClientSampleSink }];
 	'client-updated': [ObservedClientScope & { sample: ClientSample, elapsedTimeInMs: number }];
 	'client-closed': [ObservedClientScope];
 	'client-joined': [ObservedClientScope];

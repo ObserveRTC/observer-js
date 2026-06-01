@@ -1,19 +1,33 @@
 {
   "name": "@observertc/observer-js",
   "version": "1.0.0-beta.3",
-  "description": "Server Side NodeJS Library for processing ObserveRTC Samples",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "description": "Library for processing ObserveRTC Samples in Node.js and the browser (ESM)",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./sinks": {
+      "types": "./dist/sinks/index.d.mts",
+      "default": "./dist/sinks/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=16"
   },
   "scripts": {
     "prepare": "npm run build",
-    "prepublish": "pkgfiles",
-    "prepublishOnly": "npm run lint",
+    "prepublishOnly": "npm run lint && npm run typecheck",
     "format": "prettier --write \"src/**/*.ts\"",
     "lint": "./node_modules/.bin/eslint -c .eslintrc.json \"src/**/*.ts\"",
-    "build": "tsc",
+    "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.js"
   },
@@ -37,15 +51,12 @@
     "@types/uuid": "^8.3.4",
     "@typescript-eslint/eslint-plugin": "^5.38.0",
     "@typescript-eslint/parser": "^5.38.0",
-    "bufferutil": "^4.0.6",
     "eslint": "^8.24.0",
     "jest": "^27.5.0",
-    "pkgfiles": "^2.3.0",
     "prettier": "2.8.7",
     "ts-jest": "^27.1.5",
-    "typescript": "^4.8.3",
-    "ts-node-dev": "^2.0.0",
-    "utf-8-validate": "^5.0.8"
+    "tsup": "^8.5.1",
+    "typescript": "^4.8.3"
   },
   "repository": {
     "type": "git",

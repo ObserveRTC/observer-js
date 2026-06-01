@@ -26,6 +26,9 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
+      - name: Build
+        run: yarn build
+
       # Test suite is intentionally a placeholder for now; this step guards that
       # it stays green and is wired up for when real tests land.
       - name: Test

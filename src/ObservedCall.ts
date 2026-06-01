@@ -62,7 +62,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		value: undefined,
 	};
 	public remoteTrackResolver?: RemoteTrackResolver;
-	
+
 	public totalAddedClients = 0;
 	public totalRemovedClients = 0;
 
@@ -101,7 +101,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
-		this.appData = (settings.appData ?? observer.config.createCallAppData?.({ callId: settings.callId, observer }) ?? {}) as AppData;
+		this.appData = (settings.appData ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		// No built-in detectors ship yet. The registry is a server-side extension point:
 		// add custom call-level Detectors via `call.detectors.add(...)` and surface findings
@@ -178,7 +178,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public getObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(clientId: string): ObservedClient<ClientAppData> | undefined {
 		if (this.closed || !this.observedClients.has(clientId)) return;
-		
+
 		return this.observedClients.get(clientId) as ObservedClient<ClientAppData>;
 	}
 
@@ -196,6 +196,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		if (!settings.closeClientIfIdleForMs) {
 			settings.closeClientIfIdleForMs = this.observer.config.closeClientIfIdleForMs;
+		}
+		if (settings.appData === undefined) {
+			settings.appData = this.observer.config.createClientAppData?.({ clientId: settings.clientId, observedCall: this }) as ClientAppData;
 		}
 
 		const result = new ObservedClient<ClientAppData>(settings, this);
@@ -238,6 +241,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.emit('newclient', result);
 		this._notify('client-added', { ...this.eventScope, observedClient: result });
 
+		if (result.sink) {
+			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: result.sink });
+		}
+
 		if (wasEmpty) {
 			this.emit('not-empty');
 			this._notify('call-not-empty', { ...this.eventScope });
@@ -279,7 +286,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	private _onClientUpdate(client: ObservedClient) {
 		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
 		this.numberOfIssues += client.deltaNumberOfIssues;
-		
+
 		if (client.usingTURN) {
 			this.clientsUsedTurn.add(client.clientId);
 		}
