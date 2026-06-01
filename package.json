@@ -55,6 +55,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/observertc/observer-js"
+    "url": "git+https://github.com/ObserveRTC/observer-js.git"
   }
 }
