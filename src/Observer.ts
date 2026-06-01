@@ -48,7 +48,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public readonly observedTURN = new ObservedTURN();
 	public readonly observedCalls = new Map<string, ObservedCall>();
 	public updater?: Updater;
-	
+
 	public closed = false;
 
 	public totalAddedCall = 0;
@@ -60,7 +60,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public numberOfOutboundRtpStreams = 0;
 	public numberOfDataChannels = 0;
 	public numberOfPeerConnections = 0;
-	
+
 	public get numberOfCalls() {
 		return this.observedCalls.size;
 	}
@@ -98,7 +98,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 				break;
 			}
 		}
-		
+
 		this.detectors = new Detectors();
 	}
 
@@ -108,7 +108,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 	public getObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCall<T> | undefined {
 		if (this.closed || !this.observedCalls.has(callId)) return;
-		
+
 		return this.observedCalls.get(callId) as ObservedCall<T>;
 	}
 
@@ -125,7 +125,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		if (!settings.closeCallIfEmptyForMs) {
 			settings.closeCallIfEmptyForMs = this.config.closeCallIfEmptyForMs;
 		}
-		
+
 		const observedCall = new ObservedCall(settings, this);
 		const onCallUpdated = () => this._onObservedCallUpdated(observedCall);
 
@@ -150,7 +150,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		++this.totalAddedCall;
 
 		this.emit('newcall', observedCall);
-		
+
 		return observedCall;
 	}
 
@@ -163,7 +163,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this._timer = undefined;
 
 		this.observedCalls.forEach((call) => call.close());
-		
+
 		this.emit('close');
 	}
 

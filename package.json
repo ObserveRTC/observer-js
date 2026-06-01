@@ -12,7 +12,7 @@
     "prepublish": "pkgfiles",
     "prepublishOnly": "npm run lint",
     "format": "prettier --write \"src/**/*.ts\"",
-    "lint": "./node_modules/.bin/eslint -c .eslintrc.js src/*",
+    "lint": "./node_modules/.bin/eslint -c .eslintrc.json \"src/**/*.ts\"",
     "build": "tsc",
     "test": "jest --config jest.config.js"
   },

@@ -167,6 +167,8 @@ export class ObservedPeerConnection extends EventEmitter {
 	public deltaReceivedVideoPackets = 0;
 	public deltaSentAudioBytes = 0;
 	public deltaSentVideoBytes = 0;
+	public deltaSentAudioPackets = 0;
+	public deltaSentVideoPackets = 0;
 	public deltaTransportSentBytes = 0;
 	public deltaTransportReceivedBytes = 0;
 
@@ -344,6 +346,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaReceivedVideoPackets = 0;
 		this.deltaSentAudioBytes = 0;
 		this.deltaSentVideoBytes = 0;
+		this.deltaSentAudioPackets = 0;
+		this.deltaSentVideoPackets = 0;
 		this.deltaTransportReceivedBytes = 0;
 		this.deltaTransportSentBytes = 0;
 
@@ -406,10 +410,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			for (const iceTransport of sample.iceTransports) {
 				const observedIceTransport = this._updateIceTransportStats(iceTransport);
 
-				if (!observedIceTransport) return;
-
-				observedIceTransport.bytesReceived;
-
+				if (!observedIceTransport) continue;
 			}
 		}
 		if (sample.inboundRtps) {
@@ -460,11 +461,11 @@ export class ObservedPeerConnection extends EventEmitter {
 				switch (outboundRtp.kind) {
 					case 'audio':
 						this.deltaSentAudioBytes += observedOutboundRtp.deltaBytesSent;
-						this.deltaSentAudioBytes += observedOutboundRtp.deltaPacketsSent;
+						this.deltaSentAudioPackets += observedOutboundRtp.deltaPacketsSent;
 						break;
 					case 'video':
 						this.deltaSentVideoBytes += observedOutboundRtp.deltaBytesSent;
-						this.deltaSentVideoBytes += observedOutboundRtp.deltaPacketsSent;
+						this.deltaSentVideoPackets += observedOutboundRtp.deltaPacketsSent;
 						break;
 				}
 
@@ -523,8 +524,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.totalSentVideoBytes += this.deltaSentVideoBytes;
 		this.totalReceivedAudioPacktes += this.deltaReceivedAudioPackets;
 		this.totalReceivedVideoPackets += this.deltaReceivedVideoPackets;
-		this.totalSentAudioPackets += this.deltaSentAudioBytes;
-		this.totalSentVideoPackets += this.deltaSentVideoBytes;
+		this.totalSentAudioPackets += this.deltaSentAudioPackets;
+		this.totalSentVideoPackets += this.deltaSentVideoPackets;
 
 		this.receivingPacketsPerSecond = this.deltaInboundPacketsReceived / elapsedTimeInSec;
 		this.sendingPacketsPerSecond = this.deltaOutboundPacketsSent / elapsedTimeInSec;
