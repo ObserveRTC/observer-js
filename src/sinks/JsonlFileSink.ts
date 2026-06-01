@@ -13,12 +13,9 @@ export type JsonlFileSinkOptions = {
 };
 
 /**
- * Node-only sink that serializes each sample to a JSON line and appends it to a file. It wraps
- * an `fs.WriteStream` (creating the parent directory first) and re-emits its lifecycle events,
- * so `close` fires once the file is flushed and its descriptor is closed (file ready) and
- * `error` surfaces file errors.
- *
- * Importing this module pulls in `fs`; do not import it in browser/edge bundles.
+ * A sink that serializes each sample to a JSON line and appends it to a file. It wraps an
+ * `fs.WriteStream` and re-emits its lifecycle events, so `close` fires once the file is flushed
+ * and its descriptor is closed (file ready) and `error` surfaces file errors.
  */
 export class JsonlFileSink extends ClientSampleSink {
 	private readonly _stream: fs.WriteStream;

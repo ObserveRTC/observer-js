@@ -36,9 +36,8 @@ export declare interface ClientSampleSink {
  * process. The application — which created the sink — listens for `close` (destination ready,
  * e.g. a file flushed and its fd closed) and `error`.
  *
- * Subclass this and implement `write`/`end` (and `emit` your lifecycle events). The library core
- * only references the type, so importing `@observertc/observer-js` stays import-safe; the bundled
- * concrete sinks live in the Node-only `@observertc/observer-js/sinks` subpath.
+ * Subclass this and implement `write`/`end` (and `emit` your lifecycle events). Built-in sinks
+ * (`JsonlFileSink`, `InMemorySink`) and their factories are exported from the package root.
  */
 export abstract class ClientSampleSink extends EventEmitter {
 	/** Accept one sample; the sink serializes it however it likes. `false` signals backpressure. */

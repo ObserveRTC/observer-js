@@ -3,7 +3,7 @@ import type { ClientSample } from '../schema/ClientSample';
 
 /**
  * A `ClientSampleSink` that collects the accepted sample objects into an array. Useful for
- * tests and offline replay; works in any environment (no `fs`). Emits `close` on `end()`.
+ * tests and offline replay. Emits `close` on `end()`.
  */
 export class InMemorySink extends ClientSampleSink {
 	public constructor(public readonly samples: ClientSample[] = []) {

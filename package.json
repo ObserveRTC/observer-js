@@ -1,19 +1,14 @@
 {
   "name": "@observertc/observer-js",
   "version": "1.0.0-beta.3",
-  "description": "Library for processing ObserveRTC Samples in Node.js and the browser (ESM)",
+  "description": "Server-side Node.js library for processing ObserveRTC Samples (ESM)",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
-  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
-    },
-    "./sinks": {
-      "types": "./dist/sinks/index.d.mts",
-      "default": "./dist/sinks/index.mjs"
     }
   },
   "files": [

@@ -33,11 +33,22 @@ export { Detectors } from './detectors/Detectors';
 export type { Detector } from './detectors/Detector';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
-// Sink base class — import-safe everywhere (depends only on `events`, never `fs`/`stream`).
-// Subclass it to write a custom (e.g. browser) sink. Concrete Node sinks (file/in-memory)
-// live in the Node-only "@observertc/observer-js/sinks" subpath.
-export { ClientSampleSink } from './sinks/ClientSampleSink';
-export type { ClientSampleSinkEvents, ClientSampleSinkFactory } from './sinks/ClientSampleSink';
+// Per-client sample sinks. `ClientSampleSink` is the base class to subclass for a custom
+// destination; `JsonlFileSink` / `InMemorySink` are the built-ins.
+export {
+	ClientSampleSink,
+	JsonlFileSink,
+	createJsonlFileSink,
+	createJsonlFileSinkFactory,
+	InMemorySink,
+	createInMemorySink,
+} from './sinks';
+export type {
+	ClientSampleSinkEvents,
+	ClientSampleSinkFactory,
+	JsonlFileSinkOptions,
+	JsonlFileSinkFactoryOptions,
+} from './sinks';
 export { Middleware } from './common/Middleware';
 export type {
 	TrackReport,
