@@ -41,15 +41,25 @@ jobs:
         id: ctx
         shell: bash
         run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          # A prerelease version (e.g. 1.0.0-beta.3) cannot be published to "latest"; use its
+          # prerelease label (e.g. "beta") as the dist-tag. A stable version (1.0.0) -> "latest".
+          if [[ "$VERSION" == *-* ]]; then
+            PRE="${VERSION#*-}"     # beta.3
+            TAG="${PRE%%.*}"        # beta
+          else
+            TAG="latest"
+          fi
           echo "branch=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # master -> publish to the "latest" dist-tag.
+      # master -> publish to the version's dist-tag ("latest" for stable, e.g. "beta" for a prerelease).
       # Auth is via OIDC (trusted publisher); provenance is attached automatically.
-      - name: Publish (latest)
+      - name: Publish
         if: steps.ctx.outputs.branch == 'master'
-        run: npm publish --access public --ignore-scripts
+        run: npm publish --access public --ignore-scripts --tag "${{ steps.ctx.outputs.tag }}"
 
       # develop -> publish a per-commit release candidate under a custom dist-tag.
       - name: Make snapshot version
