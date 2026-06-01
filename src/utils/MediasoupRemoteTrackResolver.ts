@@ -1,14 +1,10 @@
 import { ObservedCall } from '../ObservedCall';
-import { ObservedCallEventMonitor } from '../ObservedCallEventMonitor';
 import { ObservedInboundTrack } from '../ObservedInboundTrack';
 import { ObservedOutboundTrack } from '../ObservedOutboundTrack';
 import { RemoteTrackResolver } from './RemoteTrackResolver';
+import type { ObserverEvents } from '../ObserverEvents';
 
 export class MediasoupRemoteTrackResolver implements RemoteTrackResolver {
-	public readonly eventMonitor: ObservedCallEventMonitor<{
-		// empty
-	}>;
-
 	private _consumerIdToProducerId = new Map<string, string>();
 	private _producerIdToOutboundTrack = new Map<string, ObservedOutboundTrack>();
 	private _consumerIdToInboundTrack = new Map<string, ObservedInboundTrack>();
@@ -21,16 +17,33 @@ export class MediasoupRemoteTrackResolver implements RemoteTrackResolver {
 	public constructor(
 		public readonly observedCall: ObservedCall
 	) {
-		this.eventMonitor = this.observedCall.createEventMonitor({});
+		const observer = observedCall.observer;
 
-		this.eventMonitor.onInboundTrackAdded = this._addInboundTrack.bind(this);
-		this.eventMonitor.onInboundTrackRemoved = this._removeInboundTrack.bind(this);
-		this.eventMonitor.onOutboundTrackAdded = this._addOutboundTrack.bind(this);
-		this.eventMonitor.onOutboundTrackRemoved = this._removeOutboundTrack.bind(this);
+		// Subscribe to the central Observer bus, filtering to this call's tracks.
+		const onInboundAdded = (p: ObserverEvents['inbound-track-added'][0]) => {
+			if (p.observedCall === this.observedCall) this._addInboundTrack(p.observedInboundTrack);
+		};
+		const onInboundRemoved = (p: ObserverEvents['inbound-track-removed'][0]) => {
+			if (p.observedCall === this.observedCall) this._removeInboundTrack(p.observedInboundTrack);
+		};
+		const onOutboundAdded = (p: ObserverEvents['outbound-track-added'][0]) => {
+			if (p.observedCall === this.observedCall) this._addOutboundTrack(p.observedOutboundTrack);
+		};
+		const onOutboundRemoved = (p: ObserverEvents['outbound-track-removed'][0]) => {
+			if (p.observedCall === this.observedCall) this._removeOutboundTrack(p.observedOutboundTrack);
+		};
 
-		// this.eventMonitor.onClientEvent = (client, event) => {
-            
-		// };
+		observer.on('inbound-track-added', onInboundAdded);
+		observer.on('inbound-track-removed', onInboundRemoved);
+		observer.on('outbound-track-added', onOutboundAdded);
+		observer.on('outbound-track-removed', onOutboundRemoved);
+
+		observedCall.once('close', () => {
+			observer.off('inbound-track-added', onInboundAdded);
+			observer.off('inbound-track-removed', onInboundRemoved);
+			observer.off('outbound-track-added', onOutboundAdded);
+			observer.off('outbound-track-removed', onOutboundRemoved);
+		});
 	}
 
 	public resolveRemoteOutboundTrack(inboundTrack: ObservedInboundTrack): ObservedOutboundTrack | undefined {

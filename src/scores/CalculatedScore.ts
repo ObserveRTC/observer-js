@@ -1,4 +1,3 @@
-
 export type CalculatedScore = {
 	weight: number;
 	value?: number;

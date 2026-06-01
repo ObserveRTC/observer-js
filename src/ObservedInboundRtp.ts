@@ -79,6 +79,12 @@ export class ObservedInboundRtp implements InboundRtpStats {
 	public deltaReceivedSamples = 0;
 	public deltaSilentConcealedSamples = 0;
 
+	// Derived from the corresponding remote-outbound-rtp (sender report), when present.
+	public remoteRttInMs?: number;
+	public remoteBytesSent?: number;
+	public remotePacketsSent?: number;
+	public remoteTimestamp?: number;
+
 	public constructor(
 		public timestamp: number,
 		public id: string,
@@ -127,6 +133,10 @@ export class ObservedInboundRtp implements InboundRtpStats {
 		this.deltaReceivedPackets = 0;
 		this.deltaReceivedSamples = 0;
 		this.deltaSilentConcealedSamples = 0;
+		this.remoteRttInMs = undefined;
+		this.remoteBytesSent = undefined;
+		this.remotePacketsSent = undefined;
+		this.remoteTimestamp = undefined;
 		this.bitrate = 0;
 		this.jitter = undefined;
 		this.fractionLost = undefined;

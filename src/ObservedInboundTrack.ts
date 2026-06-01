@@ -1,14 +1,12 @@
 import { CalculatedScore } from './scores/CalculatedScore';
 import { MediaKind } from './common/types';
 import { InboundTrackSample } from './schema/ClientSample';
-import { Detectors } from './detectors/Detectors';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedInboundRtp } from './ObservedInboundRtp';
 import { ObservedMediaPlayout } from './ObservedMediaPlayout';
 import { InboundTrackReport } from './Reports';
 
 export class ObservedInboundTrack implements InboundTrackSample {
-	public readonly detectors: Detectors;
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
 		value: undefined,
@@ -33,8 +31,6 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		private readonly _inboundRtp?: ObservedInboundRtp,
 		private readonly _mediaPlayout?: ObservedMediaPlayout,
 	) {
-		this.detectors = new Detectors();
-
 		this.report = {
 			trackId: this.id,
 			kind: this.kind,
@@ -99,7 +95,5 @@ export class ObservedInboundTrack implements InboundTrackSample {
 			this.report.fractionLostDistribution.count += 1;
 			this.report.fractionLostDistribution.sum += fl;
 		}
-
-		this.detectors.update();
 	}
 }

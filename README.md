@@ -1,23 +1,43 @@
-# ObserverTC - Observer JS
+# ObserverTC — `@observertc/observer-js`
 
 [![NPM version](https://img.shields.io/npm/v/@observertc/observer-js.svg)](https://www.npmjs.com/package/@observertc/observer-js)
 [![License](https://img.shields.io/npm/l/@observertc/observer-js.svg)](https://github.com/observertc/observer-js/blob/main/LICENSE)
 
-`observer-js` is a Node.js library for monitoring WebRTC client data. It processes statistical samples from clients, organizes them into calls and participants, tracks a wide range of metrics, detects common issues, and calculates quality scores. This enables real-time insights into WebRTC session performance.
+`observer-js` is a **server-side Node.js library for monitoring WebRTC sessions**. A WebRTC
+application (typically an SFU or a signaling/stats backend) feeds it `ClientSample` objects —
+periodic snapshots of each participant's `RTCPeerConnection.getStats()` output plus
+application events — and `observer-js` maintains a live, in-memory model of every call,
+participant, peer connection, and media stream, derives per-interval and cumulative metrics,
+and emits a single, unified stream of typed events the application can react to.
 
-This library is a core component of the ObserverTC ecosystem, designed to provide robust server-side monitoring capabilities for WebRTC applications.
+> **Status:** `1.0.0-beta`. The API described here is current and intended to be implemented
+> against directly. This document is written to be self-sufficient: an engineer (or an AI
+> agent) should be able to integrate the library, or develop it further, from this file alone.
+> A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
-## Features
+---
 
-- **Hierarchical Data Model**: Organizes data into `Observer` -> `ObservedCall` -> `ObservedClient` -> `ObservedPeerConnection` and further into streams and data channels.
-- **Comprehensive Metrics**: Tracks a wide array of WebRTC statistics including RTT, jitter, packet loss, codecs, ICE states, TURN usage, bandwidth, and more.
-- **Automatic Entity Management**: Can automatically create and manage call and client entities based on incoming data samples.
-- **Issue Detection**: Built-in detectors for common WebRTC problems.
-- **Quality Scoring**: Calculates quality scores for calls and clients.
-- **Event-Driven**: Emits events for significant state changes, new entities, and detected issues.
-- **Configurable Update Policies**: Flexible control over how and when metrics are processed and updated.
-- **TypeScript Support**: Written in TypeScript, providing strong typing and intellisense.
-- **Extensible**: Supports custom application data (`appData`) and integration with external schema definitions (e.g., `observertc/schemas`).
+## Table of contents
+
+1. [Installation](#installation)
+2. [Mental model](#mental-model)
+3. [Quick start](#quick-start)
+4. [Data flow](#data-flow)
+5. [Entity hierarchy](#entity-hierarchy)
+6. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
+7. [Update policies](#update-policies)
+8. [The event bus](#the-event-bus) ← the core of the API
+9. [API reference](#api-reference)
+10. [Schema types (`ClientSample`)](#schema-types-clientsample)
+11. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
+12. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
+13. [Logging](#logging)
+14. [Error-handling philosophy](#error-handling-philosophy)
+15. [Public exports](#public-exports)
+16. [Development & extension guide](#development--extension-guide)
+17. [Not yet implemented / roadmap](#not-yet-implemented--roadmap)
+
+---
 
 ## Installation
 
@@ -27,510 +47,712 @@ npm install @observertc/observer-js
 yarn add @observertc/observer-js
 ```
 
-## Quick Start
+Requires **Node.js ≥ 16**. Written in TypeScript; ships type declarations (`lib/index.d.ts`).
+Runtime dependencies: `@bufbuild/protobuf`, `events`, `uuid`. The library does **not** bundle a
+logger or any transport — see [Logging](#logging).
 
-```typescript
-import { Observer, ObserverConfig } from '@observertc/observer-js';
-import { ClientSample } from '@observertc/schemas'; // Assuming you use the official schemas
+`ClientSample` and friends are re-exported from this package, and are also published as the
+shared schema in [`@observertc/schemas`](https://github.com/observertc/schemas); samples
+produced on the client (e.g. by `@observertc/client-monitor-js`) conform to the same shape.
 
-// 1. Configure the Observer
-const observerConfig: ObserverConfig = {
-	updatePolicy: 'update-on-interval',
-	updateIntervalInMs: 5000, // Update observer every 5 seconds
-	defaultCallUpdatePolicy: 'update-on-any-client-updated', // Calls update when any client sends data
-};
-const observer = new Observer(observerConfig);
+---
 
-// 2. Listen to events
-observer.on('newcall', (call) => {
-	console.log(`[Observer] New call detected: ${call.callId}`);
+## Mental model
 
-	call.on('newclient', (client) => {
-		console.log(`[Call: ${call.callId}] New client joined: ${client.clientId}`);
+Five ideas are enough to use the whole library:
 
-		client.on('issue', (issue) => {
-			console.warn(`[Client: ${client.clientId}] Issue: ${issue.type} - ${issue.severity} - ${issue.description}`);
-		});
-	});
+1. **One ingestion method.** `observer.accept(sample, context?)` is how data gets in.
+   Calls, clients, and peer connections are created automatically the first time their id
+   appears in a sample.
 
-	call.on('update', () => {
-		console.log(
-			`[Call: ${call.callId}] Metrics updated. Score: ${call.score?.toFixed(1)}, Clients: ${call.numberOfClients}`
-		);
-	});
+2. **A live entity tree.** `Observer → ObservedCall → ObservedClient → ObservedPeerConnection
+   → {inbound/outbound RTP, tracks, data channels, ICE, codecs, …}`. Every node holds current
+   and cumulative metrics and is reachable by id through `Map`s on its parent.
+
+3. **One event bus.** Everything worth subscribing to is emitted on the **`Observer`** itself
+   (it is an `EventEmitter`). Each event payload is an **object carrying the full ancestry**
+   of the entity it came from. You never have to walk the tree to subscribe.
+
+4. **Pull or react.** You can read fields off the entities at any time (pull), and/or react to
+   events (push). The `*-updated` events fire on each processing tick.
+
+5. **Warn, don't throw.** Operational problems (bad config, duplicate ids, closed entities,
+   malformed samples) never throw; they warn through the pluggable logger and degrade
+   gracefully (returning `undefined` or emitting `sample-rejected`).
+
+---
+
+## Quick start
+
+```ts
+import { Observer, ClientSample } from '@observertc/observer-js';
+
+// 1. Create an observer.
+const observer = new Observer({
+  // how often the observer aggregates call/client metrics:
+  updatePolicy: 'update-on-interval',
+  updateIntervalInMs: 5000,
+  // default policy applied to calls created automatically by accept():
+  defaultCallUpdatePolicy: 'update-on-any-client-updated',
+  // optional auto-teardown:
+  closeCallIfEmptyForMs: 20_000,
+  closeClientIfIdleForMs: 60_000,
 });
 
-// 3. Process Client Samples
-// (ClientSample typically comes from your application after processing getStats() output)
-function processClientStats(rawStats: any, callId: string, clientId: string) {
-	// Transform rawStats into the ClientSample format
-	// This is a placeholder for your actual transformation logic
-	const sample: ClientSample = {
-		callId,
-		clientId,
-		timestamp: Date.now(),
-		// ...populate with transformed stats from rawStats, adhering to the ClientSample schema
-		// from github.com/observertc/schemas
-	};
-	observer.accept(sample);
+// 2. Subscribe on the single bus. Every payload is an object with the ancestry.
+observer.on('call-added', ({ observedCall }) => {
+  console.log('new call', observedCall.callId);
+});
+
+observer.on('client-issue', ({ observedClient, issue }) => {
+  console.warn(`[${observedClient.clientId}] ${issue.type}`, issue.payload);
+});
+
+observer.on('peer-connection-updated', ({ observedClient, observedPeerConnection }) => {
+  console.log(observedClient.clientId, 'RTT(ms):', observedPeerConnection.currentRttInMs);
+});
+
+observer.on('sample-rejected', ({ reason, sample }) => {
+  console.warn('dropped a sample:', reason);
+});
+
+// 3. Feed samples. `context` (optional) is merged into the appData of any
+//    call/client created lazily during this accept() — handy for tagging.
+function onClientStats(sample: ClientSample) {
+  observer.accept(sample, { studioVersion: '1.2.3' });
 }
 
-// Example usage:
-// const myRawClientStats = getStatsFromClient();
-// processClientStats(myRawClientStats, 'myMeeting123', 'userABC');
-
-// 4. Cleanup when done
-// process.on('SIGINT', () => observer.close());
+// 4. Tear down.
+process.on('SIGINT', () => observer.close());
 ```
 
 ---
 
-## Detailed Documentation
+## Data flow
 
-The following sections provide a comprehensive guide to `observer-js`.
-
-### 1. General Description
-
-(This section is identical to the introductory paragraph at the top of this README)
-
-### 2. Core Concepts
-
-#### 2.1. Data Flow
-
-1.  **Client-Side**: Your application collects WebRTC statistics (e.g., via `RTCPeerConnection.getStats()`).
-2.  **Transformation**: These raw stats are transformed into the `ClientSample` schema (ideally from [observertc/schemas](https://github.com/observertc/schemas)).
-3.  **Ingestion**: The `ClientSample` is passed to the `observer.accept()` method.
-4.  **Processing**: `observer-js` processes the sample, updating or creating relevant entities (`ObservedCall`, `ObservedClient`, `ObservedPeerConnection`, etc.) and their metrics.
-5.  **Analysis**: Metrics are analyzed for issue detection and quality scoring.
-6.  **Events**: Events are emitted for significant state changes, new issues, or updates.
-
-#### 2.2. Entity Hierarchy
-
-- **`Observer`**: The root object, managing multiple calls and global settings.
-  - **`ObservedCall`**: Represents a distinct call session.
-    - **`ObservedClient`**: Represents an individual participant within a call.
-      - **`ObservedPeerConnection`**: Represents a WebRTC RTCPeerConnection of a client.
-        - **`ObservedInboundRtpStream` / `ObservedOutboundRtpStream`**: Tracks individual media streams.
-        - **`ObservedDataChannel`**: Tracks data channels.
-- **`ObservedTURN`**: Tracks global TURN server usage metrics across the observer.
-
-#### 2.3. Automatic Entity Creation
-
-When `observer.accept(sample)` is called:
-
-- If an `ObservedCall` for `sample.callId` doesn't exist, it's typically created.
-- If an `ObservedClient` for `sample.clientId` within that call doesn't exist, it's typically created.
-- Peer connections, streams, and data channels are similarly managed based on IDs in the sample.
-
-#### 2.4. Metrics Aggregation
-
-The library aggregates a wide array of metrics at each level of the hierarchy, including (but not limited to):
-
-- RTT, jitter, packet loss
-- Bytes sent/received (audio, video, data)
-- Codec information
-- ICE connection details, TURN usage
-- Stream/track states (muted, enabled)
-- Frame rates, resolutions
-- Bandwidth estimations
-
-#### 2.5. Issue Detection
-
-A `Detectors` system analyzes metrics to identify common WebRTC issues (e.g., high packet loss, low audio levels, frozen video, connection setup problems). Issues are reported via events.
-
-#### 2.6. Quality Scoring
-
-`ScoreCalculator` components assess the quality of calls and clients based on metrics and detected issues, typically resulting in a numerical score (e.g., 0.0 to 5.0).
-
-#### 2.7. Event-Driven Architecture
-
-The library uses Node.js `EventEmitter` to signal various occurrences, allowing applications to react to changes in real-time.
-
-### 3. API Reference
-
-#### 3.1. `Observer`
-
-Manages all monitored calls and global observer state.
-
-**Configuration (`ObserverConfig`)**
-
-```typescript
-export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
-	updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated' | 'update-on-interval';
-	updateIntervalInMs?: number; // Used if updatePolicy is 'update-on-interval'
-	defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'];
-	defaultCallUpdateIntervalInMs?: number;
-	appData?: AppData; // Custom data for this observer instance
-};
+```
+client getStats()  ──►  ClientSample  ──►  observer.accept(sample, ctx?)
+                                               │
+              ┌────────────────────────────────┘
+              ▼
+   get-or-create ObservedCall ──► get-or-create ObservedClient ──► client.accept(sample, ctx)
+                                                                        │
+                                              per peerConnections[] in the sample
+                                                                        ▼
+                                              get-or-create ObservedPeerConnection
+                                              .accept(pcSample, ctx) updates all sub-stats,
+                                              derives deltas/bitrates/RTT, correlates remote RTP
+                                                                        │
+                          metrics roll up: PeerConnection → Client → Call → Observer
+                                                                        │
+                                          events emitted on the Observer bus  ──►  your handlers
 ```
 
-**Constructor**
+- A sample **must** have `callId` and `clientId` (the library sets them, or the app does). If
+  either is missing, the sample is dropped and `sample-rejected` is emitted.
+- Sub-entities that stop appearing in samples are garbage-collected via a "visited"
+  mark-and-sweep on each `ObservedPeerConnection.accept()`, emitting the corresponding
+  `*-removed` events.
 
-```typescript
+---
+
+## Entity hierarchy
+
+| Class | Created by | Keyed on its parent as | Holds |
+|-------|-----------|------------------------|-------|
+| `Observer` | `new Observer(config?)` | — (root) | `observedCalls: Map<string, ObservedCall>`, global counters, the event bus |
+| `ObservedCall` | `observer.createObservedCall(settings)` / lazily by `accept` | `observedCalls` | `observedClients: Map<string, ObservedClient>`, call-wide metrics, `detectors`, `scoreCalculator` |
+| `ObservedClient` | `call.createObservedClient(settings)` / lazily | `observedClients` | `observedPeerConnections: Map<string, ObservedPeerConnection>`, per-client metrics, `report` |
+| `ObservedPeerConnection` | lazily, from `sample.peerConnections[]` | `observedPeerConnections` | the 15 sub-stat maps below, transport/RTT/bitrate metrics |
+| Sub-stats | lazily, from the `PeerConnectionSample` | maps on the PC | individual WebRTC stat objects |
+
+`ObservedPeerConnection` sub-stat maps (all `public readonly`):
+
+```
+observedCertificates, observedCodecs, observedDataChannels,
+observedIceCandidates, observedIceCandidatesPair, observedIceTransports,
+observedInboundRtps, observedInboundTracks, observedMediaPlayouts,
+observedMediaSources, observedOutboundRtps, observedOutboundTracks,
+observedPeerConnectionTransports, observedRemoteInboundRtps, observedRemoteOutboundRtps
+```
+
+Each sub-stat class (`ObservedInboundRtp`, `ObservedOutboundRtp`, `ObservedInboundTrack`,
+`ObservedOutboundTrack`, `ObservedDataChannel`, `ObservedIceCandidate`,
+`ObservedIceCandidatePair`, `ObservedIceTransport`, `ObservedCertificate`, `ObservedCodec`,
+`ObservedMediaSource`, `ObservedMediaPlayout`, `ObservedPeerConnectionTransport`,
+`ObservedRemoteInboundRtp`, `ObservedRemoteOutboundRtp`) mirrors the corresponding stat
+fields from the schema plus derived fields (deltas, bitrates).
+
+---
+
+## Ingestion: `accept()`, context & lifecycle
+
+### `observer.accept(sample, context?)`
+
+The single entry point. It:
+
+1. drops + emits `sample-rejected` if the observer is closed, or `callId`/`clientId` is missing;
+2. gets or lazily creates the `ObservedCall` and `ObservedClient`;
+3. shallow-merges `context` into the created/looked-up entity `appData`;
+4. delegates to `client.accept(sample, context)`, which fans out to each
+   `ObservedPeerConnection.accept(pcSample, context)`.
+
+### `context` (the `AcceptContext`)
+
+```ts
+type AcceptContext = Record<string, unknown>;
+```
+
+A single, optional, free-form object threaded down the whole accept chain
+(`Observer → Client → PeerConnection`). It is **merged into the `appData`** of entities that
+are lazily created (or looked up) during the pass, so you can tag entities the first time you
+see them (e.g. `{ studioVersion, sfuId }`). One object is used regardless of where it is
+supplied. In addition to the `appData` merge, the most recent context is re-emitted as the
+`context` field on the `*-updated` events at the call, client, and peer-connection levels
+(`call-updated`, `client-updated`, `peer-connection-updated`).
+
+### Get-or-create helpers
+
+If you want to create/configure entities yourself before/without samples:
+
+```ts
+const call = observer.getOrCreateObservedCall({ callId, appData });        // ObservedCall | undefined
+const client = call?.getOrCreateObservedClient({ clientId, appData });     // ObservedClient | undefined
+```
+
+These return `undefined` (and warn) when the parent is closed; `createObservedCall`/
+`createObservedClient` return the **existing** instance (and warn) if the id already exists.
+
+### Automatic teardown
+
+- `closeClientIfIdleForMs` — a client with no sample for this long auto-closes.
+- `closeCallIfEmptyForMs` — a call with zero clients for this long auto-closes.
+- Closing cascades down (call → clients → peer connections → sub-stats), unsubscribing
+  listeners and emitting the `*-closed` / `*-removed` events.
+
+---
+
+## Update policies
+
+"Update" means *recompute aggregated metrics and emit the `*-updated` event* at that level.
+Both the observer and each call have a configurable trigger. The `update-on-interval` policy
+**requires** an interval and this is enforced at compile time (a discriminated union); at
+runtime a missing interval warns and falls back rather than throwing.
+
+**Observer-level** (`ObserverConfig.updatePolicy`, default `update-when-all-call-updated`):
+
+| Policy | Triggers `observer.update()` when… |
+|--------|-------------------------------------|
+| `update-on-any-call-updated` | any call updates |
+| `update-when-all-call-updated` | every call has updated since the last observer update |
+| `update-on-interval` | a timer fires (`updateIntervalInMs` required) |
+
+**Call-level** (`ObservedCallSettings.updatePolicy`, defaulted from
+`ObserverConfig.defaultCallUpdatePolicy`):
+
+| Policy | Triggers `call.update()` when… |
+|--------|--------------------------------|
+| `update-on-any-client-updated` | any client in the call updates |
+| `update-when-all-client-updated` | every client has updated since the last call update |
+| `update-on-interval` | a timer fires (`updateIntervalInMs` required) |
+
+---
+
+## The event bus
+
+This is the primary API. **Subscribe on the `Observer` instance** — it is the single emitter
+for the entire hierarchy. The `ObservedCall` / `ObservedClient` / `ObservedPeerConnection`
+objects are themselves `EventEmitter`s too, but those local events are reserved for internal
+lifecycle/teardown wiring (see [Local lifecycle events](#local-lifecycle-events)); application
+code should use the Observer bus.
+
+### Payload shape: ancestry + subject
+
+Every Observer event delivers exactly **one argument: a payload object**. The payload always
+contains the ancestry from the observer down to the entity that raised it, plus any event-
+specific subject:
+
+```ts
+type ObserverEventBase            = { observer: Observer };
+type ObservedCallScope            = ObserverEventBase            & { observedCall: ObservedCall };
+type ObservedClientScope          = ObservedCallScope            & { observedClient: ObservedClient };
+type ObservedPeerConnectionScope  = ObservedClientScope          & { observedPeerConnection: ObservedPeerConnection };
+```
+
+So a peer-connection-level event hands you the observer, call, client, **and** peer connection:
+
+```ts
+observer.on('inbound-rtp-added', ({ observer, observedCall, observedClient, observedPeerConnection, observedInboundRtp }) => {
+  // all five are present and correctly typed
+});
+```
+
+`observer.on/off/once/emit` are fully typed against the event map — the handler argument is
+inferred per event name.
+
+### Event catalogue
+
+All payloads include the ancestry for their level (above). The **Extra** column lists the
+additional field(s) on top of that scope.
+
+#### Observer level — scope `{ observer }`
+
+| Event | Extra payload | Fires when |
+|-------|---------------|-----------|
+| `observer-updated` | — | `observer.update()` ran (per the observer update policy) |
+| `observer-closed` | — | `observer.close()` |
+| `sample-rejected` | `{ reason: 'observer-closed' \| 'missing-callId' \| 'missing-clientId', sample: ClientSample }` | a sample was dropped by `accept()` |
+
+#### Call level — scope `{ observer, observedCall }`
+
+| Event | Extra | Fires when |
+|-------|-------|-----------|
+| `call-added` | — | a call is created |
+| `call-updated` | `{ context?: AcceptContext }` | `call.update()` ran |
+| `call-closed` | — | the call closed |
+| `call-empty` | — | last client left the call |
+| `call-not-empty` | — | first client joined a previously-empty call |
+| `call-issue` | `{ issue: ClientIssue }` | `call.addIssue(...)` (server-side detector finding) |
+
+#### Client level — scope `{ observer, observedCall, observedClient }`
+
+| Event | Extra | Fires when |
+|-------|-------|-----------|
+| `client-added` | — | a client is created |
+| `client-updated` | `{ sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext }` | the client processed a sample |
+| `client-closed` | — | the client closed |
+| `client-joined` | — | first `CLIENT_JOINED` event seen |
+| `client-left` | — | `CLIENT_LEFT` seen (or inferred on close) |
+| `client-rejoined` | `{ timestamp: number }` | a later `CLIENT_JOINED` after an earlier join |
+| `client-issue` | `{ issue: ClientIssue }` | a client-reported issue arrived, or `client.addIssue(...)` |
+| `client-metadata` | `{ metaData: ClientMetaData }` | a client meta item arrived |
+| `client-extension-stats` | `{ extensionStats: ExtensionStat }` | an app-defined extension stat arrived |
+| `client-event` | `{ event: ClientEvent }` | any client event was processed |
+| `client-track-report` | `{ report: TrackReport }` | a track was removed; final per-track report |
+
+#### Peer-connection level — scope `{ observer, observedCall, observedClient, observedPeerConnection }`
+
+| Event | Extra | Notes |
+|-------|-------|-------|
+| `peer-connection-added` / `peer-connection-closed` | — | lifecycle of the PC |
+| `peer-connection-updated` | `{ context?: AcceptContext }` | the PC processed a sample |
+| `ice-connection-state-changed` / `ice-gathering-state-changed` / `connection-state-changed` | `{ state: string }` | driven by client events |
+| `selected-candidate-pair-changed` | — | *declared; not currently emitted* |
+| `inbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedInboundTrack }` | |
+| `outbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedOutboundTrack }` | |
+| `inbound-rtp-added` / `-updated` / `-removed` | `{ observedInboundRtp }` | `-updated` fires every tick |
+| `outbound-rtp-added` / `-updated` / `-removed` | `{ observedOutboundRtp }` | `-updated` fires every tick |
+| `remote-inbound-rtp-added` / `-updated` / `-removed` | `{ observedRemoteInboundRtp }` | |
+| `remote-outbound-rtp-added` / `-updated` / `-removed` | `{ observedRemoteOutboundRtp }` | |
+| `data-channel-added` / `-updated` / `-removed` | `{ observedDataChannel }` | |
+| `ice-candidate-added` / `-updated` / `-removed` | `{ observedIceCandidate }` | |
+| `ice-candidate-pair-added` / `-updated` / `-removed` | `{ observedIceCandidatePair }` | |
+| `ice-transport-added` / `-updated` / `-removed` | `{ observedIceTransport }` | |
+| `codec-added` / `-updated` / `-removed` | `{ observedCodec }` | |
+| `media-source-added` / `-updated` / `-removed` | `{ observedMediaSource }` | |
+| `media-playout-added` / `-updated` / `-removed` | `{ observedMediaPlayout }` | |
+| `peer-connection-transport-added` / `-updated` / `-removed` | `{ observedPeerConnectionTransport }` | |
+| `certificate-added` / `-updated` / `-removed` | `{ observedCertificate }` | |
+
+> **Volume note.** The `*-updated` sub-stat events fire on every peer-connection `accept()`
+> (i.e. per sample, per stream). For high-throughput servers, subscribe only to what you need,
+> or read fields off the entities on `client-updated` / `call-updated` instead.
+
+### Local lifecycle events
+
+These remain on the individual entities (not the bus), for teardown/coordination. You can
+listen to them, but prefer the bus equivalents above for application logic.
+
+| Entity | Local events |
+|--------|--------------|
+| `ObservedCall` | `update`, `newclient`, `empty`, `not-empty`, `close` |
+| `ObservedClient` | `update` (`sample`, `elapsedTimeInMs`), `close`, `joined`, `left` |
+| `ObservedPeerConnection` | `removed-inbound-track`, `removed-outbound-track`, `close` |
+
+---
+
+## API reference
+
+### `Observer`
+
+```ts
 new Observer<AppData>(config?: ObserverConfig<AppData>)
+
+type ObserverConfig<AppData = Record<string, unknown>> =
+  ( { updatePolicy: 'update-on-interval'; updateIntervalInMs: number }
+  | { updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated'; updateIntervalInMs?: number }
+  ) & {
+    defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'];
+    defaultCallUpdateIntervalInMs?: number;
+    appData?: AppData;
+    closeClientIfIdleForMs?: number;
+    closeCallIfEmptyForMs?: number;
+  };
 ```
 
-- `config`: Optional. Defaults: `updatePolicy: 'update-when-all-call-updated'`.
+Key members:
 
-**Key Properties**
-
-- `observedCalls: Map<string, ObservedCall>`: Active calls.
-- `observedTURN: ObservedTURN`: Aggregated TURN metrics.
-- `appData: AppData | undefined`: Custom application data.
-- `closed: boolean`: True if `close()` has been called.
-- Counters: `totalAddedCall`, `totalRemovedCall`, RTT buckets, `totalClientIssues`, `numberOfClientsUsingTurn`, `numberOfClients`, `numberOfPeerConnections`, etc.
-
-**Key Methods**
-
-- `createObservedCall<T>(settings: ObservedCallSettings<T>): ObservedCall<T>`
-- `getObservedCall<T>(callId: string): ObservedCall<T> | undefined`
-- `accept(sample: ClientSample): void`: A convenience method to feed WebRTC stats. If `sample.callId` and `sample.clientId` are provided, it will route the sample to the appropriate `ObservedCall` and `ObservedClient`, creating them if they don't exist. The core sample processing for an existing client happens within the `ObservedClient`'s own `accept` or update mechanism.
-- `update(): void`: Manually trigger an update cycle (behavior depends on `updatePolicy`).
-- `close(): void`: Cleans up resources for the observer and all its calls.
-- `createEventMonitor<CTX>(ctx?: CTX): ObserverEventMonitor<CTX>`: For contextual event listening.
-
-**Events (`ObserverEvents`)**
-
-- `'newcall' (call: ObservedCall)`
-- `'call-updated' (call: ObservedCall)`
-- `'client-event' (client: ObservedClient, event: ClientEvent)`
-- `'client-issue' (client: ObservedClient, issue: ClientIssue)`
-- `'client-metadata' (client: ObservedClient, metadata: ClientMetaData)`
-- `'client-extension-stats' (client: ObservedClient, stats: ExtensionStat)`
-- `'update' ()`
-- `'close' ()`
-
-#### 3.2. `ObservedCall`
-
-Represents a single call session.
-
-**Configuration (`ObservedCallSettings`)**
-
-```typescript
-export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
-	callId: string;
-	appData?: AppData;
-	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'update-on-interval';
-	updateIntervalInMs?: number; // Used if updatePolicy is 'update-on-interval'
-	remoteTrackResolvePolicy?: 'mediasoup-sfu'; // For specific SFU integration
-};
-```
-
-**Key Properties**
-
-- `callId: string`
-- `appData: AppData | undefined`
-- `numberOfClients: number`
-- `score: number | undefined`: Overall call quality score.
-- `observedClients: Map<string, ObservedClient>`
-- Counters: `totalAddedClients`, `totalRemovedClients`, `numberOfIssues`, RTT buckets, total bytes sent/received (audio/video/data), etc.
-
-**Key Methods**
-
-- `createObservedClient<T>(settings: ObservedClientSettings<T>): ObservedClient<T>`
-- `getObservedClient<T>(clientId: string): ObservedClient<T> | undefined`
-- `update(): void`
+- `accept(sample: ClientSample, context?: AcceptContext): void`
+- `getObservedCall<T>(callId): ObservedCall<T> | undefined`
+- `createObservedCall<T>(settings): ObservedCall<T> | undefined`
+- `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
+- `update(): void` — force an aggregation/`observer-updated` tick
 - `close(): void`
-- `createEventMonitor<CTX>(ctx?: CTX): ObservedCallEventMonitor<CTX>`
+- `readonly observedCalls: Map<string, ObservedCall>`
+- `readonly observedTURN: ObservedTURN`
+- `get appData()`, `get numberOfCalls()`
+- counters: `numberOfClients`, `numberOfClientsUsingTurn`, `numberOfInboundRtpStreams`,
+  `numberOfOutboundRtpStreams`, `numberOfDataChannels`, `numberOfPeerConnections`,
+  `totalAddedCall`, `totalRemovedCall`, `closed`
+- `on/off/once/emit` typed against the [event map](#event-catalogue)
 
-**Events (Emitted via `ObservedCall` instance)**
+### `ObservedCall`
 
-- `'newclient' (client: ObservedClient)`
-- `'empty' ()`: When the last client leaves.
-- `'not-empty' ()`: When the first client joins an empty call.
-- `'update' ()`
-- `'close' ()`
+```ts
+type ObservedCallSettings<AppData = Record<string, unknown>> =
+  ( { updatePolicy: 'update-on-interval'; updateIntervalInMs: number }
+  | { updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated'; updateIntervalInMs?: number }
+  ) & {
+    callId: string;
+    appData?: AppData;
+    remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none';
+    closeCallIfEmptyForMs?: number;
+  };
+```
 
-#### 3.3. `ObservedClient`
+Key members:
 
-Represents a participant in a call.
+- `readonly callId: string`, `appData: AppData`
+- `readonly observedClients: Map<string, ObservedClient>`, `get numberOfClients()`
+- `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings)`, `getOrCreateObservedClient<T>(settings)` (all `… | undefined`)
+- `addIssue(issue: ClientIssue): void` — raise a **call-level** issue → emits `call-issue`
+- `readonly detectors: Detectors` — server-side detector registry (empty by default; see [Detectors](#detectors-server-side-extension-point))
+- `scoreCalculator: ScoreCalculator`, `get score()`, `readonly calculatedScore`
+- `remoteTrackResolver?: RemoteTrackResolver`
+- aggregates: `numberOfIssues`, `numberOfPeerConnections`, `numberOfInboundRtpStreams`,
+  `numberOfOutboundRtpStreams`, `numberOfDataChannels`, `maxNumberOfClients`,
+  `clientsUsedTurn: Set<string>`, `startedAt?`, `endedAt?`, `closedAt?`, `closed`
+- `update()`, `close()`
 
-**Configuration (`ObservedClientSettings`)**
+### `ObservedClient`
 
-```typescript
-export type ObservedClientSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
-	clientId: string;
-	appData?: AppData;
-	// Potentially other client-specific settings
+```ts
+type ObservedClientSettings<AppData = Record<string, unknown>> = {
+  clientId: string;
+  appData?: AppData;
+  closeClientIfIdleForMs?: number;
 };
 ```
 
-**Key Properties**
+Key members:
 
-- `clientId: string`
-- `call: ObservedCall`: Reference to the parent call.
-- `appData: AppData | undefined`
-- `score: number | undefined`: Client quality score.
-- `numberOfPeerConnections: number`
-- `usingTURN: boolean`
-- `observedPeerConnections: Map<string, ObservedPeerConnection>`
-- Counters: `numberOfIssues`, RTT buckets, total bytes sent/received, `availableIncomingBitrate`, `availableOutgoingBitrate`, etc.
+- `readonly clientId: string`, `appData: AppData`, `readonly call: ObservedCall`
+- `readonly observedPeerConnections: Map<string, ObservedPeerConnection>`
+- **Injection API** (queue app data to be merged into the next sample processing):
+  `injectEvent(ClientEvent)`, `injectIssue(ClientIssue)`, `injectMetaData(ClientMetaData)`,
+  `injectExtensionStat(ExtensionStat)`, `injectAttachment(key, value)`
+- **Direct add API** (process immediately): `addIssue(ClientIssue)`, `addMetadata(ClientMetaData)`,
+  `addExtensionStats(ExtensionStat)`
+- Metrics (current/derived): `currentAvgRttInMs?`, `currentMinRttInMs?`, `currentMaxRttInMs?`,
+  `receivingAudioBitrate`, `receivingVideoBitrate`, `sendingAudioBitrate`, `sendingVideoBitrate`,
+  `usingTURN`, `usingTCP`, `availableIncomingBitrate`, `availableOutgoingBitrate`
+- Counts: `numberOfInboundRtpStreams`, `numberOfOutboundRtpStreams`, `numberOfInbundTracks`,
+  `numberOfOutboundTracks`, `numberOfDataChannels`, `numberOfPeerConnections`
+- Per-tick deltas: `deltaReceivedAudioBytes`, `deltaSentAudioBytes`, … (see source for the full set)
+- Lifecycle: `joinedAt?`, `leftAt?`, `closedAt?`, `closed`, `get score()`
+- Metadata: `browser?`, `engine?`, `platform?`, `operationSystem?`, `mediaDevices`, `mediaConstraints`
+- `readonly report: ClientReport` — cumulative report (byte/packet totals + RTT & score distributions)
+- `accept(sample, context?)`, `close()`
 
-**Key Methods**
+### `ObservedPeerConnection`
 
-- `accept(sample: ClientSample): void`: (Or a similar internal update method called by `Observer.accept` or `ObservedCall`) Processes a `ClientSample` specific to this client, updating its metrics, peer connections, streams, etc. This is the primary point where a client's detailed WebRTC statistics are processed.
-- `createObservedPeerConnection<T>(settings: ObservedPeerConnectionSettings<T>): ObservedPeerConnection<T>`
-- `getObservedPeerConnection<T>(peerConnectionId: string): ObservedPeerConnection<T> | undefined`
-- `update(): void`
-- `close(): void`
-- `createEventMonitor<CTX>(ctx?: CTX): ObservedClientEventMonitor<CTX>`
+Key members:
 
-**Events (Emitted via `ObservedClient` instance)**
+- `readonly peerConnectionId: string`, `readonly client: ObservedClient`, `appData?`
+- The 15 `observed*` sub-stat `Map`s (listed [above](#entity-hierarchy)), plus array getters:
+  `codecs`, `inboundRtps`, `outboundRtps`, `remoteInboundRtps`, `remoteOutboundRtps`,
+  `mediaSources`, `mediaPlayouts`, `dataChannels`, `peerConnectionTransports`, `iceTransports`,
+  `iceCandidates`, `iceCandidatePairs`, `certificates`, `selectedIceCandidatePairs`,
+  `selectedIceCandiadtePairForTurn`
+- State: `connectionState?`, `iceConnectionState?`, `iceGatheringState?`, `usingTURN`, `usingTCP`
+- Metrics: `currentRttInMs?`, `currentJitter?`, `availableIncomingBitrate`,
+  `availableOutgoingBitrate`, sending/receiving bitrates, packet rates, and `total*` / `delta*`
+  byte/packet counters
+- `accept(pcSample, context?)`, `close()`, `get score()`
 
-- `'joined' ()`
-- `'left' ()`
-- `'update' ()`
-- `'close' ()`
-- `'newpeerconnection' (pc: ObservedPeerConnection)`
-- `'issue' (issue: ClientIssue)` (and other specific issue events)
+**Remote-RTP correlation (derived).** During `accept()`, receiver/sender reports are linked
+to the local streams by `remoteId` (fallback SSRC) and surfaced as fields:
 
-#### 3.4. `ObservedPeerConnection`
+- on `ObservedOutboundRtp`: `remoteRttInMs?`, `remoteFractionLost?`, `remoteJitter?`, `remotePacketsLost?`
+- on `ObservedInboundRtp`: `remoteRttInMs?`, `remoteBytesSent?`, `remotePacketsSent?`, `remoteTimestamp?`
 
-Represents an `RTCPeerConnection`.
+These are reset each tick and only set when the matching remote report is present.
 
-- Tracks ICE connection state, data channel stats, stream stats.
-- Holds `ObservedInboundRtpStream`, `ObservedOutboundRtpStream`, and `ObservedDataChannel` instances.
+---
 
-#### 3.5. `ObservedInboundRtpStream` / `ObservedOutboundRtpStream`
+## Schema types (`ClientSample`)
 
-- Track metrics for individual media streams (audio/video) like codec, packets lost/received, jitter, bytes, etc.
+The shape of an accepted sample (re-exported from this package; identical to
+`@observertc/schemas`). Only the top level is shown — each stat object mirrors the standard
+WebRTC `getStats()` dictionaries plus a few extensions.
 
-#### 3.6. `ObservedDataChannel`
-
-- Tracks metrics for data channels like state, messages sent/received, bytes.
-
-#### 3.7. `ClientSample` (Schema)
-
-This is the primary input data structure passed to `observer.accept()`. It's a comprehensive object that should mirror the information obtainable from WebRTC `getStats()` and other client-side states. Key fields include:
-
-- `callId`, `clientId`, `timestamp`
-- `peerConnections: RTCPeerConnectionStats[]`
-- `inboundRtpStreams: RTCInboundRtpStreamStats[]`
-- `outboundRtpStreams: RTCOutboundRtpStreamStats[]`
-- `remoteInboundRtpStreams: RTCRemoteInboundRtpStreamStats[]`
-- `remoteOutboundRtpStreams: RTCRemoteOutboundRtpStreamStats[]`
-- `dataChannels: RTCDataChannelStats[]`
-- `iceLocalCandidates: RTCIceCandidateStats[]`, `iceRemoteCandidates: RTCIceCandidateStats[]`, `iceCandidatePairs: RTCIceCandidatePairStats[]`
-- `mediaSources: RTCAudioSourceStats[] / RTCVideoSourceStats[]`
-- `tracks: RTCMediaStreamTrackStats[]`
-- `certificates: RTCCertificateStats[]`
-- `codecs: RTCCodecStats[]`
-- `transports: RTCIceTransportStats[]` (or similar depending on spec version)
-- `browser`, `engine`, `platform`, `os` (client environment metadata)
-- `userMediaErrors`, `iceConnectionStates`, `connectionStates` (client-reported events/states)
-- `extensionStats` (for custom data)
-
-_(Refer to the [observertc/schemas](https://github.com/observertc/schemas) repository, particularly the `ClientSample.ts` definition, for the exact and complete structure.)_
-
-### 4. Configuration Possibilities
-
-#### 4.1. Update Policies
-
-Control how frequently entities re-calculate metrics and emit `update` events.
-
-**Observer Level (`ObserverConfig.updatePolicy`)**
-
-- `'update-on-any-call-updated'`: Observer updates if any of its calls update.
-- `'update-when-all-call-updated'`: Observer updates after all its calls update. (Default)
-- `'update-on-interval'`: Observer updates at `ObserverConfig.updateIntervalInMs`.
-
-**Call Level (`ObservedCallSettings.updatePolicy` or `ObserverConfig.defaultCallUpdatePolicy`)**
-
-- `'update-on-any-client-updated'`: Call updates if any of its clients update.
-- `'update-when-all-client-updated'`: Call updates after all its clients update.
-- `'update-on-interval'`: Call updates at its `updateIntervalInMs`.
-
-#### 4.2. Intervals
-
-- `ObserverConfig.updateIntervalInMs`
-- `ObserverConfig.defaultCallUpdateIntervalInMs`
-- `ObservedCallSettings.updateIntervalInMs`
-
-#### 4.3. Application Data (`appData`)
-
-Associate custom context with `Observer`, `ObservedCall`, and `ObservedClient` instances using generics.
-
-```typescript
-interface MyCallAppData {
-	meetingTitle: string;
-	scheduledAt: Date;
-}
-const call = observer.createObservedCall<MyCallAppData>({
-	callId: 'call1',
-	appData: { meetingTitle: 'Team Sync', scheduledAt: new Date() },
-});
-console.log(call.appData?.meetingTitle);
-```
-
-#### 4.4. `appData` vs. Attachments
-
-The `observer-js` library provides two primary ways to associate custom information with its entities: `appData` and `attachments`. Understanding their distinct purposes is key for effective use.
-
-**`appData` (Application Data)**
-
-- **Purpose**: `appData` is designed to hold structured, typed, and relatively static metadata about an entity (`Observer`, `ObservedCall`, `ObservedClient`). This data is typically set at the time of entity creation and is directly accessible as a property of the entity instance.
-- **Typing**: It is strongly typed using generics (e.g., `Observer<MyObserverAppData>`). This provides type safety and autocompletion in TypeScript environments.
-- **Mutability**: While technically mutable (if the object assigned is mutable), it's generally intended for information that defines or describes the entity and doesn't change frequently during its lifecycle.
-- **Accessibility**: Directly accessible via `entity.appData`.
-- **Use Cases**:
-  - Storing application-specific identifiers (e.g., `userId`, `roomId`, `meetingType`).
-  - Configuration flags relevant to how your application interprets this entity.
-  - Descriptive information (e.g., `clientDeviceType`, `callRegion`).
-
-**`attachments` (Arbitrary Attachments)**
-
-- **Purpose**: `attachments` (if implemented as a `Map<string, unknown>` or similar mechanism on entities) are meant for associating arbitrary, often dynamic, or less structured data with an entity. This can be useful for temporary state, inter-plugin communication, or data that doesn't fit neatly into a predefined `appData` schema.
-- **Typing**: Typically less strictly typed (e.g., `unknown` or `any` values in a Map). Consumers of attachments need to perform their own type checks or assertions.
-- **Mutability**: Designed to be more dynamic. Attachments can be added, updated, or removed throughout the entity's lifecycle.
-- **Accessibility**: Accessed via methods like `entity.setAttachment(key, value)`, `entity.getAttachment(key)`, `entity.removeAttachment(key)`.
-- **Use Cases**:
-  - Storing temporary state calculated by one part of your application to be read by another (e.g., a custom issue detector plugin might attach intermediate findings).
-  - Caching results of expensive computations related to the entity.
-  - Allowing different modules or plugins to associate their own private data with an observer entity without needing to modify its core `appData` type.
-  - Storing large binary data or complex objects that are not part of the core descriptive metadata.
-
-**When to Use Which:**
-
-- Use **`appData`** for:
-  - Core, descriptive metadata that is known at creation time or changes infrequently.
-  - Data that benefits from strong typing and is integral to your application's understanding of the entity.
-- Use **`attachments`** for:
-  - Dynamic, temporary, or loosely structured data.
-  - Data added by different, potentially independent, parts of your system or plugins.
-  - Information that doesn't need to be part of the primary, typed `appData` schema.
-
-If `attachments` are not yet a formal feature, this section can serve as a design consideration or be adapted if you introduce such a mechanism. If `attachments` are already present, ensure the description matches their actual implementation.
-
-#### 4.5. Remote Track Resolution
-
-For SFU scenarios, especially with MediaSoup:
-`ObservedCallSettings.remoteTrackResolvePolicy: 'mediasoup-sfu'`
-
-### 5. Examples
-
-#### 5.1. Basic Observer Setup & Sample Ingestion
-
-```typescript
-// filepath: /path/to/your/app.ts
-import { Observer, ObserverConfig } from '@observertc/observer-js'; // Adjust path
-import { ClientSample } from '@observertc/schemas'; // Adjust path if using official schemas
-
-const observerConfig: ObserverConfig = {
-	updatePolicy: 'update-on-interval',
-	updateIntervalInMs: 5000,
-	defaultCallUpdatePolicy: 'update-on-any-client-updated',
+```ts
+type ClientSample = {
+  timestamp: number;          // client wall-clock (ms epoch)
+  callId?: string;            // set by you or the library
+  clientId?: string;          // set by you or the library
+  score?: number;             // optional client-computed score (0..5)
+  attachments?: Record<string, unknown>;
+  peerConnections?: PeerConnectionSample[];
+  clientEvents?: ClientEvent[];
+  clientIssues?: ClientIssue[];
+  clientMetaItems?: ClientMetaData[];
+  extensionStats?: ExtensionStat[];
 };
-const observer = new Observer(observerConfig);
 
-observer.on('newcall', (call) => {
-	console.log(`[Observer] New call: ${call.callId}`);
-	call.on('update', () => {
-		console.log(`[Call: ${call.callId}] Updated. Clients: ${call.numberOfClients}, Score: ${call.score?.toFixed(1)}`);
-	});
-	call.on('newclient', (client) => {
-		console.log(`[Call: ${call.callId}] New client: ${client.clientId}`);
-		client.on('update', () => {
-			// console.log(`[Client: ${client.clientId}] Updated. Score: ${client.score?.toFixed(1)}`);
-		});
-		client.on('issue', (issue) => {
-			console.warn(`[Client: ${client.clientId}] Issue: ${issue.type} - ${issue.severity} - ${issue.description}`);
-		});
-	});
-});
-
-// Function to transform your app's WebRTC stats to ClientSample
-function mapStatsToClientSample(appStats: any, callId: string, clientId: string): ClientSample {
-	// Detailed mapping logic here based on ClientSample.ts schema
-	// from github.com/observertc/schemas
-	return {
-		callId,
-		clientId,
-		timestamp: Date.now(),
-		// ... map all relevant stats fields ...
-	} as ClientSample; // Ensure all required fields are present
-}
-
-// Example: Receiving stats and processing
-const rawStatsFromClient = {
-	/* ... your client's getStats() output ... */
+type PeerConnectionSample = {
+  peerConnectionId: string;
+  attachments?: Record<string, unknown>;   // e.g. { direction: 'send'|'recv', producerId, consumerId, label }
+  score?: number;
+  inboundTracks?; outboundTracks?;
+  codecs?;
+  inboundRtps?; remoteInboundRtps?;
+  outboundRtps?; remoteOutboundRtps?;
+  mediaSources?; mediaPlayouts?;
+  peerConnectionTransports?; dataChannels?;
+  iceTransports?; iceCandidates?; iceCandidatePairs?;
+  certificates?;
 };
-const callId = 'meeting-alpha-123';
-const clientId = 'user-xyz-789';
-const sample = mapStatsToClientSample(rawStatsFromClient, callId, clientId);
-observer.accept(sample);
 
-// Later, on application shutdown:
-// observer.close();
+type ClientEvent     = { type: string; payload?: string; timestamp?: number; /* +ids */ };
+type ClientIssue     = { type: string; payload?: string; timestamp?: number };   // also used for call-issue
+type ClientMetaData  = { type: string; payload?: string; timestamp?: number; /* +ids */ };
+type ExtensionStat   = { type: string; payload?: string };
 ```
 
-#### 5.2. Manual Call and Client Creation
+`payload` fields are JSON strings; the library parses the ones it understands.
 
-```typescript
-// ... observer setup ...
+**`ClientEventTypes`** (enum of known `event.type` values): `CLIENT_JOINED`, `CLIENT_LEFT`,
+`PEER_CONNECTION_OPENED/CLOSED/STATE_CHANGED`, `MEDIA_TRACK_ADDED/REMOVED/MUTED/UNMUTED/RESUMED`,
+`ICE_GATHERING_STATE_CHANGED`, `ICE_CONNECTION_STATE_CHANGED`, `DATA_CHANNEL_OPEN/CLOSED/ERROR`,
+`NEGOTIATION_NEEDED`, `SIGNALING_STATE_CHANGE`, `ICE_CANDIDATE`, `ICE_CANDIDATE_ERROR`, and the
+mediasoup set `PRODUCER_*` / `CONSUMER_*` / `DATA_PRODUCER_*` / `DATA_CONSUMER_*`.
 
-const call = observer.createObservedCall({
-	callId: 'scheduled-webinar-456',
-	updatePolicy: 'update-on-interval',
-	updateIntervalInMs: 10000,
+**`ClientMetaTypes`** (enum of known meta `type` values): `MEDIA_CONSTRAINT`, `MEDIA_DEVICE`,
+`MEDIA_DEVICES_SUPPORTED_CONSTRAINTS`, `USER_MEDIA_ERROR`, `LOCAL_SDP`, `OPERATION_SYSTEM`,
+`ENGINE`, `PLATFORM`, `BROWSER`.
+
+`Reports` exported: `ClientReport` (cumulative per-client totals + RTT/score distributions) and
+`TrackReport` (per-track final report, delivered on `client-track-report`).
+
+---
+
+## Detectors (server-side extension point)
+
+`observer-js` deliberately ships **no built-in detectors**. Per-client signals — packet loss,
+jitter, RTT, freezes, etc. — are already detectable on the client and arrive on samples as
+`clientIssues` (surfaced via `client-issue`). Server-side detection should focus on what only
+the server can see by **correlating data across the clients of a call**.
+
+The hook lives on **`ObservedCall`**:
+
+```ts
+import { Observer, Detector } from '@observertc/observer-js';
+
+class MyCrossClientDetector implements Detector {
+  readonly name = 'my-detector';
+  constructor(private readonly call /* : ObservedCall */) {}
+  update() {                                   // called on every call.update()
+    // …inspect this.call.observedClients across participants…
+    if (/* condition only visible server-side */ false) {
+      this.call.addIssue({ type: this.name, payload: JSON.stringify({ /* … */ }), timestamp: Date.now() });
+      // → emitted on the bus as 'call-issue'
+    }
+  }
+}
+
+const observer = new Observer();
+observer.on('call-added', ({ observedCall }) => {
+  observedCall.detectors.add(new MyCrossClientDetector(observedCall));
 });
-
-const client1 = call.createObservedClient({ clientId: 'presenter-01' });
-// Samples for 'presenter-01' in call 'scheduled-webinar-456' will update this client.
+observer.on('call-issue', ({ observedCall, issue }) => { /* react */ });
 ```
 
-#### 5.3. Using Event Monitors for Contextual Logging
+`Detector` interface and the registry:
 
-```typescript
-const call = observer.getObservedCall('meeting-alpha-123');
-if (call) {
-	const callMonitor = call.createEventMonitor({ callId: call.callId, started: new Date() });
-	callMonitor.on('client-joined', (client, context) => {
-		console.log(`EVENT_MONITOR (${context.callId}): Client ${client.clientId} joined at ${new Date()}`);
-	});
-	callMonitor.on('issue-detected', (client, issue, context) => {
-		console.error(`EVENT_MONITOR (${context.callId}): Issue on ${client.clientId} - ${issue.description}`);
-	});
+```ts
+interface Detector { readonly name: string; update(): void; }
+
+class Detectors {
+  add(d: Detector): void;
+  remove(d: Detector): void;
+  clear(): void;
+  update(): void;          // called by ObservedCall.update(); guards each detector in try/catch
+  get listOfNames(): string[];
 }
 ```
 
-### 6. Best Practices
+---
 
-- **Resource Management**: Always call `observer.close()`, `call.close()`, and `client.close()` when entities are no longer needed to free resources and stop timers.
-- **Error Handling**: Wrap calls to library methods in `try...catch` blocks where appropriate, especially for operations that might throw errors based on state (e.g., creating an entity that already exists if not using `getOrCreate` patterns).
-- **Event Listener Cleanup**: If dynamically adding/removing listeners, ensure they are properly removed (e.g., using `emitter.off()` or `emitter.removeListener()`) to prevent memory leaks, especially for short-lived monitored entities.
-- **`ClientSample` Accuracy**: The quality of monitoring heavily depends on the completeness and correctness of the `ClientSample` data provided. Ensure thorough mapping from `getStats()`.
-- **Update Policies**: Choose update policies carefully based on the desired granularity of updates and performance considerations.
+## Remote track resolution (mediasoup / SFU)
 
-### 7. Troubleshooting
+In an SFU, one participant's **outbound** track is delivered to other participants as **inbound**
+tracks. To correlate them server-side, set `remoteTrackResolvePolicy: 'mediasoup-sfu'` on the
+call settings. The built-in `MediasoupRemoteTrackResolver` subscribes to the bus (filtered to
+its call) and maps producer↔consumer using track `attachments` (`producerId`, `consumerId`):
 
-- **Memory Leaks**: Ensure `close()` is called on all entities. Check for unremoved event listeners.
-- **No Events / Missing Updates**:
-  - Verify `observer.accept()` is being called with correctly formatted `ClientSample` data.
-  - Ensure `callId` and `clientId` in samples match expectations.
-  - Check if `updatePolicy` and `updateIntervalInMs` are configured as intended.
-- **Debugging**: Utilize `console.log` within event handlers at different levels (Observer, Call, Client) to trace data flow and state changes. Use `appData` to add correlation IDs for easier debugging.
-
-### 8. TypeScript Support
-
-The library is written in TypeScript and provides type definitions.
-Use generics with `Observer`, `ObservedCall`, and `ObservedClient` to type your custom `appData`.
-
-```typescript
-interface MyClientAppData {
-	userId: string;
-	role: 'admin' | 'user';
-}
-const client = call.createObservedClient<MyClientAppData>({
-	clientId: 'user1',
-	appData: { userId: 'u-123', role: 'admin' },
-});
-// client.appData will be typed as MyClientAppData | undefined
+```ts
+const call = observer.createObservedCall({ callId, remoteTrackResolvePolicy: 'mediasoup-sfu' });
+// later, given an inbound track:
+const source = inboundTrack.getRemoteOutboundTrack();     // the producing ObservedOutboundTrack
+const consumers = outboundTrack.getRemoteInboundTracks(); // the consuming ObservedInboundTrack[]
 ```
 
-### 9. Contributing
+Custom topologies can implement the `RemoteTrackResolver` interface and assign
+`call.remoteTrackResolver`:
 
-(Placeholder for contribution guidelines - e.g., link to CONTRIBUTING.md, coding standards, pull request process)
+```ts
+interface RemoteTrackResolver {
+  resolveRemoteOutboundTrack(inboundTrack: ObservedInboundTrack): ObservedOutboundTrack | undefined;
+  resolveRemoteInboundTracks(outboundTrack: ObservedOutboundTrack): ObservedInboundTrack[] | undefined;
+}
+```
 
-### 10. License
+The application is expected to put `direction` (`'send'`/`'recv'`), `producerId`, `consumerId`,
+and `label` into `PeerConnectionSample.attachments` / track `attachments`.
 
-This project is licensed under the [MIT License](LICENSE).
+---
+
+## Logging
+
+`observer-js` logs through a single, swappable sink. Out of the box it writes `debug` and
+above to `console` (verbose — install your own sink for production). Funnel everything into your
+logger:
+
+```ts
+import { setObserverLogger, type ObserverLogger } from '@observertc/observer-js';
+
+setObserverLogger({
+  trace: (m, ...a) => myLogger.trace(`[${m}]`, ...a),
+  debug: (m, ...a) => myLogger.debug(`[${m}]`, ...a),
+  info:  (m, ...a) => myLogger.info(`[${m}]`, ...a),
+  warn:  (m, ...a) => myLogger.warn(`[${m}]`, ...a),
+  error: (m, ...a) => myLogger.error(`[${m}]`, ...a),
+});
+```
+
+`createLogger(moduleName)` is also exported for your own modules. See
+**[`docs/logging.md`](./docs/logging.md)** for pino / winston / console recipes, level
+filtering, per-module routing, and full silencing.
+
+---
+
+## Error-handling philosophy
+
+The library **warns and degrades; it does not throw** on operational problems:
+
+- Bad config (`update-on-interval` without an interval) → warn + safe fallback policy.
+- `createObservedCall` / `createObservedClient` on a closed parent → warn + return `undefined`.
+- Duplicate id → warn + return the **existing** instance.
+- `accept()` on a closed client → warn + no-op.
+- Sample missing `callId`/`clientId`, or observer closed → `sample-rejected` event.
+
+Therefore `create*` and `getOrCreate*` return `T | undefined`; **guard the result.** The only
+remaining `throw`s are internal invariants in the unused `Middleware` utility.
+
+---
+
+## Public exports
+
+```ts
+// Entry: src/index.ts
+export { Observer } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext } from './Observer';
+export type { ObserverEventBase, ObservedCallScope, ObservedClientScope, ObservedPeerConnectionScope } from './ObserverEvents';
+
+export { ObservedCall, ObservedClient, ObservedPeerConnection } from './…';
+export { ObservedInboundTrack, ObservedOutboundTrack } from './…';
+export { ObservedInboundRtp, ObservedOutboundRtp, ObservedRemoteInboundRtp, ObservedRemoteOutboundRtp } from './…';
+export { ObservedMediaSource, ObservedMediaPlayout, ObservedCodec, ObservedCertificate, ObservedDataChannel } from './…';
+export { ObservedIceCandidate, ObservedIceCandidatePair, ObservedIceTransport, ObservedPeerConnectionTransport } from './…';
+
+export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
+export { ClientEventTypes } from './schema/ClientEventTypes';
+export { ClientMetaTypes } from './schema/ClientMetaTypes';
+
+export { ScoreCalculator } from './scores/ScoreCalculator';
+export { Detectors } from './detectors/Detectors';
+export type { Detector } from './detectors/Detector';
+
+export { createLogger, setObserverLogger } from './common/logger';
+export type { Logger, ObserverLogger } from './common/logger';
+
+export { Middleware } from './common/Middleware';
+export type { TrackReport, ClientReport } from './Reports';
+```
+
+---
+
+## Development & extension guide
+
+```bash
+yarn install
+yarn build       # tsc → lib/
+yarn lint        # eslint -c .eslintrc.json "src/**/*.ts"
+yarn test        # jest
+```
+
+**Project layout** (`src/`): `Observer.ts`, `ObservedCall.ts`, `ObservedClient.ts`,
+`ObservedPeerConnection.ts`, the `Observed*` sub-stat classes, `ObserverEvents.ts` (the typed
+event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `updaters/`
+(update-policy strategies), `utils/` (remote-track resolvers), `common/` (`logger`, `utils`,
+`Middleware`), `schema/` (sample/event/meta types).
+
+**Conventions to follow when developing further:**
+
+- *Single event bus.* New consumer-facing events go in `ObserverEvents.ts` with an object
+  payload `[<Scope> & { …subject }]`, and are emitted via the component's
+  `_notify(type, { ...this.eventScope, …subject })`. Each component has a precomputed
+  `eventScope` field and a thin `_notify` wrapper around the right emitter. Keep purely internal
+  coordination as **local** EventEmitter events (and remember to `off` them on close).
+- *Warn, don't throw* on operational/edge conditions; return `undefined` where a value can't be produced.
+- *Counter-reset-safe deltas.* When computing a delta from a cumulative counter, never emit a
+  negative value (guard `curr >= prev`), to survive counter resets / SSRC reuse.
+- *Explicit accumulation.* The per-sample metric accumulation in `accept()` is intentionally
+  explicit and not abstracted — match that style.
+- *Detectors are server-side.* Add cross-client detectors on `ObservedCall.detectors`; don't
+  re-implement client-detectable signals.
+
+**Recipes:**
+
+- *Add an event:* add the key + payload to `ObserverEvents`; in the owning component call
+  `this._notify('my-event', { ...this.eventScope, subject })`.
+- *Add a per-stream metric:* add the field to the relevant `Observed*Rtp`/track class, populate
+  it in its `update()` (reset at the top of `update()` if it's per-tick), and read it from a
+  `*-updated` handler.
+- *Add a detector:* implement `Detector`, register it on `call-added` via
+  `observedCall.detectors.add(...)`, surface findings with `observedCall.addIssue(...)`.
+
+---
+
+## Not yet implemented / roadmap
+
+For an agent continuing the work, these are explicitly **not** present yet:
+
+- **Tests.** There is currently only a placeholder spec. The two `accept()` methods
+  (`ObservedClient`, `ObservedPeerConnection`) are the priority for characterization tests.
+- **CI gate** (lint + typecheck + test).
+- **Built-in detectors / quality classifier.** The registry exists; concrete server-side
+  detectors (e.g. producer→consumer delivery mismatch, quality outlier, asymmetric media) are
+  to be designed.
+- **Per-tick snapshot API.** A serializable snapshot per `*-updated` tick to replace consuming
+  the fine-grained `*-updated` events (under consideration).
+- **Monotonic-timestamp / clock-skew handling** for client clock jumps.
+- **Batch `processSamples()`** entry point for offline analysis of recorded sample streams.
+- **Expanded derived metrics** (jitter-buffer delay, concealment, freeze fraction, encode/decode
+  CPU, quality-limitation breakdown, etc.) and first-class producer/consumer & PC-direction
+  fields beyond `attachments`.
+
+## License
+
+Apache-2.0. Part of the [ObserverTC](https://github.com/observertc) ecosystem.

@@ -18,7 +18,7 @@ export class Detectors {
 		this._detectors = this._detectors.filter((d) => d !== detector);
 	}
 
-	get listOfNames() {
+	public get listOfNames() {
 		return this._detectors.map((d) => d.name);
 	}
 
@@ -27,7 +27,7 @@ export class Detectors {
 			try {
 				detector.update();
 			} catch (err) {
-				logger.warn(`Error updating detector ${detector?.constructor?.name}`, err);
+				logger.warn(`Error updating detector ${detector?.name}`, err);
 			}
 		}
 	}

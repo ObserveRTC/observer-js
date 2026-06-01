@@ -1,14 +1,12 @@
 import { CalculatedScore } from './scores/CalculatedScore';
 import { MediaKind } from './common/types';
 import { OutboundTrackSample } from './schema/ClientSample';
-import { Detectors } from './detectors/Detectors';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedMediaSource } from './ObservedMediaSource';
 import { OutboundTrackReport } from './Reports';
 
 export class ObservedOutboundTrack implements OutboundTrackSample {
-	public readonly detectors: Detectors;
 	private _visited = false;
 	public appData?: Record<string, unknown>;
 	public readonly report: OutboundTrackReport;
@@ -37,8 +35,6 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 			trackId: this.id,
 			kind: this.kind as 'audio' | 'video',
 		};
-
-		this.detectors = new Detectors();
 	}
 
 	public get score() { 
@@ -75,8 +71,5 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		this.timestamp = stats.timestamp;
 		this.calculatedScore.value = stats.score;
 		this.attachments = stats.attachments;
-
-		this.detectors.update();
 	}
-	
 }

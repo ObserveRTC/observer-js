@@ -9,10 +9,11 @@ import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
-import { Detectors } from './detectors/Detectors';
-import { ClientReport, TrackReport } from './Reports';
+import { ClientReport } from './Reports';
 import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
+import type { AcceptContext } from './Observer';
+import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 
 const logger = createLogger('ObservedClient');
 
@@ -22,22 +23,14 @@ export type ObservedClientSettings<AppData extends Record<string, unknown> = Rec
 	closeClientIfIdleForMs?: number;
 };
 
+// Local lifecycle/coordination events only. Everything worth subscribing to is
+// emitted on the Observer bus (see ObserverEvents). These remain local so the
+// parent ObservedCall and the updaters can wire to them for teardown/aggregation.
 export type ObservedClientEvents = {
 	update: [sample: ClientSample, elapsedTimeInMs: number];
 	close: [];
 	joined: [];
-	issue: [ClientIssue];
-	metaData: [ClientMetaData];
-	rejoined: [timestamp: number];
 	left: [];
-	usingturn: [boolean];
-	usermediaerror: [string];
-	extensionStats: [ExtensionStat];
-	clientEvent: [ClientEvent];
-
-	newpeerconnection: [ObservedPeerConnection];
-
-	trackreport: [TrackReport];
 };
 
 export declare interface ObservedClient {
@@ -48,10 +41,11 @@ export declare interface ObservedClient {
 }
 
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
-	public readonly detectors: Detectors;
-
 	public readonly clientId: string;
 	public readonly observedPeerConnections = new Map<string, ObservedPeerConnection>();
+
+	/** Ancestry base shared by all Observer-bus events originating at this client. */
+	public readonly eventScope: ObservedClientScope;
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
 		value: undefined,
@@ -82,24 +76,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
 
-	// public totalInboundPacketsLost = 0;
-	// public totalInboundPacketsReceived = 0;
-	// public totalOutboundPacketsSent = 0;
-	// public totalDataChannelBytesSent = 0;
-	// public totalDataChannelBytesReceived = 0;
-	// public totalDataChannelMessagesSent = 0;
-	// public totalDataChannelMessagesReceived = 0;
-	// public totalReceivedAudioBytes = 0;
-	// public totalReceivedVideoBytes = 0;
-	// public totalSentAudioBytes = 0;
-	// public totalSentVideoBytes = 0;
-	// public totalSentBytes = 0;
-	// public totalReceivedBytes = 0;
-	// public totalRttLt50Measurements = 0;
-	// public totalRttLt150Measurements = 0;
-	// public totalRttLt300Measurements = 0;
-	// public totalRttGtOrEq300Measurements = 0;
-	
 	public deltaReceivedAudioBytes = 0;
 	public deltaReceivedVideoBytes = 0;
 	public deltaSentAudioBytes = 0;
@@ -152,10 +128,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		super();
 		this.setMaxListeners(Infinity);
 
+		this.eventScope = { observer: call.observer, observedCall: call, observedClient: this };
 		this.clientId = settings.clientId;
 		this.appData = settings.appData ?? {} as AppData;
-		
-		this.detectors = new Detectors();
+
 		this.settings = {
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
 		};
@@ -198,13 +174,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			totalNumberOfIssues: 0,
 		};
 	}
-	
+
 	public get numberOfPeerConnections() {
 		return this.observedPeerConnections.size;
 	}
 
-	public get score() { 
-		return this.calculatedScore.value; 
+	public get score() {
+		return this.calculatedScore.value;
+	}
+
+	/** Emit an Observer-bus event scoped to this client (or a peer connection under it). */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.call.observer.emit(type, ...args);
 	}
 
 	public close() {
@@ -222,15 +203,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			if (this.leftAt) {
 				this.emit('left');
+				this._notify('client-left', { ...this.eventScope });
 			}
 		}
 		this.closedAt = Date.now();
 
 		this.emit('close');
+		this._notify('client-closed', { ...this.eventScope });
 	}
 
-	public accept(sample: ClientSample): void {
-		if (this.closed) throw new Error(`Client ${this.clientId} is closed`);
+	public accept(sample: ClientSample, context?: AcceptContext): void {
+		if (this.closed) {
+			logger.warn('Attempted to accept a sample on a closed client %s', this.clientId);
+
+			return;
+		}
 
 		if (this.closeTimer) {
 			clearTimeout(this.closeTimer);
@@ -282,8 +269,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		for (const clientEvent of sample.clientEvents ?? []) {
 			this._processClientEvent(clientEvent, clientEventsPostBuffer);
-
-			this.call.observer.emit('client-event', this, clientEvent);
 		}
 
 		for (const metaData of sample.clientMetaItems ?? []) {
@@ -301,7 +286,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 
 		for (const pcSample of sample.peerConnections ?? []) {
-			const observedPeerConnection = this._updatePeerConnection(pcSample);
+			const observedPeerConnection = this._updatePeerConnection(pcSample, context);
 
 			if (!observedPeerConnection) continue;
 
@@ -400,15 +385,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.report.scoreDistribution.count += 1;
 			this.report.scoreDistribution.sum += sample.score;
 		}
-		
-		this.detectors.update();
 
 		this.lastSampleTimestamp = sample.timestamp;
 		// emit update
-		this.emit('update', 
-			sample,
-			now - this.updated,
-		);
+		const elapsedTimeInMs = now - this.updated;
+
+		this.emit('update', sample, elapsedTimeInMs);
+		this._notify('client-updated', { ...this.eventScope, sample, elapsedTimeInMs, context });
 		this.updated = now;
 
 		// if result changed after update
@@ -433,8 +416,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					if (!this.joinedAt) {
 						this.joinedAt = event.timestamp;
 						this.emit('joined');
+						this._notify('client-joined', { ...this.eventScope });
 					} else if (this.joinedAt < event.timestamp) {
-						this.emit('rejoined', event.timestamp);
+						this._notify('client-rejoined', { ...this.eventScope, timestamp: event.timestamp });
 					} else {
 						this.joinedAt = event.timestamp;
 						logger.warn(`Client ${this.clientId} joinedAt timestamp was updated to ${event.timestamp}. the joined event will not be emitted.`);
@@ -448,6 +432,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					if (!this.leftAt) {
 						this.leftAt = event.timestamp;
 						this.emit('left');
+						this._notify('client-left', { ...this.eventScope });
 					} else {
 						logger.warn(`Client ${this.clientId} leftAt timestamp was already set`);
 					}
@@ -568,10 +553,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					if (observedPeerConnection) {
 						if (observedInboundTrack) {
 							observedInboundTrack.muted = true;
-							observedPeerConnection?.emit('muted-inbound-track', observedInboundTrack);
+							this._notify('inbound-track-muted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
 						} else if (observedOutboundTrack) {
 							observedOutboundTrack.muted = true;
-							observedPeerConnection?.emit('muted-outbound-track', observedOutboundTrack);
+							this._notify('outbound-track-muted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
 						}
 					} else if (postBuffer) {
 						postBuffer.push(event);
@@ -593,10 +578,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					if (observedPeerConnection) {
 						if (observedInboundTrack) {
 							observedInboundTrack.muted = false;
-							observedPeerConnection?.emit('unmuted-inbound-track', observedInboundTrack);
+							this._notify('inbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
 						} else if (observedOutboundTrack) {
 							observedOutboundTrack.muted = false;
-							observedPeerConnection?.emit('unmuted-outbound-track', observedOutboundTrack);
+							this._notify('outbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
 						}
 					} else if (postBuffer) {
 						postBuffer.push(event);
@@ -614,9 +599,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 					if (observedPeerConnection) {
 						observedPeerConnection.iceConnectionState = payload.iceConnectionState as 'new' | 'checking' | 'connected' | 'completed' | 'failed' | 'disconnected' | 'closed';
-						observedPeerConnection.emit('iceconnectionstatechange', {
-							state: payload.iceConnectionState,
-						});
+						this._notify('ice-connection-state-changed', { ...this.eventScope, observedPeerConnection, state: payload.iceConnectionState });
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
@@ -633,9 +616,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 					if (observedPeerConnection) {
 						observedPeerConnection.iceGatheringState = payload.iceGatheringState as 'new' | 'gathering' | 'complete';
-						observedPeerConnection.emit('icegatheringstatechange', {
-							state: payload.iceGatheringState,
-						});
+						this._notify('ice-gathering-state-changed', { ...this.eventScope, observedPeerConnection, state: payload.iceGatheringState });
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
@@ -651,10 +632,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedPeerConnection = this.observedPeerConnections.get(payload.peerConnectionId);
 
 					if (observedPeerConnection) {
-						observedPeerConnection.connectionState = payload.peerConnectionState as 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed'; 
-						observedPeerConnection.emit('connectionstatechange', {
-							state: payload.peerConnectionState,
-						});
+						observedPeerConnection.connectionState = payload.peerConnectionState as 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
+						this._notify('connection-state-changed', { ...this.eventScope, observedPeerConnection, state: payload.peerConnectionState });
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
@@ -664,8 +643,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				break;
 			}
 		}
-		
-		this.emit('clientEvent', event);
+
+		this._notify('client-event', { ...this.eventScope, event });
 	}
 
 	public injectMetaData(metaData: ClientMetaData) {
@@ -731,7 +710,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
-		this.call.observer.emit('client-metadata', this, metadata);
+		this._notify('client-metadata', { ...this.eventScope, metaData: metadata });
 	}
 
 	public addIssue(issue: ClientIssue) {
@@ -739,16 +718,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.report.issues[issue.type] = (this.report.issues[issue.type] ?? 0) + 1;
 
-		this.emit('issue', issue);
-		this.call.observer.emit('client-issue', this, issue);
+		this._notify('client-issue', { ...this.eventScope, issue });
 	}
 
 	public addExtensionStats(stats: ExtensionStat) {
-		this.call.observer.emit('client-extension-stats', this, stats);
-		this.emit('extensionStats', stats);
+		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
 	}
 
-	private _updatePeerConnection(sample: PeerConnectionSample): ObservedPeerConnection | undefined {
+	private _updatePeerConnection(sample: PeerConnectionSample, context?: AcceptContext): ObservedPeerConnection | undefined {
 		let observedPeerConnection = this.observedPeerConnections.get(sample.peerConnectionId);
 
 		if (!observedPeerConnection) {
@@ -761,15 +738,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			const newObservedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
 			const onInboundTrackRemoved = (track: ObservedInboundTrack) => {
-				this.emit('trackreport', {
-					direction: 'inbound',
-					...track.report,
+				this._notify('client-track-report', {
+					...this.eventScope,
+					report: {
+						direction: 'inbound',
+						...track.report,
+					},
 				});
 			};
 			const onOutboundTrackRemoved = (track: ObservedOutboundTrack) => {
-				this.emit('trackreport', {
-					direction: 'outbound',
-					...track.report,
+				this._notify('client-track-report', {
+					...this.eventScope,
+					report: {
+						direction: 'outbound',
+						...track.report,
+					},
 				});
 			};
 
@@ -781,13 +764,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			newObservedPeerConnection.on('removed-inbound-track', onInboundTrackRemoved);
 			newObservedPeerConnection.on('removed-outbound-track', onOutboundTrackRemoved);
 			this.observedPeerConnections.set(sample.peerConnectionId, newObservedPeerConnection);
-			
-			this.emit('newpeerconnection', newObservedPeerConnection);
+
+			this._notify('peer-connection-added', { ...this.eventScope, observedPeerConnection: newObservedPeerConnection });
 
 			observedPeerConnection = newObservedPeerConnection;
 		}
 
-		observedPeerConnection.accept(sample);
+		observedPeerConnection.accept(sample, context);
 
 		return observedPeerConnection;
 	}
@@ -832,52 +815,4 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		return sample;
 	}
-
-	// public resetSummaryMetrics() {
-	// 	this.totalDataChannelBytesReceived = 0;
-	// 	this.totalDataChannelBytesSent = 0;
-	// 	this.totalDataChannelMessagesReceived = 0;
-	// 	this.totalDataChannelMessagesSent = 0;
-	// 	this.totalInboundPacketsLost = 0;
-	// 	this.totalInboundPacketsReceived = 0;
-	// 	this.totalOutboundPacketsSent = 0;
-	// 	this.totalReceivedAudioBytes = 0;
-	// 	this.totalReceivedVideoBytes = 0;
-	// 	this.totalSentAudioBytes = 0;
-	// 	this.totalSentVideoBytes = 0;
-	// 	this.totalSentBytes = 0;
-	// 	this.totalReceivedBytes = 0;
-		
-	// 	this.totalNumberOfIssues = 0;
-		
-	// 	this.totalScoreSum = 0;
-	// 	this.numberOfScoreMeasurements = 0;
-	// }
-
-	// public createSummary(): ObservedClientSummary {
-	// 	return {
-	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
-	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
-	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
-	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
-	// 		totalDataChannelBytesReceived: this.totalDataChannelBytesReceived,
-	// 		totalDataChannelBytesSent: this.totalDataChannelBytesSent,
-	// 		totalDataChannelMessagesReceived: this.totalDataChannelMessagesReceived,
-	// 		totalDataChannelMessagesSent: this.totalDataChannelMessagesSent,
-	// 		totalInboundPacketsLost: this.totalInboundPacketsLost,
-	// 		totalInboundPacketsReceived: this.totalInboundPacketsReceived,
-	// 		totalOutboundPacketsSent: this.totalOutboundPacketsSent,
-	// 		totalReceivedAudioBytes: this.totalReceivedAudioBytes,
-	// 		totalReceivedVideoBytes: this.totalReceivedVideoBytes,
-	// 		totalSentAudioBytes: this.totalSentAudioBytes,
-	// 		totalSentVideoBytes: this.totalSentVideoBytes,
-	// 		totalSentBytes: this.totalSentBytes,
-	// 		totalReceivedBytes: this.totalReceivedBytes,
-			
-	// 		numberOfIssues: this.totalNumberOfIssues,
-
-	// 		totalScoreSum: this.totalScoreSum,
-	// 		numberOfScoreMeasurements: this.numberOfScoreMeasurements,
-	// 	};
-	// }
 }

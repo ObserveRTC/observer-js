@@ -1,23 +1,37 @@
 import { EventEmitter } from 'events';
+import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientSettings } from './ObservedClient';
 import { Observer } from './Observer';
 import { ScoreCalculator } from './scores/ScoreCalculator';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator';
-import { Detectors } from './detectors/Detectors';
 import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
 import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
 import { Updater } from './updaters/Updater';
 import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
-import { ObservedCallEventMonitor } from './ObservedCallEventMonitor';
+import { Detectors } from './detectors/Detectors';
+import { ClientIssue } from './schema/ClientSample';
+import type { AcceptContext } from './Observer';
+import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
 
-export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
+const logger = createLogger('ObservedCall');
+
+// `update-on-interval` requires an interval; the other policies do not use one.
+type ObservedCallUpdateConfig =
+	| {
+		updatePolicy: 'update-on-interval',
+		updateIntervalInMs: number,
+	}
+	| {
+		updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated',
+		updateIntervalInMs?: number,
+	};
+
+export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = ObservedCallUpdateConfig & {
 	callId: string;
 	appData?: AppData;
 	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none',
-	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'update-on-interval',
-	updateIntervalInMs?: number,
 	closeCallIfEmptyForMs?: number,
 };
 
@@ -37,9 +51,9 @@ export declare interface ObservedCall {
 }
 
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
-	public readonly detectors: Detectors;
 	public updater?: Updater;
 	public scoreCalculator: ScoreCalculator;
+	public readonly detectors: Detectors;
 	public readonly callId: string;
 	public readonly observedClients = new Map<string, ObservedClient>();
 	public readonly clientsUsedTurn = new Set<string>();
@@ -73,6 +87,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public closedAt?: number;
 
 	public readonly settings: Pick<ObservedCallSettings, 'closeCallIfEmptyForMs'>;
+
+	/** Ancestry base shared by all Observer-bus events originating at this call. */
+	public readonly eventScope: ObservedCallScope;
+
+	/** The most recent `accept()` context routed to this call; emitted with `call-updated`. */
+	public lastAcceptContext?: AcceptContext;
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -82,36 +102,35 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		super();
 		this.setMaxListeners(Infinity);
 
+		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
 		this.appData = settings.appData ?? {} as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
+		// No built-in detectors ship yet. The registry is a server-side extension point:
+		// add custom call-level Detectors via `call.detectors.add(...)` and surface findings
+		// with `call.addIssue(...)` (emitted on the Observer bus as `call-issue`).
 		this.detectors = new Detectors();
-		
-		if (settings.updateIntervalInMs) {
-			if (settings.updatePolicy !== 'update-on-interval') {
-				throw new Error('updatePolicy must be update-on-interval if updateIntervalInMs is set in config');
-			}
+
+		if (settings.updateIntervalInMs && settings.updatePolicy !== 'update-on-interval') {
+			logger.warn('updateIntervalInMs is ignored unless updatePolicy is "update-on-interval" (callId: %s)', settings.callId);
 		}
 		switch (settings.updatePolicy) {
 			case 'update-on-any-client-updated':
-				this.updater = new OnAnyClientCallUpdater(this);	
+				this.updater = new OnAnyClientCallUpdater(this);
 				break;
 			case 'update-when-all-client-updated':
-				this.updater = new OnAllClientCallUpdater(this);	
+				this.updater = new OnAllClientCallUpdater(this);
 				break;
-			case 'update-on-interval': 
+			case 'update-on-interval':
 				if (!settings.updateIntervalInMs) {
-					throw new Error('updateIntervalInMs setting in config must be set if updatePolicy is update-on-interval');
+					logger.warn('updateIntervalInMs must be set when updatePolicy is "update-on-interval"; falling back to "update-when-all-client-updated" (callId: %s)', settings.callId);
+					this.updater = new OnAllClientCallUpdater(this);
+				} else {
+					this.updater = new OnIntervalUpdater(
+						settings.updateIntervalInMs,
+						this.update.bind(this),
+					);
 				}
-				this.updater = new OnIntervalUpdater(
-					settings.updateIntervalInMs,
-					this.update.bind(this),
-				);
-				break;
-		}
-
-		switch (settings.remoteTrackResolvePolicy) {
-			case 'mediasoup-sfu':
 				break;
 		}
 
@@ -124,8 +143,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.observedClients.size;
 	}
 
-	public get score() { 
-		return this.calculatedScore.value; 
+	public get score() {
+		return this.calculatedScore.value;
+	}
+
+	/** Emit an Observer-bus event scoped to this call. */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.observer.emit(type, ...args);
+	}
+
+	/** Raise a call-level (server-side) issue; surfaced on the Observer bus as `call-issue`. */
+	public addIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		this._notify('call-issue', { ...this.eventScope, issue });
 	}
 
 	public close() {
@@ -150,6 +181,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.closedAt = Date.now();
 		this.emit('close');
+		this._notify('call-closed', { ...this.eventScope });
 	}
 
 	public getObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(clientId: string): ObservedClient<ClientAppData> | undefined {
@@ -158,9 +190,17 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.observedClients.get(clientId) as ObservedClient<ClientAppData>;
 	}
 
-	public createObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(settings: ObservedClientSettings<ClientAppData>): ObservedClient<ClientAppData> {
-		if (this.closed) throw new Error(`Call ${this.callId} is closed`);
-		if (this.observedClients.has(settings.clientId)) throw new Error(`Client with id ${settings.clientId} already exists`);
+	public createObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(settings: ObservedClientSettings<ClientAppData>): ObservedClient<ClientAppData> | undefined {
+		if (this.closed) {
+			logger.warn('Attempted to create a client (clientId: %s) on a closed call %s', settings.clientId, this.callId);
+
+			return undefined;
+		}
+		if (this.observedClients.has(settings.clientId)) {
+			logger.warn('Client with id %s already exists in call %s; returning the existing instance', settings.clientId, this.callId);
+
+			return this.observedClients.get(settings.clientId) as ObservedClient<ClientAppData>;
+		}
 
 		if (!settings.closeClientIfIdleForMs) {
 			settings.closeClientIfIdleForMs = this.observer.config.closeClientIfIdleForMs;
@@ -180,6 +220,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
+				this._notify('call-empty', { ...this.eventScope });
 
 				if (this.settings.closeCallIfEmptyForMs) {
 					this.closeTimer = setTimeout(() => {
@@ -203,16 +244,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		}
 
 		this.emit('newclient', result);
+		this._notify('client-added', { ...this.eventScope, observedClient: result });
 
 		if (wasEmpty) {
 			this.emit('not-empty');
+			this._notify('call-not-empty', { ...this.eventScope });
 		}
-		
+
 		return result;
 	}
 
-	public createEventMonitor<CTX>(context: CTX): ObservedCallEventMonitor<CTX> {
-		return new ObservedCallEventMonitor(this, context);
+	public getOrCreateObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
+		settings: ObservedClientSettings<ClientAppData>
+	): ObservedClient<ClientAppData> | undefined {
+		return this.getObservedClient<ClientAppData>(settings.clientId) ?? this.createObservedClient<ClientAppData>(settings);
 	}
 
 	public update() {
@@ -230,10 +275,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.numberOfDataChannels += client.numberOfDataChannels;
 		}
 
-		this.detectors.update();
 		this.scoreCalculator.update();
+		this.detectors.update();
 
 		this.emit('update');
+		this._notify('call-updated', { ...this.eventScope, context: this.lastAcceptContext });
 
 		this.deltaNumberOfIssues = 0;
 	}
@@ -258,51 +304,4 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
 	}
-
-	// public resetSummaryMetrics() {
-	// 	this.totalAddedClients = 0;
-	// 	this.totalRemovedClients = 0;
-
-	// 	this.totalClientsReceivedAudioBytes = 0;
-	// 	this.totalClientsReceivedVideoBytes = 0;
-	// 	this.totalClientsReceivedBytes = 0;
-
-	// 	this.totalClientsSentAudioBytes = 0;
-	// 	this.totalClientsSentVideoBytes = 0;
-	// 	this.totalClientsSentBytes = 0;
-
-	// 	this.totalRttLt50Measurements = 0;
-	// 	this.totalRttLt150Measurements = 0;
-	// 	this.totalRttLt300Measurements = 0;
-	// 	this.totalRttGtOrEq300Measurements = 0;
-
-	// 	this.numberOfIssues = 0;
-
-	// 	this.clientsUsedTurn.clear();
-		
-	// }
-
-	// public createSummary(): ObservedCallSummary {
-	// 	return {
-	// 		currentActiveClients: this.observedClients.size,
-	// 		totalAddedClients: this.totalAddedClients,
-	// 		totalRemovedClients: this.totalRemovedClients,
-			
-	// 		totalClientsReceivedAudioBytes: this.totalClientsReceivedBytes,
-	// 		totalClientsReceivedVideoBytes: this.totalClientsReceivedVideoBytes,
-	// 		totalClientsReceivedBytes: this.totalClientsReceivedBytes,
-
-	// 		totalClientsSentAudioBytes: this.totalClientsSentAudioBytes,
-	// 		totalClientsSentVideoBytes: this.totalClientsSentVideoBytes,
-	// 		totalClientsSentBytes: this.totalClientsSentBytes,
-
-	// 		totalRttLt50Measurements: this.totalRttLt50Measurements,
-	// 		totalRttLt150Measurements: this.totalRttLt150Measurements,
-	// 		totalRttLt300Measurements: this.totalRttLt300Measurements,
-	// 		totalRttGtOrEq300Measurements: this.totalRttGtOrEq300Measurements,
-
-	// 		numberOfIssues: this.numberOfIssues,
-	// 		numberOfClientsUsedTurn: this.clientsUsedTurn.size,
-	// 	};
-	// }
 }

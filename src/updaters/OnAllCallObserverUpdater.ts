@@ -1,5 +1,6 @@
 import { ObservedCall } from '../ObservedCall';
 import { Observer } from '../Observer';
+import type { ObservedCallScope } from '../ObserverEvents';
 import { Updater } from './Updater';
 
 export class OnAllCallObserverUpdater implements Updater {
@@ -14,10 +15,10 @@ export class OnAllCallObserverUpdater implements Updater {
 	) {
 		this._onNewObservedCall = this._onNewObservedCall.bind(this);
 
-		this.observer.once('close', () => {
-			this.observer.off('newcall', this._onNewObservedCall);
+		this.observer.once('observer-closed', () => {
+			this.observer.off('call-added', this._onNewObservedCall);
 		});
-		this.observer.on('newcall', this._onNewObservedCall);
+		this.observer.on('call-added', this._onNewObservedCall);
 	}
 
 	close(): void {
@@ -27,9 +28,9 @@ export class OnAllCallObserverUpdater implements Updater {
 		this._updatedCalls.clear();
 	}
 
-	private _onNewObservedCall(observedCall: ObservedCall) {
+	private _onNewObservedCall({ observedCall }: ObservedCallScope) {
 		if (this.closed) return;
-		
+
 		const onUpdate = () => this._onObservedCallUpdated(observedCall);
 
 		observedCall.once('close', () => {

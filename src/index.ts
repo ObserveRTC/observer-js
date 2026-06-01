@@ -1,4 +1,10 @@
-export type { ObserverEvents } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext } from './Observer';
+export type {
+	ObserverEventBase,
+	ObservedCallScope,
+	ObservedClientScope,
+	ObservedPeerConnectionScope,
+} from './ObserverEvents';
 
 export { Observer } from './Observer';
 export { ObservedCall } from './ObservedCall';
@@ -23,8 +29,10 @@ export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
 export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
-export { ObservedClientEventMonitor } from './ObservedClientEventMonitor';
-export { ObserverEventMonitor } from './ObserverEventMonitor';
+export { Detectors } from './detectors/Detectors';
+export type { Detector } from './detectors/Detector';
+export { createLogger, setObserverLogger } from './common/logger';
+export type { Logger, ObserverLogger } from './common/logger';
 export { Middleware } from './common/Middleware';
 export type {
 	TrackReport,

@@ -51,6 +51,12 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 	public deltaPacketsSent = 0;
 	public deltaBytesSent = 0;
 
+	// Derived from the corresponding remote-inbound-rtp (receiver report), when present.
+	public remoteRttInMs?: number;
+	public remoteFractionLost?: number;
+	public remoteJitter?: number;
+	public remotePacketsLost?: number;
+
 	public constructor(
 		public timestamp: number,
 		public id: string,
@@ -96,15 +102,20 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 		this.packetRate = 0;
 		this.deltaPacketsSent = 0;
 		this.deltaBytesSent = 0;
+		this.remoteRttInMs = undefined;
+		this.remoteFractionLost = undefined;
+		this.remoteJitter = undefined;
+		this.remotePacketsLost = undefined;
 
 		const elapsedTimeInMs = stats.timestamp - this.timestamp;
 
 		if (elapsedTimeInMs) {
-			if (stats.packetsSent !== undefined && this.packetsSent !== undefined) {
+			// Guard against counter resets / SSRC reuse: only accept a non-negative delta.
+			if (stats.packetsSent !== undefined && this.packetsSent !== undefined && stats.packetsSent >= this.packetsSent) {
 				this.deltaPacketsSent = stats.packetsSent - this.packetsSent;
 				this.packetRate = this.deltaPacketsSent / (elapsedTimeInMs / 1000);
 			}
-			if (stats.bytesSent !== undefined && this.bytesSent !== undefined) {
+			if (stats.bytesSent !== undefined && this.bytesSent !== undefined && stats.bytesSent >= this.bytesSent) {
 				this.deltaBytesSent = stats.bytesSent - this.bytesSent;
 				this.bitrate = (this.deltaBytesSent * 8) / (elapsedTimeInMs / 1000);
 			}

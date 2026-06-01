@@ -21,78 +21,18 @@ import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { ObservedTurnServer } from './ObservedTurnServer';
 import { getMedian } from './common/utils';
+import type { AcceptContext } from './Observer';
+import type { ObserverEvents, ObservedPeerConnectionScope } from './ObserverEvents';
 
 const logger = createLogger('ObservedPeerConnection');
 
+// Local lifecycle/coordination events only. All consumer-facing events are
+// emitted on the Observer bus (see ObserverEvents). `close` and the two track
+// `removed-*` events stay local because the parent ObservedClient wires to them
+// for teardown and track-report emission.
 export type ObservedPeerConnectionEvents = {
-	iceconnectionstatechange: [
-		{
-			state: string;
-		}
-	];
-	icegatheringstatechange: [
-		{
-			state: string;
-		}
-	];
-	connectionstatechange: [
-		{
-			state: string;
-		}
-	];
-	selectedcandidatepair: [];
-
-	'added-certificate': [ObservedCertificate];
-	'added-codec': [ObservedCodec];
-	'added-data-channel': [ObservedDataChannel];
-	'added-ice-candidate': [ObservedIceCandidate];
-	'added-ice-candidate-pair': [ObservedIceCandidatePair];
-	'added-ice-transport': [ObservedIceTransport];
-	'added-inbound-rtp': [ObservedInboundRtp];
-	'added-inbound-track': [ObservedInboundTrack];
-	'added-media-playout': [ObservedMediaPlayout];
-	'added-media-source': [ObservedMediaSource];
-	'added-outbound-rtp': [ObservedOutboundRtp];
-	'added-outbound-track': [ObservedOutboundTrack];
-	'added-peer-connection-transport': [ObservedPeerConnectionTransport];
-	'added-remote-inbound-rtp': [ObservedRemoteInboundRtp];
-	'added-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
-	'removed-certificate': [ObservedCertificate];
-	'removed-codec': [ObservedCodec];
-	'removed-data-channel': [ObservedDataChannel];
-	'removed-ice-candidate': [ObservedIceCandidate];
-	'removed-ice-candidate-pair': [ObservedIceCandidatePair];
-	'removed-ice-transport': [ObservedIceTransport];
-	'removed-inbound-rtp': [ObservedInboundRtp];
 	'removed-inbound-track': [ObservedInboundTrack];
-	'removed-media-playout': [ObservedMediaPlayout];
-	'removed-media-source': [ObservedMediaSource];
-	'removed-outbound-rtp': [ObservedOutboundRtp];
 	'removed-outbound-track': [ObservedOutboundTrack];
-	'removed-peer-connection-transport': [ObservedPeerConnectionTransport];
-	'removed-remote-inbound-rtp': [ObservedRemoteInboundRtp];
-	'removed-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
-	'updated-inbound-rtp': [ObservedInboundRtp];
-	'updated-outbound-rtp': [ObservedOutboundRtp];
-	'updated-inbound-track': [ObservedInboundTrack];
-	'updated-outbound-track': [ObservedOutboundTrack];
-	'updated-ice-candidate-pair': [ObservedIceCandidatePair];
-	'updated-ice-transport': [ObservedIceTransport];
-	'updated-peer-connection-transport': [ObservedPeerConnectionTransport];
-	'updated-media-source': [ObservedMediaSource];
-	'updated-media-playout': [ObservedMediaPlayout];
-	'updated-data-channel': [ObservedDataChannel];
-	'updated-ice-candidate': [ObservedIceCandidate];
-	'updated-certificate': [ObservedCertificate];
-	'updated-codec': [ObservedCodec];
-	'updated-remote-inbound-rtp': [ObservedRemoteInboundRtp];
-	'updated-remote-outbound-rtp': [ObservedRemoteOutboundRtp];
-	'muted-inbound-track': [ObservedInboundTrack];
-	'muted-outbound-track': [ObservedOutboundTrack];
-	'unmuted-inbound-track': [ObservedInboundTrack];
-	'unmuted-outbound-track': [ObservedOutboundTrack];
-
-	'update': [],
 	close: [];
 };
 
@@ -120,7 +60,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		weight: 1,
 		value: undefined,
 	};
-	
+
 	public closed = false;
 	// timestamp of the PEER_CONNECTION_OPENED event
 	public openedAt?: number;
@@ -128,7 +68,7 @@ export class ObservedPeerConnection extends EventEmitter {
 	public closedAt?: number;
 	public updated = Date.now();
 
-	public connectionState?: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed'; 
+	public connectionState?: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 	public iceConnectionState?: 'new' | 'checking' | 'connected' | 'completed' | 'failed' | 'disconnected' | 'closed';
 	public iceGatheringState?: 'new' | 'gathering' | 'complete';
 
@@ -202,13 +142,29 @@ export class ObservedPeerConnection extends EventEmitter {
 	public readonly observedRemoteInboundRtps = new Map<number, ObservedRemoteInboundRtp>();
 	public readonly observedRemoteOutboundRtps = new Map<number, ObservedRemoteOutboundRtp>();
 
+	private readonly eventScope: ObservedPeerConnectionScope;
+
 	public constructor(public readonly peerConnectionId: string, public readonly client: ObservedClient) {
 		super();
 		this.setMaxListeners(Infinity);
+		this.eventScope = {
+			observer: client.call.observer,
+			observedCall: client.call,
+			observedClient: client,
+			observedPeerConnection: this,
+		};
 	}
 
-	public get score() { 
-		return this.calculatedScore.value; 
+	public get score() {
+		return this.calculatedScore.value;
+	}
+
+	/** Emit an Observer-bus event scoped to this peer connection. */
+	private _notify<K extends keyof ObserverEvents>(
+		type: K,
+		...args: ObserverEvents[K]
+	): void {
+		this.client.call.observer.emit(type, ...args);
 	}
 
 	public get visited() {
@@ -278,8 +234,8 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public get selectedIceCandiadtePairForTurn() {
 		return this.selectedIceCandidatePairs
-			.filter((pair) => 
-				pair.getLocalCandidate()?.candidateType === 'relay' && 
+			.filter((pair) =>
+				pair.getLocalCandidate()?.candidateType === 'relay' &&
 				pair.getRemoteCandidate()?.url?.startsWith('turn:')
 			);
 	}
@@ -288,21 +244,21 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (this.closed) return;
 		this.closed = true;
 
-		this.observedCertificates.forEach((cert) => this.emit('removed-certificate', cert));
-		this.observedCodecs.forEach((codec) => this.emit('removed-codec', codec));
-		this.observedDataChannels.forEach((dc) => this.emit('removed-data-channel', dc));
-		this.observedIceCandidates.forEach((candidate) => this.emit('removed-ice-candidate', candidate));
-		this.observedIceCandidatesPair.forEach((pair) => this.emit('removed-ice-candidate-pair', pair));
-		this.observedIceTransports.forEach((transport) => this.emit('removed-ice-transport', transport));
-		this.observedInboundRtps.forEach((rtp) => this.emit('removed-inbound-rtp', rtp));
-		this.observedInboundTracks.forEach((track) => this.emit('removed-inbound-track', track));
-		this.observedMediaPlayouts.forEach((playout) => this.emit('removed-media-playout', playout));
-		this.observedMediaSources.forEach((source) => this.emit('removed-media-source', source));
-		this.observedOutboundRtps.forEach((rtp) => this.emit('removed-outbound-rtp', rtp));
-		this.observedOutboundTracks.forEach((track) => this.emit('removed-outbound-track', track));
-		this.observedPeerConnectionTransports.forEach((transport) => this.emit('removed-peer-connection-transport', transport));
-		this.observedRemoteInboundRtps.forEach((rtp) => this.emit('removed-remote-inbound-rtp', rtp));
-		this.observedRemoteOutboundRtps.forEach((rtp) => this.emit('removed-remote-outbound-rtp', rtp));
+		this.observedCertificates.forEach((observedCertificate) => this._notify('certificate-removed', { ...this.eventScope, observedCertificate }));
+		this.observedCodecs.forEach((observedCodec) => this._notify('codec-removed', { ...this.eventScope, observedCodec }));
+		this.observedDataChannels.forEach((observedDataChannel) => this._notify('data-channel-removed', { ...this.eventScope, observedDataChannel }));
+		this.observedIceCandidates.forEach((observedIceCandidate) => this._notify('ice-candidate-removed', { ...this.eventScope, observedIceCandidate }));
+		this.observedIceCandidatesPair.forEach((pair) => this._notify('ice-candidate-pair-removed', { ...this.eventScope, observedIceCandidatePair: pair }));
+		this.observedIceTransports.forEach((transport) => this._notify('ice-transport-removed', { ...this.eventScope, observedIceTransport: transport }));
+		this.observedInboundRtps.forEach((rtp) => this._notify('inbound-rtp-removed', { ...this.eventScope, observedInboundRtp: rtp }));
+		this.observedInboundTracks.forEach((track) => { this.emit('removed-inbound-track', track); this._notify('inbound-track-removed', { ...this.eventScope, observedInboundTrack: track }); });
+		this.observedMediaPlayouts.forEach((playout) => this._notify('media-playout-removed', { ...this.eventScope, observedMediaPlayout: playout }));
+		this.observedMediaSources.forEach((source) => this._notify('media-source-removed', { ...this.eventScope, observedMediaSource: source }));
+		this.observedOutboundRtps.forEach((rtp) => this._notify('outbound-rtp-removed', { ...this.eventScope, observedOutboundRtp: rtp }));
+		this.observedOutboundTracks.forEach((track) => { this.emit('removed-outbound-track', track); this._notify('outbound-track-removed', { ...this.eventScope, observedOutboundTrack: track }); });
+		this.observedPeerConnectionTransports.forEach((transport) => this._notify('peer-connection-transport-removed', { ...this.eventScope, observedPeerConnectionTransport: transport }));
+		this.observedRemoteInboundRtps.forEach((rtp) => this._notify('remote-inbound-rtp-removed', { ...this.eventScope, observedRemoteInboundRtp: rtp }));
+		this.observedRemoteOutboundRtps.forEach((rtp) => this._notify('remote-outbound-rtp-removed', { ...this.eventScope, observedRemoteOutboundRtp: rtp }));
 
 		this.observedCertificates.clear();
 		this.observedCodecs.clear();
@@ -321,15 +277,18 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.observedRemoteOutboundRtps.clear();
 
 		this.client.call.observer.observedTURN.removePeerConnection(this);
-		
+
 		if (!this.closedAt) this.closedAt = Date.now();
-		
+
 		this.emit('close');
+		this._notify('peer-connection-closed', { ...this.eventScope });
 	}
 
-	public accept(sample: PeerConnectionSample) {
+	public accept(sample: PeerConnectionSample, context?: AcceptContext) {
 		if (this.closed) return;
 		this._visited = true;
+
+		if (context) this.appData = { ...this.appData, ...context };
 
 		this.availableIncomingBitrate = 0;
 		this.availableOutgoingBitrate = 0;
@@ -416,13 +375,13 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (sample.inboundRtps) {
 			for (const inboundRtp of sample.inboundRtps) {
 				const observedInboundRtp = this._updateInboundRtpStats(inboundRtp);
-				
+
 				if (!observedInboundRtp) continue;
 
 				this.deltaInboundPacketsLost += observedInboundRtp.deltaLostPackets;
 				this.deltaInboundPacketsReceived += observedInboundRtp.deltaReceivedPackets;
 				this.deltaInboundReceivedBytes += observedInboundRtp.deltaBytesReceived;
-				
+
 				switch (inboundRtp.kind) {
 					case 'audio':
 						this.deltaReceivedAudioBytes += observedInboundRtp.deltaBytesReceived;
@@ -452,7 +411,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (sample.outboundRtps) {
 			for (const outboundRtp of sample.outboundRtps) {
 				const observedOutboundRtp = this._updateOutboundRtpStats(outboundRtp);
-			
+
 				if (!observedOutboundRtp) continue;
 
 				this.deltaOutboundPacketsSent += observedOutboundRtp.deltaPacketsSent ?? 0;
@@ -474,7 +433,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		if (sample.peerConnectionTransports) {
 			for (const peerConnectionTransport of sample.peerConnectionTransports) {
 				const observedTransport = this._updatePeerConnectionTransportStats(peerConnectionTransport);
-				
+
 				if (!observedTransport) continue;
 
 			}
@@ -488,13 +447,49 @@ export class ObservedPeerConnection extends EventEmitter {
 				if (observedRemoteInboundRtp.roundTripTime) {
 					rttMeasurementsInSec.push(observedRemoteInboundRtp.roundTripTime);
 				}
+
+				// Surface receiver-report-derived metrics on the corresponding local outbound-rtp.
+				const observedOutboundRtp = observedRemoteInboundRtp.getOutboundRtp();
+
+				if (observedOutboundRtp) {
+					if (observedRemoteInboundRtp.roundTripTime !== undefined) {
+						observedOutboundRtp.remoteRttInMs = observedRemoteInboundRtp.roundTripTime * 1000;
+					}
+					if (observedRemoteInboundRtp.fractionLost !== undefined) {
+						observedOutboundRtp.remoteFractionLost = observedRemoteInboundRtp.fractionLost;
+					}
+					if (observedRemoteInboundRtp.jitter !== undefined) {
+						observedOutboundRtp.remoteJitter = observedRemoteInboundRtp.jitter;
+					}
+					if (observedRemoteInboundRtp.packetsLost !== undefined) {
+						observedOutboundRtp.remotePacketsLost = observedRemoteInboundRtp.packetsLost;
+					}
+				}
 			}
 		}
 		if (sample.remoteOutboundRtps) {
 			for (const remoteOutboundRtp of sample.remoteOutboundRtps) {
 				const observedRemoteOutboundRtp = this._updateRemoteOutboundRtpStats(remoteOutboundRtp);
-			
+
 				if (!observedRemoteOutboundRtp) continue;
+
+				// Surface sender-report-derived metrics on the corresponding local inbound-rtp.
+				const observedInboundRtp = observedRemoteOutboundRtp.getInboundRtp();
+
+				if (observedInboundRtp) {
+					if (observedRemoteOutboundRtp.roundTripTime !== undefined) {
+						observedInboundRtp.remoteRttInMs = observedRemoteOutboundRtp.roundTripTime * 1000;
+					}
+					if (observedRemoteOutboundRtp.bytesSent !== undefined) {
+						observedInboundRtp.remoteBytesSent = observedRemoteOutboundRtp.bytesSent;
+					}
+					if (observedRemoteOutboundRtp.packetsSent !== undefined) {
+						observedInboundRtp.remotePacketsSent = observedRemoteOutboundRtp.packetsSent;
+					}
+					if (observedRemoteOutboundRtp.remoteTimestamp !== undefined) {
+						observedInboundRtp.remoteTimestamp = observedRemoteOutboundRtp.remoteTimestamp;
+					}
+				}
 			}
 		}
 
@@ -577,7 +572,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.updated = now;
 		this._checkVisited();
 
-		this.emit('update');
+		this._notify('peer-connection-updated', { ...this.eventScope, context });
 	}
 
 	private _checkVisited() {
@@ -586,89 +581,91 @@ export class ObservedPeerConnection extends EventEmitter {
 
 			this.observedCertificates.delete(certificate.id);
 		}
-		for (const codec of [ ...this.observedCodecs.values() ]) {
-			if (codec.visited) continue;
+		for (const observedCodec of [ ...this.observedCodecs.values() ]) {
+			if (observedCodec.visited) continue;
 
-			this.observedCodecs.delete(codec.id);
-			this.emit('removed-codec', codec);
+			this.observedCodecs.delete(observedCodec.id);
+			this._notify('codec-removed', { ...this.eventScope, observedCodec });
 		}
-		for (const dataChannel of [ ...this.observedDataChannels.values() ]) {
-			if (dataChannel.visited) continue;
+		for (const observedDataChannel of [ ...this.observedDataChannels.values() ]) {
+			if (observedDataChannel.visited) continue;
 
-			this.observedDataChannels.delete(dataChannel.id);
-			this.emit('removed-data-channel', dataChannel);
+			this.observedDataChannels.delete(observedDataChannel.id);
+			this._notify('data-channel-removed', { ...this.eventScope, observedDataChannel });
 		}
-		for (const iceCandidate of [ ...this.observedIceCandidates.values() ]) {
-			if (iceCandidate.visited) continue;
+		for (const observedIceCandidate of [ ...this.observedIceCandidates.values() ]) {
+			if (observedIceCandidate.visited) continue;
 
-			this.observedIceCandidates.delete(iceCandidate.id);
-			this.emit('removed-ice-candidate', iceCandidate);
+			this.observedIceCandidates.delete(observedIceCandidate.id);
+			this._notify('ice-candidate-removed', { ...this.eventScope, observedIceCandidate });
 		}
-		for (const iceCandidatePair of [ ...this.observedIceCandidatesPair.values() ]) {
-			if (iceCandidatePair.visited) continue;
+		for (const observedIceCandidatePair of [ ...this.observedIceCandidatesPair.values() ]) {
+			if (observedIceCandidatePair.visited) continue;
 
-			this.observedIceCandidatesPair.delete(iceCandidatePair.id);
-			this.emit('removed-ice-candidate-pair', iceCandidatePair);
+			this.observedIceCandidatesPair.delete(observedIceCandidatePair.id);
+			this._notify('ice-candidate-pair-removed', { ...this.eventScope, observedIceCandidatePair });
 		}
-		for (const iceTransport of [ ...this.observedIceTransports.values() ]) {
-			if (iceTransport.visited) continue;
+		for (const observedIceTransport of [ ...this.observedIceTransports.values() ]) {
+			if (observedIceTransport.visited) continue;
 
-			this.observedIceTransports.delete(iceTransport.id);
-			this.emit('removed-ice-transport', iceTransport);
+			this.observedIceTransports.delete(observedIceTransport.id);
+			this._notify('ice-transport-removed', { ...this.eventScope, observedIceTransport });
 		}
-		for (const inboundRtp of [ ...this.observedInboundRtps.values() ]) {
-			if (inboundRtp.visited) continue;
+		for (const observedInboundRtp of [ ...this.observedInboundRtps.values() ]) {
+			if (observedInboundRtp.visited) continue;
 
-			this.observedInboundRtps.delete(inboundRtp.ssrc);
-			this.emit('removed-inbound-rtp', inboundRtp);
+			this.observedInboundRtps.delete(observedInboundRtp.ssrc);
+			this._notify('inbound-rtp-removed', { ...this.eventScope, observedInboundRtp });
 		}
-		for (const inboundTrack of [ ...this.observedInboundTracks.values() ]) {
-			if (inboundTrack.visited) continue;
+		for (const observedInboundTrack of [ ...this.observedInboundTracks.values() ]) {
+			if (observedInboundTrack.visited) continue;
 
-			this.observedInboundTracks.delete(inboundTrack.id);
-			this.emit('removed-inbound-track', inboundTrack);
+			this.observedInboundTracks.delete(observedInboundTrack.id);
+			this.emit('removed-inbound-track', observedInboundTrack);
+			this._notify('inbound-track-removed', { ...this.eventScope, observedInboundTrack });
 		}
-		for (const mediaPlayout of [ ...this.observedMediaPlayouts.values() ]) {
-			if (mediaPlayout.visited) continue;
+		for (const observedMediaPlayout of [ ...this.observedMediaPlayouts.values() ]) {
+			if (observedMediaPlayout.visited) continue;
 
-			this.observedMediaPlayouts.delete(mediaPlayout.id);
-			this.emit('removed-media-playout', mediaPlayout);
+			this.observedMediaPlayouts.delete(observedMediaPlayout.id);
+			this._notify('media-playout-removed', { ...this.eventScope, observedMediaPlayout });
 		}
-		for (const mediaSource of [ ...this.observedMediaSources.values() ]) {
-			if (mediaSource.visited) continue;
+		for (const observedMediaSource of [ ...this.observedMediaSources.values() ]) {
+			if (observedMediaSource.visited) continue;
 
-			this.observedMediaSources.delete(mediaSource.id);
-			this.emit('removed-media-source', mediaSource);
+			this.observedMediaSources.delete(observedMediaSource.id);
+			this._notify('media-source-removed', { ...this.eventScope, observedMediaSource });
 		}
-		for (const outboundRtp of [ ...this.observedOutboundRtps.values() ]) {
-			if (outboundRtp.visited) continue;
+		for (const observedOutboundRtp of [ ...this.observedOutboundRtps.values() ]) {
+			if (observedOutboundRtp.visited) continue;
 
-			this.observedOutboundRtps.delete(outboundRtp.ssrc);
-			this.emit('removed-outbound-rtp', outboundRtp);
+			this.observedOutboundRtps.delete(observedOutboundRtp.ssrc);
+			this._notify('outbound-rtp-removed', { ...this.eventScope, observedOutboundRtp });
 		}
-		for (const outboundTrack of [ ...this.observedOutboundTracks.values() ]) {
-			if (outboundTrack.visited) continue;
+		for (const observedOutboundTrack of [ ...this.observedOutboundTracks.values() ]) {
+			if (observedOutboundTrack.visited) continue;
 
-			this.observedOutboundTracks.delete(outboundTrack.id);
-			this.emit('removed-outbound-track', outboundTrack);
+			this.observedOutboundTracks.delete(observedOutboundTrack.id);
+			this.emit('removed-outbound-track', observedOutboundTrack);
+			this._notify('outbound-track-removed', { ...this.eventScope, observedOutboundTrack });
 		}
-		for (const peerConnectionTransport of [ ...this.observedPeerConnectionTransports.values() ]) {
-			if (peerConnectionTransport.visited) continue;
+		for (const observedPeerConnectionTransport of [ ...this.observedPeerConnectionTransports.values() ]) {
+			if (observedPeerConnectionTransport.visited) continue;
 
-			this.observedPeerConnectionTransports.delete(peerConnectionTransport.id);
-			this.emit('removed-peer-connection-transport', peerConnectionTransport);
+			this.observedPeerConnectionTransports.delete(observedPeerConnectionTransport.id);
+			this._notify('peer-connection-transport-removed', { ...this.eventScope, observedPeerConnectionTransport });
 		}
-		for (const remoteInboundRtp of [ ...this.observedRemoteInboundRtps.values() ]) {
-			if (remoteInboundRtp.visited) continue;
+		for (const observedRemoteInboundRtp of [ ...this.observedRemoteInboundRtps.values() ]) {
+			if (observedRemoteInboundRtp.visited) continue;
 
-			this.observedRemoteInboundRtps.delete(remoteInboundRtp.ssrc);
-			this.emit('removed-remote-inbound-rtp', remoteInboundRtp);
+			this.observedRemoteInboundRtps.delete(observedRemoteInboundRtp.ssrc);
+			this._notify('remote-inbound-rtp-removed', { ...this.eventScope, observedRemoteInboundRtp });
 		}
-		for (const remoteOutboundRtp of [ ...this.observedRemoteOutboundRtps.values() ]) {
-			if (remoteOutboundRtp.visited) continue;
+		for (const observedRemoteOutboundRtp of [ ...this.observedRemoteOutboundRtps.values() ]) {
+			if (observedRemoteOutboundRtp.visited) continue;
 
-			this.observedRemoteOutboundRtps.delete(remoteOutboundRtp.ssrc);
-			this.emit('removed-remote-outbound-rtp', remoteOutboundRtp);
+			this.observedRemoteOutboundRtps.delete(observedRemoteOutboundRtp.ssrc);
+			this._notify('remote-outbound-rtp-removed', { ...this.eventScope, observedRemoteOutboundRtp });
 		}
 	}
 
@@ -688,10 +685,10 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedCertificate.update(stats);
 
 			this.observedCertificates.set(stats.id, observedCertificate);
-			this.emit('added-certificate', observedCertificate);
+			this._notify('certificate-added', { ...this.eventScope, observedCertificate });
 		} else {
 			observedCertificate.update(stats);
-			this.emit('updated-certificate', observedCertificate);
+			this._notify('certificate-updated', { ...this.eventScope, observedCertificate });
 		}
 
 		return observedCertificate;
@@ -711,13 +708,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedCodec = new ObservedCodec(stats.timestamp, stats.id, stats.mimeType, this);
 
 			observedCodec.update(stats);
-			
+
 			this.observedCodecs.set(stats.id, observedCodec);
-			this.emit('added-codec', observedCodec);
+			this._notify('codec-added', { ...this.eventScope, observedCodec });
 		} else {
 			observedCodec.update(stats);
 		}
-		this.emit('updated-codec', observedCodec);
+		this._notify('codec-updated', { ...this.eventScope, observedCodec });
 
 		return observedCodec;
 	}
@@ -738,11 +735,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedDataChannel.update(stats);
 
 			this.observedDataChannels.set(stats.id, observedDataChannel);
-			this.emit('added-data-channel', observedDataChannel);
+			this._notify('data-channel-added', { ...this.eventScope, observedDataChannel });
 		} else {
 			observedDataChannel.update(stats);
 		}
-		this.emit('updated-data-channel', observedDataChannel);
+		this._notify('data-channel-updated', { ...this.eventScope, observedDataChannel });
 
 		return observedDataChannel;
 	}
@@ -763,11 +760,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedIceCandidate.update(stats);
 
 			this.observedIceCandidates.set(stats.id, observedIceCandidate);
-			this.emit('added-ice-candidate', observedIceCandidate);
+			this._notify('ice-candidate-added', { ...this.eventScope, observedIceCandidate });
 		} else {
 			observedIceCandidate.update(stats);
 		}
-		this.emit('updated-ice-candidate', observedIceCandidate);
+		this._notify('ice-candidate-updated', { ...this.eventScope, observedIceCandidate });
 
 		return observedIceCandidate;
 	}
@@ -786,13 +783,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedIceCandidatePair = new ObservedIceCandidatePair(stats.timestamp, stats.id, this);
 
 			observedIceCandidatePair.update(stats);
-			
+
 			this.observedIceCandidatesPair.set(stats.id, observedIceCandidatePair);
-			this.emit('added-ice-candidate-pair', observedIceCandidatePair);
+			this._notify('ice-candidate-pair-added', { ...this.eventScope, observedIceCandidatePair });
 		} else {
 			observedIceCandidatePair.update(stats);
 		}
-		this.emit('updated-ice-candidate-pair', observedIceCandidatePair);
+		this._notify('ice-candidate-pair-updated', { ...this.eventScope, observedIceCandidatePair });
 
 		return observedIceCandidatePair;
 	}
@@ -811,13 +808,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedIceTransport = new ObservedIceTransport(stats.timestamp, stats.id, this);
 
 			observedIceTransport.update(stats);
-			
+
 			this.observedIceTransports.set(stats.id, observedIceTransport);
-			this.emit('added-ice-transport', observedIceTransport);
+			this._notify('ice-transport-added', { ...this.eventScope, observedIceTransport });
 		} else {
 			observedIceTransport.update(stats);
 		}
-		this.emit('updated-ice-transport', observedIceTransport);
+		this._notify('ice-transport-updated', { ...this.eventScope, observedIceTransport });
 
 		return observedIceTransport;
 	}
@@ -841,15 +838,15 @@ export class ObservedPeerConnection extends EventEmitter {
 				stats.trackIdentifier,
 				this
 			);
-			
+
 			observedInboundRtp.update(stats);
 
 			this.observedInboundRtps.set(stats.ssrc, observedInboundRtp);
-			this.emit('added-inbound-rtp', observedInboundRtp);
+			this._notify('inbound-rtp-added', { ...this.eventScope, observedInboundRtp });
 		} else {
 			observedInboundRtp.update(stats);
 		}
-		this.emit('updated-inbound-rtp', observedInboundRtp);
+		this._notify('inbound-rtp-updated', { ...this.eventScope, observedInboundRtp });
 
 		return observedInboundRtp;
 	}
@@ -866,7 +863,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			}
 
 			const inboundRtp = [ ...this.observedInboundRtps.values() ].find((inbRtp) => inbRtp.trackIdentifier === stats.id);
-			const mediaPlayout = inboundRtp ? 
+			const mediaPlayout = inboundRtp ?
 				[ ...this.observedMediaPlayouts.values() ].find((mp) => mp.id === inboundRtp.playoutId) : undefined;
 
 			observedInboundTrack = new ObservedInboundTrack(
@@ -879,13 +876,13 @@ export class ObservedPeerConnection extends EventEmitter {
 			);
 
 			observedInboundTrack.update(stats);
-			
+
 			this.observedInboundTracks.set(stats.id, observedInboundTrack);
-			this.emit('added-inbound-track', observedInboundTrack);
+			this._notify('inbound-track-added', { ...this.eventScope, observedInboundTrack });
 		} else {
 			observedInboundTrack.update(stats);
 		}
-		this.emit('updated-inbound-track', observedInboundTrack);
+		this._notify('inbound-track-updated', { ...this.eventScope, observedInboundTrack });
 
 		return observedInboundTrack;
 	}
@@ -902,20 +899,20 @@ export class ObservedPeerConnection extends EventEmitter {
 			}
 
 			observedMediaPlayout = new ObservedMediaPlayout(
-				stats.timestamp, 
-				stats.id, 
-				stats.kind as MediaKind, 
+				stats.timestamp,
+				stats.id,
+				stats.kind as MediaKind,
 				this
 			);
 
 			observedMediaPlayout.update(stats);
 
 			this.observedMediaPlayouts.set(stats.id, observedMediaPlayout);
-			this.emit('added-media-playout', observedMediaPlayout);
+			this._notify('media-playout-added', { ...this.eventScope, observedMediaPlayout });
 		} else {
 			observedMediaPlayout.update(stats);
 		}
-		this.emit('updated-media-playout', observedMediaPlayout);
+		this._notify('media-playout-updated', { ...this.eventScope, observedMediaPlayout });
 
 		return observedMediaPlayout;
 	}
@@ -932,20 +929,20 @@ export class ObservedPeerConnection extends EventEmitter {
 			}
 
 			observedMediaSource = new ObservedMediaSource(
-				stats.timestamp, 
-				stats.id, 
-				stats.kind as MediaKind, 
+				stats.timestamp,
+				stats.id,
+				stats.kind as MediaKind,
 				this
 			);
 
 			observedMediaSource.update(stats);
 
 			this.observedMediaSources.set(stats.id, observedMediaSource);
-			this.emit('added-media-source', observedMediaSource);
+			this._notify('media-source-added', { ...this.eventScope, observedMediaSource });
 		} else {
 			observedMediaSource.update(stats);
 		}
-		this.emit('updated-media-source', observedMediaSource);
+		this._notify('media-source-updated', { ...this.eventScope, observedMediaSource });
 
 		return observedMediaSource;
 	}
@@ -972,12 +969,12 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedOutboundRtp.update(stats);
 
 			this.observedOutboundRtps.set(stats.ssrc, observedOutboundRtp);
-			this.emit('added-outbound-rtp', observedOutboundRtp);
+			this._notify('outbound-rtp-added', { ...this.eventScope, observedOutboundRtp });
 		} else {
 			observedOutboundRtp.update(stats);
 		}
-		this.emit('updated-outbound-rtp', observedOutboundRtp);
-		
+		this._notify('outbound-rtp-updated', { ...this.eventScope, observedOutboundRtp });
+
 		return observedOutboundRtp;
 	}
 
@@ -992,7 +989,7 @@ export class ObservedPeerConnection extends EventEmitter {
 				);
 			}
 			const observedMediaSource = [ ...this.observedMediaSources.values() ].find((mediaSource) => mediaSource.trackIdentifier === stats.id);
-			const outboundRtps = observedMediaSource 
+			const outboundRtps = observedMediaSource
 				? [ ...this.observedOutboundRtps.values() ].filter((outboundRtp) => outboundRtp.mediaSourceId === observedMediaSource?.id) : undefined;
 
 			observedOutboundTrack = new ObservedOutboundTrack(
@@ -1007,11 +1004,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedOutboundTrack.update(stats);
 
 			this.observedOutboundTracks.set(stats.id, observedOutboundTrack);
-			this.emit('added-outbound-track', observedOutboundTrack);
+			this._notify('outbound-track-added', { ...this.eventScope, observedOutboundTrack });
 		} else {
 			observedOutboundTrack.update(stats);
 		}
-		this.emit('updated-outbound-track', observedOutboundTrack);
+		this._notify('outbound-track-updated', { ...this.eventScope, observedOutboundTrack });
 
 		return observedOutboundTrack;
 	}
@@ -1032,11 +1029,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedPeerConnectionTransport.update(stats);
 
 			this.observedPeerConnectionTransports.set(stats.id, observedPeerConnectionTransport);
-			this.emit('added-peer-connection-transport', observedPeerConnectionTransport);
+			this._notify('peer-connection-transport-added', { ...this.eventScope, observedPeerConnectionTransport });
 		} else {
 			observedPeerConnectionTransport.update(stats);
 		}
-		this.emit('updated-peer-connection-transport', observedPeerConnectionTransport);
+		this._notify('peer-connection-transport-updated', { ...this.eventScope, observedPeerConnectionTransport });
 
 		return observedPeerConnectionTransport;
 	}
@@ -1063,11 +1060,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedRemoteInboundRtp.update(stats);
 
 			this.observedRemoteInboundRtps.set(stats.ssrc, observedRemoteInboundRtp);
-			this.emit('added-remote-inbound-rtp', observedRemoteInboundRtp);
+			this._notify('remote-inbound-rtp-added', { ...this.eventScope, observedRemoteInboundRtp });
 		} else {
 			observedRemoteInboundRtp.update(stats);
 		}
-		this.emit('updated-remote-inbound-rtp', observedRemoteInboundRtp);
+		this._notify('remote-inbound-rtp-updated', { ...this.eventScope, observedRemoteInboundRtp });
 
 		return observedRemoteInboundRtp;
 	}
@@ -1094,11 +1091,11 @@ export class ObservedPeerConnection extends EventEmitter {
 			observedRemoteOutboundRtp.update(stats);
 
 			this.observedRemoteOutboundRtps.set(stats.ssrc, observedRemoteOutboundRtp);
-			this.emit('added-remote-outbound-rtp', observedRemoteOutboundRtp);
+			this._notify('remote-outbound-rtp-added', { ...this.eventScope, observedRemoteOutboundRtp });
 		} else {
 			observedRemoteOutboundRtp.update(stats);
 		}
-		this.emit('updated-remote-outbound-rtp', observedRemoteOutboundRtp);
+		this._notify('remote-outbound-rtp-updated', { ...this.eventScope, observedRemoteOutboundRtp });
 
 		return observedRemoteOutboundRtp;
 	}

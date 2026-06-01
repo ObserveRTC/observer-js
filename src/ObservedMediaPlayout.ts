@@ -32,8 +32,6 @@ export class ObservedMediaPlayout implements MediaPlayoutStats {
 		return this._peerConnection;
 	}
 
-	
-
 	public update(stats: MediaPlayoutStats) {
 		this._visited = true;
 
