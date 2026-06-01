@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "description": "Server-side Node.js library for processing ObserveRTC Samples (ESM)",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
