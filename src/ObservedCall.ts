@@ -90,9 +90,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	/** Ancestry base shared by all Observer-bus events originating at this call. */
 	public readonly eventScope: ObservedCallScope;
-
-	/** The most recent `accept()` context routed to this call; emitted with `call-updated`. */
-	public lastAcceptContext?: AcceptContext;
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -104,7 +101,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
-		this.appData = settings.appData ?? {} as AppData;
+		this.appData = (settings.appData ?? observer.config.createCallAppData?.({ callId: settings.callId, observer }) ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		// No built-in detectors ship yet. The registry is a server-side extension point:
 		// add custom call-level Detectors via `call.detectors.add(...)` and surface findings
@@ -145,11 +142,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	public get score() {
 		return this.calculatedScore.value;
-	}
-
-	/** Emit an Observer-bus event scoped to this call. */
-	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
-		this.observer.emit(type, ...args);
 	}
 
 	/** Raise a call-level (server-side) issue; surfaced on the Observer bus as `call-issue`. */
@@ -260,9 +252,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.getObservedClient<ClientAppData>(settings.clientId) ?? this.createObservedClient<ClientAppData>(settings);
 	}
 
-	public update() {
+	public update(context?: AcceptContext) {
 		if (this.closed) return;
-		
+
 		this.numberOfInboundRtpStreams = 0;
 		this.numberOfOutboundRtpStreams = 0;
 		this.numberOfPeerConnections = 0;
@@ -279,7 +271,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.detectors.update();
 
 		this.emit('update');
-		this._notify('call-updated', { ...this.eventScope, context: this.lastAcceptContext });
+		this._notify('call-updated', { ...this.eventScope, context });
 
 		this.deltaNumberOfIssues = 0;
 	}
@@ -303,5 +295,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (!client.leftAt) return;
 
 		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
+	}
+
+	/** Emit an Observer-bus event scoped to this call. */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.observer.emit(type, ...args);
 	}
 }

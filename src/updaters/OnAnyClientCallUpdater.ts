@@ -1,5 +1,5 @@
 import { ObservedCall } from '../ObservedCall';
-import { ObservedClient } from '../ObservedClient';
+import { ObservedClient, ObservedClientEvents } from '../ObservedClient';
 import { Updater } from './Updater';
  
 export class OnAnyClientCallUpdater implements Updater {
@@ -26,9 +26,9 @@ export class OnAnyClientCallUpdater implements Updater {
 	private _onNewObservedClient(observedClient: ObservedClient) {
 		if (this.closed) return;
 		
-		const onUpdate = () => {
+		const onUpdate = (...args: ObservedClientEvents['update']) => {
 			if (this.closed) return;
-			this._observedCall.update();
+			this._observedCall.update(args[2]);
 		};
 
 		observedClient.once('close', () => {

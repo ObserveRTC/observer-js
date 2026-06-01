@@ -14,6 +14,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "lint": "./node_modules/.bin/eslint -c .eslintrc.json \"src/**/*.ts\"",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.js"
   },
   "keywords": [

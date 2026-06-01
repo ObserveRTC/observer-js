@@ -116,8 +116,8 @@ observer.on('sample-rejected', ({ reason, sample }) => {
   console.warn('dropped a sample:', reason);
 });
 
-// 3. Feed samples. `context` (optional) is merged into the appData of any
-//    call/client created lazily during this accept() — handy for tagging.
+// 3. Feed samples. `context` (optional) is transient per-accept data, carried to the
+//    `*-updated` events this accept triggers (never written to appData).
 function onClientStats(sample: ClientSample) {
   observer.accept(sample, { studioVersion: '1.2.3' });
 }
@@ -204,12 +204,21 @@ type AcceptContext = Record<string, unknown>;
 ```
 
 A single, optional, free-form object threaded down the whole accept chain
-(`Observer → Client → PeerConnection`). It is **merged into the `appData`** of entities that
-are lazily created (or looked up) during the pass, so you can tag entities the first time you
-see them (e.g. `{ studioVersion, sfuId }`). One object is used regardless of where it is
-supplied. In addition to the `appData` merge, the most recent context is re-emitted as the
-`context` field on the `*-updated` events at the call, client, and peer-connection levels
-(`call-updated`, `client-updated`, `peer-connection-updated`).
+(`Observer → Client → PeerConnection`). It is **transient request-scoped data** — temporary or
+contextual information the application wants available while an update is processed.
+
+`context` is **never written to `appData`** and is **not stored** on any entity. The two are
+deliberately distinct:
+
+- **`appData`** — application-assigned extra info that identifies/decorates an entity, fixed at
+  creation (via `settings.appData` or the `createCallAppData` / `createClientAppData` factories),
+  or assigned by the app on the `*-added` events. The library never changes it.
+- **`context`** — passed per `accept()`, may differ on every call, and is carried straight
+  through to the `*-updated` events that the `accept()` triggers, then discarded.
+
+`client-updated` and `peer-connection-updated` carry the exact context of that sample;
+`call-updated` carries the context of the client `accept()` that drove the call update (absent
+for interval- or teardown-driven call updates). When no context is given, the field is absent.
 
 ### Get-or-create helpers
 
@@ -387,7 +396,25 @@ type ObserverConfig<AppData = Record<string, unknown>> =
     appData?: AppData;
     closeClientIfIdleForMs?: number;
     closeCallIfEmptyForMs?: number;
+    // appData factories — run when an entity is created without explicit appData
+    // (incl. lazily by accept()). appData is application-owned; accept `context` never touches it.
+    createCallAppData?: (p: { callId: string; observer: Observer }) => Record<string, unknown>;
+    createClientAppData?: (p: { clientId: string; observedCall: ObservedCall }) => Record<string, unknown>;
   };
+```
+
+**appData factories.** Instead of pre-creating a call/client (or assigning on `call-added` /
+`client-added`) just to enrich its `appData`, register a factory once. It runs in the entity's
+constructor whenever it's created without an explicit `settings.appData` — including the lazy
+creation inside `accept()`. The `client` factory receives the already-created parent
+`observedCall`, so it can derive fields from it. `appData` is application-owned and is never
+modified by the `accept()` context.
+
+```ts
+const observer = new Observer({
+  createCallAppData:   ({ callId })                 => ({ callId, startedAt: Date.now(), region: 'eu' }),
+  createClientAppData: ({ clientId, observedCall }) => ({ clientId, region: observedCall.appData.region }),
+});
 ```
 
 Key members:
@@ -667,7 +694,7 @@ remaining `throw`s are internal invariants in the unused `Middleware` utility.
 ```ts
 // Entry: src/index.ts
 export { Observer } from './Observer';
-export type { ObserverEvents, SampleRejectedReason, AcceptContext } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory } from './Observer';
 export type { ObserverEventBase, ObservedCallScope, ObservedClientScope, ObservedPeerConnectionScope } from './ObserverEvents';
 
 export { ObservedCall, ObservedClient, ObservedPeerConnection } from './…';
@@ -699,6 +726,7 @@ export type { TrackReport, ClientReport } from './Reports';
 yarn install
 yarn build       # tsc → lib/
 yarn lint        # eslint -c .eslintrc.json "src/**/*.ts"
+yarn typecheck   # tsc --noEmit
 yarn test        # jest
 ```
 
@@ -740,8 +768,8 @@ event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `up
 For an agent continuing the work, these are explicitly **not** present yet:
 
 - **Tests.** There is currently only a placeholder spec. The two `accept()` methods
-  (`ObservedClient`, `ObservedPeerConnection`) are the priority for characterization tests.
-- **CI gate** (lint + typecheck + test).
+  (`ObservedClient`, `ObservedPeerConnection`) are the priority for characterization tests. (A
+  CI gate running lint + typecheck + test is already in place — see `.github/workflows/ci.yml`.)
 - **Built-in detectors / quality classifier.** The registry exists; concrete server-side
   detectors (e.g. producer→consumer delivery mismatch, quality outlier, asymmetric media) are
   to be designed.

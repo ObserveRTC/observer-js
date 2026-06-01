@@ -1,5 +1,6 @@
 import { ObservedCall } from '../ObservedCall';
-import { ObservedClient } from '../ObservedClient';
+import { ObservedClient, ObservedClientEvents } from '../ObservedClient';
+import type { AcceptContext } from '../Observer';
 import { Updater } from './Updater';
  
 export class OnAllClientCallUpdater implements Updater {
@@ -30,7 +31,7 @@ export class OnAllClientCallUpdater implements Updater {
 	private _onNewObservedClient(observedClient: ObservedClient) {
 		if (this.closed) return;
 		
-		const onUpdate = () => this._onClientUpdate(observedClient);
+		const onUpdate = (...args: ObservedClientEvents['update']) => this._onClientUpdate(observedClient, args[2]);
 
 		observedClient.once('close', () => {
 			observedClient.off('update', onUpdate);
@@ -40,14 +41,14 @@ export class OnAllClientCallUpdater implements Updater {
 		observedClient.on('update', onUpdate);
 	}
 
-	private _onClientUpdate(observedClient: ObservedClient) {
+	private _onClientUpdate(observedClient: ObservedClient, context?: AcceptContext) {
 		if (observedClient.closed) return;
 
 		this._updatedClients.add(observedClient.clientId);
-		this._updateIfEveryClientUpdated();
+		this._updateIfEveryClientUpdated(context);
 	}
 
-	private _updateIfEveryClientUpdated() {
+	private _updateIfEveryClientUpdated(context?: AcceptContext) {
 		if (this._updatedClients.size < this._observedCall.observedClients.size) {
 			return;
 		} else if (this.closed) {
@@ -55,7 +56,7 @@ export class OnAllClientCallUpdater implements Updater {
 		}
 
 		this._updatedClients.clear();
-		this._observedCall.update();
+		this._observedCall.update(context);
 	}
 
 }	

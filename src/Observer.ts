@@ -35,12 +35,28 @@ type ObserverUpdateConfig =
 		updateIntervalInMs?: number,
 	};
 
+/** Produces the initial `appData` for a call created without an explicit `appData`. */
+export type CallAppDataFactory = (params: { callId: string, observer: Observer }) => Record<string, unknown>;
+
+/** Produces the initial `appData` for a client created without an explicit `appData`. */
+export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall }) => Record<string, unknown>;
+
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = ObserverUpdateConfig & {
 	defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'],
 	defaultCallUpdateIntervalInMs?: number,
 	appData?: AppData,
 	closeClientIfIdleForMs?: number,
 	closeCallIfEmptyForMs?: number,
+
+	/**
+	 * Optional factory invoked when a call is created without an explicit `appData`
+	 * (e.g. lazily by `accept()`), so apps can enrich appData without pre-creating the
+	 * entity. `appData` is application-owned; it is never modified by the `accept()` context.
+	 */
+	createCallAppData?: CallAppDataFactory,
+
+	/** Same as `createCallAppData`, for clients. Receives the (already-created) parent call. */
+	createClientAppData?: ClientAppDataFactory,
 }
 
 export declare interface Observer {
@@ -69,10 +85,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public numberOfOutboundRtpStreams = 0;
 	public numberOfDataChannels = 0;
 	public numberOfPeerConnections = 0;
-
-	public get numberOfCalls() {
-		return this.observedCalls.size;
-	}
 
 	private _timer?: ReturnType<typeof setInterval>;
 
@@ -110,13 +122,12 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		}
 	}
 
-	public get appData() {
-		return this.config.appData;
+	public get numberOfCalls() {
+		return this.observedCalls.size;
 	}
 
-	/** Emit an Observer-bus event. */
-	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
-		this.emit(type, ...args);
+	public get appData() {
+		return this.config.appData;
 	}
 
 	public getObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCall<T> | undefined {
@@ -203,28 +214,23 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return;
 		}
 
+		// Lazily create the call/client. appData for new entities comes only from the
+		// configured factory (createCallAppData / createClientAppData) applied in their
+		// constructors — never from the accept `context`. The context is transient and is
+		// only carried through to the `*-updated` events.
 		let call = this.getObservedCall(sample.callId);
 
 		if (!call) {
-			call = this.createObservedCall({
-				callId: sample.callId,
-				...(context ? { appData: { ...context } } : {}),
-			});
+			call = this.createObservedCall({ callId: sample.callId });
 		}
 		if (!call) return;
-		if (context) Object.assign(call.appData, context);
-		call.lastAcceptContext = context;
 
 		let client = call.getObservedClient(sample.clientId);
 
 		if (!client) {
-			client = call.createObservedClient({
-				clientId: sample.clientId,
-				...(context ? { appData: { ...context } } : {}),
-			});
+			client = call.createObservedClient({ clientId: sample.clientId });
 		}
 		if (!client) return;
-		if (context) Object.assign(client.appData, context);
 
 		client.accept(sample, context);
 	}
@@ -253,5 +259,10 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.observedTURN.update();
 
 		this._notify('observer-updated', { ...this.eventScope });
+	}
+
+	/** Emit an Observer-bus event. */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.emit(type, ...args);
 	}
 }

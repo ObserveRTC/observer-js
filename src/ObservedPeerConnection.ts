@@ -159,14 +159,6 @@ export class ObservedPeerConnection extends EventEmitter {
 		return this.calculatedScore.value;
 	}
 
-	/** Emit an Observer-bus event scoped to this peer connection. */
-	private _notify<K extends keyof ObserverEvents>(
-		type: K,
-		...args: ObserverEvents[K]
-	): void {
-		this.client.call.observer.emit(type, ...args);
-	}
-
 	public get visited() {
 		const visited = this._visited;
 
@@ -978,7 +970,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		return observedOutboundRtp;
 	}
 
-	public _updateOutboundTrackSample(stats: OutboundTrackSample) {
+	private _updateOutboundTrackSample(stats: OutboundTrackSample) {
 		let observedOutboundTrack = this.observedOutboundTracks.get(stats.id);
 
 		if (!observedOutboundTrack) {
@@ -1098,5 +1090,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._notify('remote-outbound-rtp-updated', { ...this.eventScope, observedRemoteOutboundRtp });
 
 		return observedRemoteOutboundRtp;
+	}
+
+	/** Emit an Observer-bus event scoped to this peer connection. */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.client.call.observer.emit(type, ...args);
 	}
 }

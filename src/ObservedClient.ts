@@ -27,7 +27,7 @@ export type ObservedClientSettings<AppData extends Record<string, unknown> = Rec
 // emitted on the Observer bus (see ObserverEvents). These remain local so the
 // parent ObservedCall and the updaters can wire to them for teardown/aggregation.
 export type ObservedClientEvents = {
-	update: [sample: ClientSample, elapsedTimeInMs: number];
+	update: [sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext];
 	close: [];
 	joined: [];
 	left: [];
@@ -130,7 +130,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.eventScope = { observer: call.observer, observedCall: call, observedClient: this };
 		this.clientId = settings.clientId;
-		this.appData = settings.appData ?? {} as AppData;
+		this.appData = (settings.appData ?? call.observer.config.createClientAppData?.({ clientId: settings.clientId, observedCall: call }) ?? {}) as AppData;
 
 		this.settings = {
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
@@ -181,11 +181,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get score() {
 		return this.calculatedScore.value;
-	}
-
-	/** Emit an Observer-bus event scoped to this client (or a peer connection under it). */
-	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
-		this.call.observer.emit(type, ...args);
 	}
 
 	public close() {
@@ -390,7 +385,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// emit update
 		const elapsedTimeInMs = now - this.updated;
 
-		this.emit('update', sample, elapsedTimeInMs);
+		this.emit('update', sample, elapsedTimeInMs, context);
 		this._notify('client-updated', { ...this.eventScope, sample, elapsedTimeInMs, context });
 		this.updated = now;
 
@@ -405,6 +400,83 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.close();
 			}, this.settings.closeClientIfIdleForMs);
 		}
+	}
+
+	public injectMetaData(metaData: ClientMetaData) {
+		if (this.closed) return;
+
+		if (!this._injections.clientMetaItems) this._injections.clientMetaItems = [];
+
+		this._injections.clientMetaItems.push(metaData);
+	}
+
+	public injectEvent(event: ClientEvent) {
+		if (this.closed) return;
+
+		if (!this._injections.clientEvents) this._injections.clientEvents = [];
+
+		this._injections.clientEvents.push(event);
+	}
+
+	public injectIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		if (!this._injections.clientIssues) this._injections.clientIssues = [];
+
+		this._injections.clientIssues.push(issue);
+	}
+
+	public injectExtensionStat(stat: ExtensionStat) {
+		if (this.closed) return;
+
+		if (!this._injections.extensionStats) this._injections.extensionStats = [];
+
+		this._injections.extensionStats.push(stat);
+	}
+
+	public injectAttachment(key: string, value: unknown) {
+		if (this.closed) return;
+
+		if (!this._injections.attachments) this._injections.attachments = {};
+
+		this._injections.attachments[key] = value;
+	}
+
+	public addMetadata(metadata: ClientMetaData) {
+		if (this.closed) return;
+
+		switch (metadata.type) {
+			case ClientMetaTypes.BROWSER: {
+				this.browser = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.ENGINE: {
+				this.engine = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.PLATFORM: {
+				this.platform = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.OPERATION_SYSTEM: {
+				this.operationSystem = parseJsonAs(metadata.payload);
+				break;
+			}
+		}
+
+		this._notify('client-metadata', { ...this.eventScope, metaData: metadata });
+	}
+
+	public addIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		this.report.issues[issue.type] = (this.report.issues[issue.type] ?? 0) + 1;
+
+		this._notify('client-issue', { ...this.eventScope, issue });
+	}
+
+	public addExtensionStats(stats: ExtensionStat) {
+		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
 	}
 
 	private _processClientEvent(event: ClientEvent, postBuffer?: ClientEvent[]) {
@@ -647,84 +719,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this._notify('client-event', { ...this.eventScope, event });
 	}
 
-	public injectMetaData(metaData: ClientMetaData) {
-		if (this.closed) return;
-		
-		if (!this._injections.clientMetaItems) this._injections.clientMetaItems = [];
-
-		this._injections.clientMetaItems.push(metaData);
-	}
-
-	public injectEvent(event: ClientEvent) {
-		if (this.closed) return;
-
-		if (!this._injections.clientEvents) this._injections.clientEvents = [];
-
-		this._injections.clientEvents.push(event);
-	}
-
-	public injectIssue(issue: ClientIssue) {
-		if (this.closed) return;
-
-		if (!this._injections.clientIssues) this._injections.clientIssues = [];
-
-		this._injections.clientIssues.push(issue);
-	}
-
-	public injectExtensionStat(stat: ExtensionStat) {
-		if (this.closed) return;
-
-		if (!this._injections.extensionStats) this._injections.extensionStats = [];
-
-		this._injections.extensionStats.push(stat);
-	}
-
-	public injectAttachment(key: string, value: unknown) {
-		if (this.closed) return;
-
-		if (!this._injections.attachments) this._injections.attachments = {};
-
-		this._injections.attachments[key] = value;
-		
-	}
-
-	public addMetadata(metadata: ClientMetaData) {
-		if (this.closed) return;
-		
-		switch (metadata.type) {
-			case ClientMetaTypes.BROWSER: {
-				this.browser = parseJsonAs(metadata.payload);
-				break;
-			}
-			case ClientMetaTypes.ENGINE: {
-				this.engine = parseJsonAs(metadata.payload);
-				break;
-			}
-			case ClientMetaTypes.PLATFORM: {
-				this.platform = parseJsonAs(metadata.payload);
-				break;
-			}
-			case ClientMetaTypes.OPERATION_SYSTEM: {
-				this.operationSystem = parseJsonAs(metadata.payload);
-				break;
-			}
-		}
-
-		this._notify('client-metadata', { ...this.eventScope, metaData: metadata });
-	}
-
-	public addIssue(issue: ClientIssue) {
-		if (this.closed) return;
-
-		this.report.issues[issue.type] = (this.report.issues[issue.type] ?? 0) + 1;
-
-		this._notify('client-issue', { ...this.eventScope, issue });
-	}
-
-	public addExtensionStats(stats: ExtensionStat) {
-		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
-	}
-
 	private _updatePeerConnection(sample: PeerConnectionSample, context?: AcceptContext): ObservedPeerConnection | undefined {
 		let observedPeerConnection = this.observedPeerConnections.get(sample.peerConnectionId);
 
@@ -814,5 +808,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 
 		return sample;
+	}
+
+	/** Emit an Observer-bus event scoped to this client (or a peer connection under it). */
+	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
+		this.call.observer.emit(type, ...args);
 	}
 }
