@@ -1,55 +1,61 @@
 name: Publish
+
 on:
   push:
     branches:
       - master
       - develop
-  pull_request:
-    branches:
-      - master
+
+# Required for npm Trusted Publishing (OIDC). `id-token: write` lets the job mint the
+# short-lived OIDC token npm exchanges for publish rights, and enables provenance attestations.
+# No NPM_TOKEN secret is used anymore.
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted Publishing requires npm >= 11.5.1; Node 20 ships an older npm, so upgrade it.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Install
-        run: yarn
+        run: yarn install --frozen-lockfile
 
       - name: Build
         run: yarn build
 
       - name: Test
-        run: yarn test --detectOpenHandles --forceExit
+        run: yarn test --ci
 
-      - name: Setup Custom Contexts
+      - name: Resolve context
+        id: ctx
         shell: bash
         run: |
-          echo "##[set-output name=branch;]$(echo ${GITHUB_REF##*/})"
-          echo "##[set-output name=version;]$(cat ./package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')"
-          echo "##[set-output name=short_sha;]$(git rev-parse --short HEAD)"
-        id: job_context
+          echo "branch=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      # master -> publish to the "latest" dist-tag.
+      # Auth is via OIDC (trusted publisher); provenance is attached automatically.
+      - name: Publish (latest)
+        if: steps.ctx.outputs.branch == 'master'
+        run: npm publish --access public --ignore-scripts
+
+      # develop -> publish a per-commit release candidate under a custom dist-tag.
       - name: Make snapshot version
-        if: steps.job_context.outputs.branch != 'master'
-        run: |
-          npm version prerelease --preid=${{ steps.job_context.outputs.short_sha }} --git-tag-version false
+        if: steps.ctx.outputs.branch != 'master'
+        run: npm version prerelease --preid=${{ steps.ctx.outputs.short_sha }} --git-tag-version false
 
-      - name: Publish package to latest
-        if: steps.job_context.outputs.branch == 'master'
-        run: |
-          npm config set //registry.npmjs.org/:_authToken ${NPM_TOKEN}
-          npm publish --ignore-scripts --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish package to branch-tag
-        if: steps.job_context.outputs.branch != 'master'
-        run: |
-          npm config set //registry.npmjs.org/:_authToken ${NPM_TOKEN}
-          npm publish --ignore-scripts --access public  --tag $(echo "develop-${{ steps.job_context.outputs.version }}-rc" | sed 's/[.]//g')
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish (release candidate)
+        if: steps.ctx.outputs.branch != 'master'
+        run: npm publish --access public --ignore-scripts --tag "$(echo "develop-${{ steps.ctx.outputs.version }}-rc" | sed 's/[.]//g')"
