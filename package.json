@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.7",
   "description": "Server-side Node.js library for processing ObserveRTC Samples",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -21,7 +21,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
     "prepare": "npm run build",

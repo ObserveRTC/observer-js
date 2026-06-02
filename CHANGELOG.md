@@ -88,7 +88,7 @@ the 1.0.0 API provides.
 
 ### Packaging & tooling
 
-- **Server-side, Node.js ≥ 22.** Shipped as a **dual ESM + CommonJS** build (single entry) via
+- **Server-side, Node.js ≥ 20.** Shipped as a **dual ESM + CommonJS** build (single entry) via
   `tsup`, with `.d.ts`/`.d.mts` types and sourcemaps; works with both `import` and `require()`.
 - **CI gate** (lint + typecheck + build + tested with a **coverage threshold**) and **npm Trusted
   Publishing (OIDC) with provenance**.

@@ -15,7 +15,7 @@ and emits a single, unified stream of typed events the application can react to.
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
-> **Packaging:** server-side, **Node.js ≥ 22**, shipped as a **dual ESM + CommonJS** build — so it
+> **Packaging:** server-side, **Node.js ≥ 20**, shipped as a **dual ESM + CommonJS** build — so it
 > works whether your project uses `import` (ESM) or `require()` (CommonJS). Everything — including
 > the built-in file sink — is exported from the single `@observertc/observer-js` entry.
 
@@ -52,7 +52,7 @@ npm install @observertc/observer-js
 yarn add @observertc/observer-js
 ```
 
-**Server-side, Node.js ≥ 22, dual ESM + CommonJS.** The package ships both module formats, so it
+**Server-side, Node.js ≥ 20, dual ESM + CommonJS.** The package ships both module formats, so it
 works the same whether your project is ESM or CommonJS — your import line is unchanged either way:
 
 ```ts
@@ -929,7 +929,7 @@ yarn test        # jest
 
 The build is driven by [`tsup`](https://tsup.egoist.dev) (config in `tsup.config.ts`): a single
 entry (`src/index.ts`), dual ESM + CommonJS output to `dist/` (`index.mjs` / `index.js`) with
-`.d.mts` / `.d.ts` types and sourcemaps, targeting Node 22. CI (`.github/workflows/ci.yml`) runs
+`.d.mts` / `.d.ts` types and sourcemaps, targeting Node 20. CI (`.github/workflows/ci.yml`) runs
 lint + typecheck + **build** + test on every push/PR.
 
 **Project layout** (`src/`): `Observer.ts`, `ObservedCall.ts`, `ObservedClient.ts`,
