@@ -15,8 +15,9 @@ and emits a single, unified stream of typed events the application can react to.
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
-> **Packaging:** the package is **ESM-only** and **server-side** (Node.js ≥ 16). Everything —
-> including the built-in file sink — is exported from the single `@observertc/observer-js` entry.
+> **Packaging:** server-side, **Node.js ≥ 22**, shipped as a **dual ESM + CommonJS** build — so it
+> works whether your project uses `import` (ESM) or `require()` (CommonJS). Everything — including
+> the built-in file sink — is exported from the single `@observertc/observer-js` entry.
 
 ---
 
@@ -51,21 +52,19 @@ npm install @observertc/observer-js
 yarn add @observertc/observer-js
 ```
 
-**ESM-only, server-side.** The package ships ES Modules (`import`, not `require()`) and targets
-**Node.js ≥ 16**. Use it from ESM code (`"type": "module"`, or `.mjs`), or from TypeScript
-compiled to ESM. Everything is exported from the single `@observertc/observer-js` entry:
+**Server-side, Node.js ≥ 22, dual ESM + CommonJS.** The package ships both module formats, so it
+works the same whether your project is ESM or CommonJS — your import line is unchanged either way:
 
 ```ts
 import { Observer, ClientSample, createJsonlFileSinkFactory } from '@observertc/observer-js';
 ```
 
-Written in TypeScript; ships type declarations alongside the build (`dist/index.d.mts`). Runtime
+In an ESM project this resolves to the `.mjs` build; in a CommonJS project (where TypeScript
+compiles your `import` down to `require()`) it resolves to the `.js` build. Everything is exported
+from the single `@observertc/observer-js` entry. Written in TypeScript; ships type declarations for
+both formats (`dist/index.d.ts` for `require`, `dist/index.d.mts` for `import`). Runtime
 dependencies: `@bufbuild/protobuf`, `events`, `uuid`. The library does **not** bundle a logger or
 any transport — see [Logging](#logging).
-
-> **Note on `require()`.** Being ESM-only, the package can't be loaded with CommonJS
-> `require('@observertc/observer-js')`; consume it with `import` (or `await import()` from a CJS
-> module). If you need a CommonJS build, a dual ESM+CJS output is a small change — ask.
 
 `ClientSample` and friends are re-exported from this package, and are also published as the
 shared schema in [`@observertc/schemas`](https://github.com/observertc/schemas); samples
@@ -733,11 +732,31 @@ observer.on('client-sink-created', ({ observedClient, sink }) => {
 |--------|-----------|-------|
 | `createJsonlFileSinkFactory` | `({ directory, flags?, getFileName?, serializeSample? }) => ClientSampleSinkFactory` | per-client JSONL files; path defaults to `${callId}__${clientId}.jsonl` under `directory` (which **must exist**) |
 | `createJsonlFileSink` | `({ path, flags?, serializeSample? }) => ClientSampleSink` | a single JSONL file; wraps `fs.WriteStream` and re-emits its `close`/`finish`/`drain`/`error` |
-| `JsonlFileSink` | `class extends ClientSampleSink` | the underlying class, if you want to construct it directly |
+| `JsonlFileSink` | `class extends ClientSampleSink` | the underlying class; exposes `readonly path` so a `close` handler knows which file is ready |
 | `createInMemorySink` / `InMemorySink` | `(samples?: ClientSample[]) => InMemorySink` | collects the accepted **sample objects** into `.samples: ClientSample[]`; emits `close` on `end()` |
 
 `serializeSample?: (sample: ClientSample) => string` overrides the default `JSON.stringify` for
 the JSONL sinks (e.g. to redact or reshape before writing).
+
+### Reading sink-specific info (e.g. the file path)
+
+The bus hands you the sink as the base `ClientSampleSink`. To read information specific to a sink
+type — for a file sink, where it was written — **narrow with `instanceof`** and read the sink's
+public fields. `JsonlFileSink` exposes `path`:
+
+```ts
+import { JsonlFileSink } from '@observertc/observer-js';
+
+observer.on('client-sink-created', ({ observedClient, sink }) => {
+  if (sink instanceof JsonlFileSink) {
+    const { path } = sink;                          // the file this client's samples go to
+    sink.once('close', () => uploadFile(path));     // close = flushed & fd closed → ready
+  }
+});
+```
+
+The general pattern: each concrete sink exposes whatever it wants as `public readonly` fields, and
+consumers narrow (`instanceof YourSink`) to read them. Your own sinks do the same.
 
 ### Writing your own sink
 
@@ -853,23 +872,23 @@ export type { TrackReport, ClientReport } from './Reports';
 
 ```bash
 yarn install
-yarn build       # tsup → dist/ (ESM: index + sinks, with .d.mts types & sourcemaps)
+yarn build       # tsup → dist/ (dual ESM .mjs + CJS .js, single entry, .d.ts/.d.mts + sourcemaps)
 yarn lint        # eslint -c .eslintrc.json "src/**/*.ts"
 yarn typecheck   # tsc --noEmit
 yarn test        # jest
 ```
 
 The build is driven by [`tsup`](https://tsup.egoist.dev) (config in `tsup.config.ts`): a single
-entry (`src/index.ts`), ESM output to `dist/` with `.d.mts` types and sourcemaps. CI
-(`.github/workflows/ci.yml`) runs lint + typecheck + **build** + test on every push/PR.
+entry (`src/index.ts`), dual ESM + CommonJS output to `dist/` (`index.mjs` / `index.js`) with
+`.d.mts` / `.d.ts` types and sourcemaps, targeting Node 22. CI (`.github/workflows/ci.yml`) runs
+lint + typecheck + **build** + test on every push/PR.
 
 **Project layout** (`src/`): `Observer.ts`, `ObservedCall.ts`, `ObservedClient.ts`,
 `ObservedPeerConnection.ts`, the `Observed*` sub-stat classes, `ObserverEvents.ts` (the typed
 event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `updaters/`
 (update-policy strategies), `utils/` (remote-track resolvers), `common/` (`logger`, `utils`,
-`Middleware`), `schema/` (sample/event/meta types), and `sinks/` (the import-safe
-`ClientSampleSink` base + the Node-only `JsonlFileSink` / `InMemorySink`, re-exported via the
-`@observertc/observer-js/sinks` subpath).
+`Middleware`), `schema/` (sample/event/meta types), and `sinks/` (the `ClientSampleSink` base +
+`JsonlFileSink` / `InMemorySink`, re-exported from the package root).
 
 **Conventions to follow when developing further:**
 

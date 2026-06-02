@@ -18,12 +18,16 @@ export type JsonlFileSinkOptions = {
  * and its descriptor is closed (file ready) and `error` surfaces file errors.
  */
 export class JsonlFileSink extends ClientSampleSink {
+	/** The file this sink writes to. Read it (e.g. in a `close` handler) to upload/move the file. */
+	public readonly path: string;
+
 	private readonly _stream: fs.WriteStream;
 	private readonly _serializeSample: (sample: ClientSample) => string;
 
 	public constructor(options: JsonlFileSinkOptions) {
 		super();
-		this._stream = fs.createWriteStream(options.path, { flags: 'a' });
+		this.path = options.path;
+		this._stream = fs.createWriteStream(this.path, { flags: 'a' });
 
 		this._stream.on('close', () => this.emit('close'));
 		this._stream.on('finish', () => this.emit('finish'));
