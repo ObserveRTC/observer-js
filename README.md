@@ -104,9 +104,8 @@ import { Observer, ClientSample } from '@observertc/observer-js';
 
 // 1. Create an observer.
 const observer = new Observer({
-  // how often the observer aggregates call/client metrics:
-  updatePolicy: 'update-on-interval',
-  updateIntervalInMs: 5000,
+  // when the observer aggregates call/client metrics:
+  updatePolicy: 'update-when-all-call-updated',
   // default policy applied to calls created automatically by accept():
   defaultCallUpdatePolicy: 'update-on-any-client-updated',
   // optional auto-teardown:
@@ -206,11 +205,48 @@ fields from the schema plus derived fields (deltas, bitrates).
 
 The single entry point. It:
 
-1. drops + emits `sample-rejected` if the observer is closed, or `callId`/`clientId` is missing;
-2. gets or lazily creates the `ObservedCall` and `ObservedClient`;
-3. shallow-merges `context` into the created/looked-up entity `appData`;
-4. delegates to `client.accept(sample, context)`, which fans out to each
+1. drops + emits `sample-rejected` if the observer is closed;
+2. runs the sample through the **global accept-middleware chain** (see below);
+3. (chain terminal) drops + emits `sample-rejected` if `callId`/`clientId` is missing;
+4. gets or lazily creates the `ObservedCall` and `ObservedClient` (their `appData` comes from the
+   configured factories, never from `context`);
+5. delegates to `client.accept(sample, context)`, which fans out to each
    `ObservedPeerConnection.accept(pcSample, context)`.
+
+### Accept middlewares (global pre-dispatch hook)
+
+`observer.addAcceptMiddleware(...)` registers middlewares run on **every** sample inside
+`accept()`, in order, **before** the sample is dispatched to any call or client. Each middleware
+gets a `{ sample, context }` payload; it can inspect or mutate the sample (set/normalize
+`callId`/`clientId`, enrich, redact) or the context, then call `next(payload)` to continue.
+**Not calling `next` drops the sample** — nothing is created and no event fires. A throwing
+middleware is caught and warns (the sample is dropped), never crashing `accept()`.
+
+```ts
+import { Observer, AcceptMiddleware } from '@observertc/observer-js';
+
+const observer = new Observer();
+
+// derive callId/clientId from the app's own attachment, before dispatch
+const route: AcceptMiddleware = ({ sample }, next) => {
+  sample.callId ??= sample.attachments?.roomId as string;
+  sample.clientId ??= sample.attachments?.peerId as string;
+  next({ sample });
+};
+
+// drop samples from a blocklisted client (never dispatched)
+const filter: AcceptMiddleware = (payload, next) => {
+  if (blocked.has(payload.sample.clientId)) return;   // no next() => dropped
+  next(payload);
+};
+
+observer.addAcceptMiddleware(route, filter);
+// observer.removeAcceptMiddleware(route);
+```
+
+This is a lightweight global injection point, distinct from the larger (not-yet-built)
+`ClientSampleProcessor` pipeline in the roadmap. When no middleware is registered, `accept()`
+dispatches directly with no overhead.
 
 ### `context` (the `AcceptContext`)
 
@@ -259,9 +295,9 @@ These return `undefined` (and warn) when the parent is closed; `createObservedCa
 ## Update policies
 
 "Update" means *recompute aggregated metrics and emit the `*-updated` event* at that level.
-Both the observer and each call have a configurable trigger. The `update-on-interval` policy
-**requires** an interval and this is enforced at compile time (a discriminated union); at
-runtime a missing interval warns and falls back rather than throwing.
+Both the observer and each call have a configurable trigger. Updates are **event-driven** — there
+is no built-in timer. An app that wants a fixed cadence can call `observer.update()` /
+`call.update()` from its own `setInterval`.
 
 **Observer-level** (`ObserverConfig.updatePolicy`, default `update-when-all-call-updated`):
 
@@ -269,7 +305,6 @@ runtime a missing interval warns and falls back rather than throwing.
 |--------|-------------------------------------|
 | `update-on-any-call-updated` | any call updates |
 | `update-when-all-call-updated` | every call has updated since the last observer update |
-| `update-on-interval` | a timer fires (`updateIntervalInMs` required) |
 
 **Call-level** (`ObservedCallSettings.updatePolicy`, defaulted from
 `ObserverConfig.defaultCallUpdatePolicy`):
@@ -278,7 +313,6 @@ runtime a missing interval warns and falls back rather than throwing.
 |--------|--------------------------------|
 | `update-on-any-client-updated` | any client in the call updates |
 | `update-when-all-client-updated` | every client has updated since the last call update |
-| `update-on-interval` | a timer fires (`updateIntervalInMs` required) |
 
 ---
 
@@ -403,12 +437,9 @@ listen to them, but prefer the bus equivalents above for application logic.
 ```ts
 new Observer<AppData>(config?: ObserverConfig<AppData>)
 
-type ObserverConfig<AppData = Record<string, unknown>> =
-  ( { updatePolicy: 'update-on-interval'; updateIntervalInMs: number }
-  | { updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated'; updateIntervalInMs?: number }
-  ) & {
+type ObserverConfig<AppData = Record<string, unknown>> = {
+    updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated';
     defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'];
-    defaultCallUpdateIntervalInMs?: number;
     appData?: AppData;
     closeClientIfIdleForMs?: number;
     closeCallIfEmptyForMs?: number;
@@ -438,6 +469,7 @@ const observer = new Observer({
 Key members:
 
 - `accept(sample: ClientSample, context?: AcceptContext): void`
+- `addAcceptMiddleware(...mw: AcceptMiddleware[]): this` / `removeAcceptMiddleware(...mw): this` — global pre-dispatch sample hooks (see [Accept middlewares](#accept-middlewares-global-pre-dispatch-hook))
 - `getObservedCall<T>(callId): ObservedCall<T> | undefined`
 - `createObservedCall<T>(settings): ObservedCall<T> | undefined`
 - `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
@@ -454,10 +486,8 @@ Key members:
 ### `ObservedCall`
 
 ```ts
-type ObservedCallSettings<AppData = Record<string, unknown>> =
-  ( { updatePolicy: 'update-on-interval'; updateIntervalInMs: number }
-  | { updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated'; updateIntervalInMs?: number }
-  ) & {
+type ObservedCallSettings<AppData = Record<string, unknown>> = {
+    updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated';
     callId: string;
     appData?: AppData;
     remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none';
@@ -819,14 +849,15 @@ filtering, per-module routing, and full silencing.
 
 The library **warns and degrades; it does not throw** on operational problems:
 
-- Bad config (`update-on-interval` without an interval) → warn + safe fallback policy.
 - `createObservedCall` / `createObservedClient` on a closed parent → warn + return `undefined`.
 - Duplicate id → warn + return the **existing** instance.
 - `accept()` on a closed client → warn + no-op.
 - Sample missing `callId`/`clientId`, or observer closed → `sample-rejected` event.
+- A throwing accept-middleware → warn + drop that sample (never crashes `accept()`).
 
-Therefore `create*` and `getOrCreate*` return `T | undefined`; **guard the result.** The only
-remaining `throw`s are internal invariants in the unused `Middleware` utility.
+Therefore `create*` and `getOrCreate*` return `T | undefined`; **guard the result.** The
+`Middleware` utility's internal invariants (e.g. calling `next()` twice) throw, but those throws
+are caught by `accept()` and surfaced as a warning.
 
 ---
 

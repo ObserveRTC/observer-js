@@ -8,7 +8,6 @@ import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator'
 import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
 import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
 import { Updater } from './updaters/Updater';
-import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
 import { Detectors } from './detectors/Detectors';
 import { ClientIssue } from './schema/ClientSample';
@@ -17,16 +16,11 @@ import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
 
 const logger = createLogger('ObservedCall');
 
-// `update-on-interval` requires an interval; the other policies do not use one.
-type ObservedCallUpdateConfig =
-	| {
-		updatePolicy: 'update-on-interval',
-		updateIntervalInMs: number,
-	}
-	| {
-		updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated',
-		updateIntervalInMs?: number,
-	};
+// Updates are event-driven: triggered when any/all clients in the call have updated.
+// (Apps wanting a fixed cadence can call `call.update()` on their own timer.)
+type ObservedCallUpdateConfig = {
+	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated',
+};
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = ObservedCallUpdateConfig & {
 	callId: string;
@@ -108,26 +102,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		// with `call.addIssue(...)` (emitted on the Observer bus as `call-issue`).
 		this.detectors = new Detectors();
 
-		if (settings.updateIntervalInMs && settings.updatePolicy !== 'update-on-interval') {
-			logger.warn('updateIntervalInMs is ignored unless updatePolicy is "update-on-interval" (callId: %s)', settings.callId);
-		}
 		switch (settings.updatePolicy) {
 			case 'update-on-any-client-updated':
 				this.updater = new OnAnyClientCallUpdater(this);
 				break;
 			case 'update-when-all-client-updated':
 				this.updater = new OnAllClientCallUpdater(this);
-				break;
-			case 'update-on-interval':
-				if (!settings.updateIntervalInMs) {
-					logger.warn('updateIntervalInMs must be set when updatePolicy is "update-on-interval"; falling back to "update-when-all-client-updated" (callId: %s)', settings.callId);
-					this.updater = new OnAllClientCallUpdater(this);
-				} else {
-					this.updater = new OnIntervalUpdater(
-						settings.updateIntervalInMs,
-						this.update.bind(this),
-					);
-				}
 				break;
 		}
 

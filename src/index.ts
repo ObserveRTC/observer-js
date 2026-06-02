@@ -1,4 +1,4 @@
-export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory, AcceptMiddleware, AcceptMiddlewarePayload } from './Observer';
 export type {
 	ObserverEventBase,
 	ObservedCallScope,

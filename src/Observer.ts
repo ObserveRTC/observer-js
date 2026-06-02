@@ -4,12 +4,12 @@ import { EventEmitter } from 'events';
 import { ClientSample } from './schema/ClientSample';
 import { ObservedTURN } from './ObservedTURN';
 import { Updater } from './updaters/Updater';
-import { OnIntervalUpdater } from './updaters/OnIntervalUpdater';
 import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater';
 import { MediasoupRemoteTrackResolver } from './utils/MediasoupRemoteTrackResolver';
 import type { ObserverEvents, ObserverEventBase } from './ObserverEvents';
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
+import { Middleware, MiddlewareProcessor } from './common/Middleware';
 
 const logger = createLogger('Observer');
 
@@ -24,17 +24,25 @@ export type { ObserverEvents } from './ObserverEvents';
  */
 export type AcceptContext = Record<string, unknown>;
 
-// `update-on-interval` requires an interval; the other policies do not use one.
-// This makes the illegal combination a compile-time error instead of a runtime throw.
-type ObserverUpdateConfig =
-	| {
-		updatePolicy: 'update-on-interval',
-		updateIntervalInMs: number,
-	}
-	| {
-		updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated',
-		updateIntervalInMs?: number,
-	};
+/** The payload threaded through `accept()` middlewares: the sample and its optional context. */
+export type AcceptMiddlewarePayload = {
+	sample: ClientSample,
+	context?: AcceptContext,
+};
+
+/**
+ * A global middleware run on every sample passed to `observer.accept()`, in registration order,
+ * **before** the sample is dispatched to any call/client. It may inspect or mutate the sample
+ * (e.g. set/normalize `callId`/`clientId`, enrich, redact) or the context, then call
+ * `next(payload)` to continue the chain. Not calling `next` **drops** the sample.
+ */
+export type AcceptMiddleware = Middleware<AcceptMiddlewarePayload>;
+
+// Updates are event-driven: triggered when any/all calls have updated.
+// (Apps wanting a fixed cadence can call `observer.update()` on their own timer.)
+type ObserverUpdateConfig = {
+	updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated',
+};
 
 /** Produces the initial `appData` for a call created without an explicit `appData`. */
 export type CallAppDataFactory = (params: { callId: string, observer: Observer }) => Record<string, unknown>;
@@ -44,7 +52,6 @@ export type ClientAppDataFactory = (params: { clientId: string, observedCall: Ob
 
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = ObserverUpdateConfig & {
 	defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'],
-	defaultCallUpdateIntervalInMs?: number,
 	appData?: AppData,
 	closeClientIfIdleForMs?: number,
 	closeCallIfEmptyForMs?: number,
@@ -94,7 +101,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public numberOfDataChannels = 0;
 	public numberOfPeerConnections = 0;
 
-	private _timer?: ReturnType<typeof setInterval>;
+	/** Global, pre-dispatch middleware chain run on every accepted sample. */
+	public readonly acceptMiddlewares = new MiddlewareProcessor<AcceptMiddlewarePayload>();
 
 	public constructor(public readonly config: ObserverConfig<AppData> = {
 		updatePolicy: 'update-when-all-call-updated',
@@ -113,20 +121,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			case 'update-when-all-call-updated':
 				this.updater = new OnAllCallObserverUpdater(this);
 				break;
-			case 'update-on-interval': {
-				const interval = config?.updateIntervalInMs;
-
-				if (!interval) {
-					logger.warn('updateIntervalInMs must be set when updatePolicy is "update-on-interval"; falling back to "update-when-all-call-updated"');
-					this.updater = new OnAllCallObserverUpdater(this);
-				} else {
-					this.updater = new OnIntervalUpdater(
-						interval,
-						this.update.bind(this),
-					);
-				}
-				break;
-			}
 		}
 	}
 
@@ -162,7 +156,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		const callSettings = {
 			...settings,
 			updatePolicy: settings.updatePolicy ?? this.config.defaultCallUpdatePolicy,
-			updateIntervalInMs: settings.updateIntervalInMs ?? this.config.defaultCallUpdateIntervalInMs,
 			closeCallIfEmptyForMs: settings.closeCallIfEmptyForMs ?? this.config.closeCallIfEmptyForMs,
 			appData: settings.appData ?? this.config.createCallAppData?.({ callId: settings.callId, observer: this }),
 		} as ObservedCallSettings<T>;
@@ -198,8 +191,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return logger.debug('Attempted to close twice');
 		}
 		this.closed = true;
-		clearInterval(this._timer);
-		this._timer = undefined;
 
 		this.observedCalls.forEach((call) => call.close());
 
@@ -208,10 +199,15 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 	public accept(sample: ClientSample, context?: AcceptContext) {
 		if (this.closed) {
-			this._notify('sample-rejected', { ...this.eventScope, reason: 'observer-closed', sample });
-
-			return;
+			return this._notify('sample-rejected', { ...this.eventScope, reason: 'observer-closed', sample });
 		}
+
+		try {
+			this.acceptMiddlewares.process({ sample, context });
+		} catch (err) {
+			logger.warn('An accept middleware threw; dropping the sample. %o', err);
+		}
+
 		if (!sample.callId) {
 			this._notify('sample-rejected', { ...this.eventScope, reason: 'missing-callId', sample });
 
@@ -223,10 +219,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return;
 		}
 
-		// Lazily create the call/client. appData for new entities comes only from the
-		// configured factory (createCallAppData / createClientAppData) applied in their
-		// constructors — never from the accept `context`. The context is transient and is
-		// only carried through to the `*-updated` events.
 		let call = this.getObservedCall(sample.callId);
 
 		if (!call) {
