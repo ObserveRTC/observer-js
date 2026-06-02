@@ -50,3 +50,10 @@ export type {
 	JsonlFileSinkFactoryOptions,
 } from './sinks';
 export { Middleware } from './common/Middleware';
+// Remote track correlation: the generic resolver + built-in strategy factories.
+export { RemoteTrackResolver } from './utils/RemoteTrackResolver';
+export type { RemoteTrackResolvers, RemoteTrackResolverFactory } from './utils/RemoteTrackResolver';
+export {
+	createDefaultMediasoupRemoteTrackResolverFactory,
+	createP2pRemoteTrackResolverFactory,
+} from './utils/RemoteTrackResolverFactories';

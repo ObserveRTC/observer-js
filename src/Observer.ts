@@ -6,7 +6,7 @@ import { ObservedTURN } from './ObservedTURN';
 import { Updater } from './updaters/Updater';
 import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater';
-import { MediasoupRemoteTrackResolver } from './utils/MediasoupRemoteTrackResolver';
+import type { RemoteTrackResolverFactory } from './utils/RemoteTrackResolver';
 import type { ObserverEvents, ObserverEventBase } from './ObserverEvents';
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
@@ -72,6 +72,14 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	 * can be derived from `callId` / `clientId`.
 	 */
 	createClientSink?: ClientSampleSinkFactory,
+
+	/**
+	 * Optional factory invoked when a call is created, producing the call's `RemoteTrackResolver`
+	 * (or `undefined` for none). Use the built-ins
+	 * (`createDefaultMediasoupRemoteTrackResolverFactory()` / `createP2pRemoteTrackResolverFactory()`)
+	 * or build a `RemoteTrackResolver` with custom publisher/subscriber id resolvers.
+	 */
+	createTrackResolver?: RemoteTrackResolverFactory,
 }
 
 export declare interface Observer {
@@ -162,10 +170,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 		const observedCall = new ObservedCall(callSettings, this);
 
-		if (callSettings.remoteTrackResolvePolicy === 'mediasoup-sfu') {
-			observedCall.remoteTrackResolver = new MediasoupRemoteTrackResolver(observedCall);
-		}
-		// 'p2p' is reserved for future use; 'none'/undefined => no resolver.
+		// Build the call's track resolver from the configured factory (if any).
+		observedCall.remoteTrackResolver = this.config.createTrackResolver?.(observedCall);
 
 		observedCall.once('close', () => {
 			this.observedCalls.delete(observedCall.callId);

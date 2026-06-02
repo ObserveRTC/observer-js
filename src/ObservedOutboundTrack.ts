@@ -4,11 +4,13 @@ import { OutboundTrackSample } from './schema/ClientSample';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedMediaSource } from './ObservedMediaSource';
+import { ObservedInboundTrack } from './ObservedInboundTrack';
 
 export class ObservedOutboundTrack implements OutboundTrackSample {
 	private _visited = false;
 	public appData?: Record<string, unknown>;
 
+	public readonly remoteInboundTracks = new Set<ObservedInboundTrack>();
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
 		value: undefined,
@@ -32,8 +34,8 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		// no-op
 	}
 
-	public get score() { 
-		return this.calculatedScore.value; 
+	public get score() {
+		return this.calculatedScore.value;
 	}
 
 	public get visited() {
@@ -54,10 +56,6 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 
 	public getMediaSource() {
 		return this._mediaSource;
-	}
-
-	public getRemoteInboundTracks() {
-		return this._peerConnection.client.call.remoteTrackResolver?.resolveRemoteInboundTracks(this);
 	}
 
 	public update(stats: OutboundTrackSample): void {

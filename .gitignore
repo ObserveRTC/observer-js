@@ -6,3 +6,4 @@ keys/
 draft.md
 yarn.lock
 .vscode
+coverage/

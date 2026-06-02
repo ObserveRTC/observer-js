@@ -46,6 +46,12 @@ These came out of the analysis/plan and are now implemented, so they are **not**
   extension point) with `call.addIssue()` → `call-issue`.
 - **Per-client sinks**: `ClientSampleSink` base class, `JsonlFileSink` / `InMemorySink`,
   `createClientSink` factory, `client-sink-created` event, object-mode `write(sample)`.
+- **Optional track correlation**: generic `RemoteTrackResolver` (publisher→subscriber link by key)
+  + `ObserverConfig.createTrackResolver` factory + mediasoup / p2p built-in factories; links exposed
+  as `inboundTrack.remoteOutboundTrack` / `outboundTrack.remoteInboundTracks` (see
+  [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md) §1).
+- **Removed**: the entire in-Observer report subsystem (`ClientReport`/`TrackReport`,
+  `client-track-report`); reporting is deferred to the future `ClientSampleProcessor`.
 - **Logger** exported + documented (`docs/logging.md`).
 
 ---
@@ -139,8 +145,11 @@ correct skew before metrics are derived. Fits naturally as a `ClientSampleProces
 but could also be a standalone helper. Needed for trustworthy rate/delta math and for replay.
 
 > Track correlation, the detector catalog, expanded metrics, and call-issue handling are designed
-> in detail in [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md).
-> §2.3 and §2.4 below are the short version.
+> in detail in [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md);
+> the livecalls-stats-grounded analysis of which call-level detectors are feasible (with exact
+> thresholds + what's out of scope) is in
+> [`docs/call-level-detectors-analysis.md`](./call-level-detectors-analysis.md). §2.3/§2.4 below are
+> the short version.
 
 ### 2.3 Real server-side detectors (cross-client)
 

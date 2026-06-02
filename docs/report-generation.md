@@ -38,8 +38,13 @@
 
 ## Proposed direction (recommended): snapshots + opt-in collectors
 
+> This describes how the future **`ClientSampleProcessor`** should generate reports — by consuming
+> the Observer's events/snapshots from the *outside*. None of it lives on the Observer; the
+> `observer.createSnapshot()` / `new ClientReportCollector(observer)` calls below are illustrative
+> of the shape, not an API to add back to the Observer itself.
+
 Split "maintain live state + emit events" (core's job) from "aggregate into a report" (a separate,
-opt-in concern). Two pieces:
+opt-in concern, owned by the processor). Two pieces:
 
 ### a) Snapshots — a serializable view of current state
 

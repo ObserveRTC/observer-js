@@ -4,6 +4,7 @@ import { InboundTrackSample } from './schema/ClientSample';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedInboundRtp } from './ObservedInboundRtp';
 import { ObservedMediaPlayout } from './ObservedMediaPlayout';
+import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 
 export class ObservedInboundTrack implements InboundTrackSample {
 	public readonly calculatedScore: CalculatedScore = {
@@ -11,6 +12,7 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		value: undefined,
 	};
 	public appData?: Record<string, unknown>;
+	public remoteOutboundTrack?: ObservedOutboundTrack | undefined;
 
 	private _visited = false;
 
@@ -18,7 +20,7 @@ export class ObservedInboundTrack implements InboundTrackSample {
 	public removedAt?: number | undefined;
 
 	public muted?: boolean;
-	
+
 	attachments?: Record<string, unknown> | undefined;
 
 	constructor(
@@ -32,8 +34,8 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		// no-op
 	}
 
-	public get score() { 
-		return this.calculatedScore.value; 
+	public get score() {
+		return this.calculatedScore.value;
 	}
 
 	public get visited() {
@@ -54,10 +56,6 @@ export class ObservedInboundTrack implements InboundTrackSample {
 
 	public getMediaPlayout() {
 		return this._mediaPlayout;
-	}
-
-	public getRemoteOutboundTrack() {
-		return this._peerConnection.client.call.remoteTrackResolver?.resolveRemoteOutboundTrack(this);
 	}
 
 	public update(stats: InboundTrackSample): void {

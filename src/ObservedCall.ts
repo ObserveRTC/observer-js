@@ -25,7 +25,6 @@ type ObservedCallUpdateConfig = {
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = ObservedCallUpdateConfig & {
 	callId: string;
 	appData?: AppData;
-	remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none',
 	closeCallIfEmptyForMs?: number,
 };
 

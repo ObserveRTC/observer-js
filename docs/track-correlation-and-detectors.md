@@ -1,86 +1,73 @@
-# Design: optional track correlation, derived metrics, detectors & call-level issues
+# Track correlation (implemented), derived metrics, detectors & call-level issues
 
-Status: **design / collection.** No code written yet — this is the thing to react to before we
-build. Three connected topics:
+Status: **§1 (track correlation) is implemented**; §2–§4 (expanded metrics, detectors, call-issue
+handling) remain **design / collection** — input for the future server-side detectors and the
+`ClientSampleProcessor`.
 
-1. **Track correlation** — an *optional*, strategy-based mechanism to link outbound tracks to the
-   inbound tracks that carry them (mediasoup, p2p-by-SSRC, generic attachment-field, or custom).
-2. **Expanded derived metrics** — additive only; `attachments` are never removed.
-3. **Detectors & call-level issues** — what server-side detectors to build (several need #1) and
-   how `call-issue` should behave.
+1. **Track correlation** — *optional*, strategy-driven linking of published (outbound) tracks to
+   the subscribed (inbound) tracks that carry them. **Shipped.**
+2. **Expanded derived metrics** — additive only; `attachments` are never removed. *Design.*
+3. **Detectors & call-level issues** — server-side detectors (several need #1) and how `call-issue`
+   should behave. *Design.*
 
 ---
 
-## 1. Optional track correlation
+## 1. Track correlation (implemented)
 
-### Principle
-
-Correlation is **off by default** and never required. It's a per-call concern, set on the call
-settings; when unset, nothing runs and no indexes are built. It already exists as
-`ObservedCall.remoteTrackResolver?: RemoteTrackResolver` (interface below) — this design only adds
-strategies and a config shape around it. **`attachments` are read, never modified**, by any
-strategy.
+Correlation is **opt-in** and off by default. You enable it per observer via the
+`ObserverConfig.createTrackResolver` factory, which is invoked when each call is created and
+returns that call's `RemoteTrackResolver` (or `undefined` for none). **`attachments` are read,
+never modified.**
 
 ```ts
-export interface RemoteTrackResolver {
-  resolveRemoteOutboundTrack(inboundTrack: ObservedInboundTrack): ObservedOutboundTrack | undefined;
-  resolveRemoteInboundTracks(outboundTrack: ObservedOutboundTrack): ObservedInboundTrack[] | undefined;
-}
+import { Observer, createDefaultMediasoupRemoteTrackResolverFactory } from '@observertc/observer-js';
+
+const observer = new Observer({
+  createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
+});
 ```
 
-A resolver subscribes (filtered to its call) to `inbound-track-added/-removed` and
-`outbound-track-added/-removed` on the bus, maintains its index, and answers the two queries.
-(That's exactly how the existing `MediasoupRemoteTrackResolver` works.)
+### Model
 
-### Config shape — **decided: extend `remoteTrackResolvePolicy`**
+`RemoteTrackResolver` is one generic class. It subscribes to the bus (filtered to its call) on
+`inbound-/outbound-track-added/-removed`, and links tracks by a **publisher id** (the link key:
+one publisher → many subscribers). It maintains the links **directly on the tracks**:
 
-Extend the existing `remoteTrackResolvePolicy` on `ObservedCallSettings` (and a matching default
-on `ObserverConfig`) into a discriminated union so the generic strategy can carry parameters.
-(Chosen over adding a separate `trackCorrelation` option — one field, backwards-compatible, and
-the current `'p2p'`/`'mediasoup-sfu'`/`'none'` strings fold straight in.)
+- `inboundTrack.remoteOutboundTrack?: ObservedOutboundTrack` — the publisher of this subscription.
+- `outboundTrack.remoteInboundTracks: Set<ObservedInboundTrack>` — all subscribers of this publisher.
+
+A strategy is just a set of resolver functions (`RemoteTrackResolvers`):
 
 ```ts
-export type TrackCorrelationPolicy =
-  | 'none'                                   // default — no correlation, no indexes
-  | 'mediasoup-sfu'                          // attachments: producerId / consumerId (today's impl)
-  | 'p2p-ssrc'                               // match by SSRC across the two peers
-  | {                                        // generic attachment-field mapping
-      kind: 'attachment';
-      // value of `outboundKey` on an outbound track's attachments is matched against
-      // value of `inboundKey` on an inbound track's attachments (inboundKey defaults to outboundKey)
-      outboundKey: string;
-      inboundKey?: string;
-    };
-// (custom: assign your own `call.remoteTrackResolver` — already supported and stays supported.)
+type RemoteTrackResolvers = {
+  resolveInboundTrackPublisherId:  (inboundTrack)  => string | undefined;  // required (link key)
+  resolveOutboundTrackPublisherId: (outboundTrack) => string | undefined;  // required (link key)
+  resolveInboundTrackSubscriberId?: (inboundTrack) => string | undefined;  // optional (lookup)
+};
 ```
 
-`Observer` instantiates the matching resolver in `createObservedCall` (where it already does this
-for `'mediasoup-sfu'`); `'none'`/unset → no resolver.
+The "publisher id" is whatever links the two sides — mediasoup's `producerId`, an RTP **SSRC**, or
+a shared attachment value. The optional subscriber id only powers `getInboundTrackBySubscriberId`.
+Ids are re-resolved on demand (no key caching). The resolver also exposes
+`getOutboundTrackByPublisherId` / `getInboundTrackBySubscriberId`.
 
-### Strategies
+### Built-in strategy factories
 
-| Strategy | Matches on | Cardinality | Notes |
-|----------|-----------|-------------|-------|
-| `mediasoup-sfu` | inbound `attachments.{producerId,consumerId}` ↔ outbound `attachments.producerId` | 1 outbound → N inbound | already implemented |
-| `p2p-ssrc` | SSRC of the outbound RTP(s) == SSRC of the inbound RTP(s) on the other peer | 1 ↔ 1 (typically) | uses `ObservedOutboundRtp.ssrc` / `ObservedInboundRtp.ssrc`; index `ssrc → track`. Caveat: SSRC can be reused/rewritten — scope the index per call and refresh on add/remove |
-| `attachment` (generic) | `outbound.attachments[outboundKey]` == `inbound.attachments[inboundKey]` | 1 → N | the app puts a shared id (e.g. a media id) in both tracks' attachments; library just indexes by it |
-| custom | anything | anything | implement `RemoteTrackResolver`, assign `call.remoteTrackResolver` |
+| Factory | Publisher id | Subscriber id | Notes |
+|---------|-------------|---------------|-------|
+| `createDefaultMediasoupRemoteTrackResolverFactory()` | `attachments.producerId` | `attachments.consumerId` | 1 publisher → N subscribers (SFU) |
+| `createP2pRemoteTrackResolverFactory()` | RTP **SSRC** (`getInboundRtp().ssrc` / `getOutboundRtps().map(r => r.ssrc)`) | same SSRC | SSRC is preserved end-to-end in p2p; single-encoding (simulcast would need per-encoding keys) |
+| custom | your resolver functions | optional | `new RemoteTrackResolver(call, { … })` in your factory |
 
-All strategies share the same add/remove/index/query skeleton, so a small
-`AttributeIndexedResolver` base can back both `p2p-ssrc` and `attachment` (they differ only in the
-key-extraction function). mediasoup stays its own (two-key producer/consumer mapping).
+### Using the links
 
-### What correlation produces (additive, no attachment changes)
+```ts
+const publisher  = inboundTrack.remoteOutboundTrack;          // who is sending this
+const subscribers = [ ...outboundTrack.remoteInboundTracks ]; // who is receiving this
+```
 
-Today: `inboundTrack.getRemoteOutboundTrack()` and `outboundTrack.getRemoteInboundTracks()`.
-With correlation on, we can *additionally* derive cross-side fields that are otherwise impossible
-server-side — populated on update, left `undefined` when no match:
-
-- on the inbound side: the producing client/track id, end-to-end loss/delay vs. what the producer
-  sent, "is anyone actually producing this" liveness.
-- on the outbound side: number of consumers, worst/ળaverage consumer quality, "delivered vs sent".
-
-These are the inputs the cross-client detectors (§3) need.
+These links are the inputs the cross-client detectors (§3) need. (The class also keeps thin
+`resolveRemoteOutboundTrack`/`resolveRemoteInboundTracks` accessors that just read these fields.)
 
 ---
 
@@ -106,6 +93,11 @@ ergonomics + typing, keep attachments authoritative and untouched.
 
 ## 3. Detectors we can / should implement
 
+> A deeper, livecalls-stats-grounded analysis of exactly which call-level detectors are feasible
+> from `ClientSample` (with the exact thresholds and what's out of scope) is in
+> [`docs/call-level-detectors-analysis.md`](./call-level-detectors-analysis.md). This section is the
+> summary.
+
 All are **server-side, cross-client** — things the client can't see on its own (per-client signals
 already arrive as `clientIssues`). Grouped by what they need.
 
@@ -116,7 +108,7 @@ already arrive as `clientIssues`). Grouped by what they need.
   implies an SFU/forwarding problem rather than the sender. *Inputs:* outbound health + correlated
   inbound health.
 - **Dead/zombie outbound track** — an outbound track with no correlated inbound anywhere (nobody
-  consuming), or producing bytes that reach no one. *Inputs:* outbound + `getRemoteInboundTracks()`.
+  consuming), or producing bytes that reach no one. *Inputs:* `outboundTrack.remoteInboundTracks`.
 - **One-way media** — a peer pair where media flows in one direction only. *Inputs:* paired tracks.
 
 ### Don't need correlation (call-wide aggregates)
@@ -133,8 +125,61 @@ already arrive as `clientIssues`). Grouped by what they need.
 
 Each implements the existing `Detector` interface, is registered on `call-added` via
 `observedCall.detectors.add(...)`, runs on `call.update()`, and raises findings with
-`observedCall.addIssue(...)`. Detectors that need correlation should no-op gracefully when the
-call's policy is `none` (so they're safe to register unconditionally).
+`observedCall.addIssue(...)`. Detectors that need correlation should no-op gracefully when no
+resolver is configured (`call.remoteTrackResolver` is `undefined`), so they're safe to register
+unconditionally.
+
+### Grounding: what `livecalls-stats` and the SFU actually do today
+
+Investigated the two real consumers of `ClientSample`. They strongly validate the list above and
+give us concrete heuristics to copy. Highlights:
+
+**The SFU (`livecalls-sfu`)** — its single most important call-level signal is a
+**producer↔consumer score mismatch**: it compares mediasoup `producerScore` vs `consumerScore`
+and flags when the **producer is healthy (score ≥ 9 / 10) but the consumer is not (< 9)** — i.e.
+the sender is fine but a receiver isn't getting good media → a forwarding/network problem the
+client can't self-diagnose. It also detects a **consumer "stopped"** (consumer not paused, producer
+not paused, but no layers/media arriving). It tracks these as **open/close transitions** ("score is
+low" → "returned to normal", with a degradation timestamp) rather than per-tick spam. It also
+watches **ICE state flapping** per transport (send/recv/hybrid) and ICE restarts. Notably, this
+producer/consumer correlation happens *outside* the observer today (in `consuming.ts`) — which is
+exactly the gap the optional correlation (§1) lets us close inside `observer-js`.
+
+**`livecalls-stats`** — correlates clients via track `attachments` (`producerId` / `consumerId` /
+`label` / `trackIdentifier`) and detects, among others:
+- **dry-inbound-track** — a consumer exists but no media is flowing. Crucially it is **filtered
+  against producer pause/mute** (a paused producer legitimately sends nothing) — false-positive
+  suppression a detector must replicate.
+- **missing consumer** — a producer was active during a participant's consuming window but that
+  participant never created a consumer (with a ~1.5 s overlap tolerance for join/leave races).
+- **orphan consumer** — a consumer points at a `producerId` that exists in no report.
+- Per-stream **quality classification** (`good` / `degraded` / `high-jitter` / `packet-loss` /
+  `freezing`) with screen-share-relaxed thresholds keyed off the track `label`.
+- It also **auto-corrects clock skew** when `|offset| ≥ 5000 ms` (validates roadmap item A2).
+
+**Concrete thresholds worth adopting as detector defaults** (from these repos):
+
+| Signal | Threshold |
+|--------|-----------|
+| Healthy-vs-unhealthy score split | producer ≥ 9, consumer < 9 (on a 0–10 scale; note `observer-js` score is 0–5, so make it relative/configurable) |
+| fractionLost buckets | 0.01, 0.05, 0.1, 0.2, 0.3, 0.5 |
+| Inbound video freezing | freeze events > 0.5 /s |
+| Inbound video/audio packet-loss | lost > 10 /s |
+| Jitter (in/out) | > 100 ms |
+| Inbound audio freezing | concealment > 5 /s |
+| Outbound video packet-loss | nack > 15 /s, or pli+fir > 2 /s |
+| Consumer-coverage overlap tolerance | ~1.5 s |
+| Clock-skew auto-correct | \|offset\| ≥ 5000 ms |
+
+**So the priority order to build** (highest signal first):
+1. **Producer→consumer delivery mismatch** (needs §1 correlation) — the SFU's top signal, and the
+   thing only the server sees. Must suppress when the producer is muted/paused (per stats'
+   dry-track filtering).
+2. **Dead/dry inbound track** (needs correlation) — consumer present, producer active & unmuted, no
+   bytes/frames flowing.
+3. **Quality outlier** (no correlation) — one participant materially worse than the call's peers.
+4. **Orphan / missing consumer** (needs correlation) — mostly an analytics-time check; live is harder.
+5. **ICE flapping / TURN-reliance spike** and **call-wide correlated degradation**.
 
 ---
 
@@ -174,10 +219,10 @@ type CallIssue = {
 
 ## Suggested build order
 
-1. **Correlation core**: the `AttributeIndexedResolver` base + `p2p-ssrc` and generic `attachment`
-   strategies + the `TrackCorrelationPolicy` config union (mediasoup already done). Keep it optional.
+1. ~~**Correlation core**~~ — **done.** `RemoteTrackResolver` + `createTrackResolver` config +
+   the mediasoup and p2p factories (see §1).
 2. **Issue model**: extend the issue shape (severity/key/state) + the ongoing-issue helper on the
    call; store + report call issues.
 3. **First detectors**: start with **quality outlier** (no correlation needed) and
-   **producer→consumer delivery mismatch** (needs #1) — the two highest-signal ones.
+   **producer→consumer delivery mismatch** (uses §1) — the two highest-signal ones.
 4. **Derived metrics**: add incrementally as detectors/consumers need them.

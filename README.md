@@ -448,6 +448,8 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     createClientAppData?: (p: { clientId: string; observedCall: ObservedCall }) => Record<string, unknown>;
     // sink factory — produces a per-client sink that receives every accepted sample (see Sinks).
     createClientSink?: (p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined;
+    // track-resolver factory — produces a call's RemoteTrackResolver (see Remote track resolution).
+    createTrackResolver?: (observedCall: ObservedCall) => RemoteTrackResolver | undefined;
   };
 ```
 
@@ -489,7 +491,6 @@ type ObservedCallSettings<AppData = Record<string, unknown>> = {
     updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated';
     callId: string;
     appData?: AppData;
-    remoteTrackResolvePolicy?: 'p2p' | 'mediasoup-sfu' | 'none';
     closeCallIfEmptyForMs?: number;
   };
 ```
@@ -502,7 +503,7 @@ Key members:
 - `addIssue(issue: ClientIssue): void` — raise a **call-level** issue → emits `call-issue`
 - `readonly detectors: Detectors` — server-side detector registry (empty by default; see [Detectors](#detectors-server-side-extension-point))
 - `scoreCalculator: ScoreCalculator`, `get score()`, `readonly calculatedScore`
-- `remoteTrackResolver?: RemoteTrackResolver`
+- `remoteTrackResolver?: RemoteTrackResolver` — set from `ObserverConfig.createTrackResolver` at call creation (see [Remote track resolution](#remote-track-resolution-mediasoup--sfu))
 - aggregates: `numberOfIssues`, `numberOfPeerConnections`, `numberOfInboundRtpStreams`,
   `numberOfOutboundRtpStreams`, `numberOfDataChannels`, `maxNumberOfClients`,
   `clientsUsedTurn: Set<string>`, `startedAt?`, `endedAt?`, `closedAt?`, `closed`
@@ -668,29 +669,47 @@ class Detectors {
 ## Remote track resolution (mediasoup / SFU)
 
 In an SFU, one participant's **outbound** track is delivered to other participants as **inbound**
-tracks. To correlate them server-side, set `remoteTrackResolvePolicy: 'mediasoup-sfu'` on the
-call settings. The built-in `MediasoupRemoteTrackResolver` subscribes to the bus (filtered to
-its call) and maps producer↔consumer using track `attachments` (`producerId`, `consumerId`):
+tracks (one **publisher** → many **subscribers**). Correlation is **opt-in** per observer: set
+`ObserverConfig.createTrackResolver`, a factory invoked when each call is created that returns the
+call's `RemoteTrackResolver` (or `undefined` for none).
+
+`RemoteTrackResolver` is a generic, strategy-driven class. It subscribes to the bus (filtered to
+its call) and links tracks by **publisher id** — the link key — maintaining the links directly on
+the tracks: `inboundTrack.remoteOutboundTrack` and `outboundTrack.remoteInboundTracks: Set`.
 
 ```ts
-const call = observer.createObservedCall({ callId, remoteTrackResolvePolicy: 'mediasoup-sfu' });
-// later, given an inbound track:
-const source = inboundTrack.getRemoteOutboundTrack();     // the producing ObservedOutboundTrack
-const consumers = outboundTrack.getRemoteInboundTracks(); // the consuming ObservedInboundTrack[]
+import { Observer, createDefaultMediasoupRemoteTrackResolverFactory } from '@observertc/observer-js';
+
+const observer = new Observer({
+  createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
+});
+
+// later, given tracks (links are kept up to date as tracks come and go):
+const source    = inboundTrack.remoteOutboundTrack;       // the publishing ObservedOutboundTrack
+const receivers = [ ...outboundTrack.remoteInboundTracks ]; // the subscribing ObservedInboundTrack[]
 ```
 
-Custom topologies can implement the `RemoteTrackResolver` interface and assign
-`call.remoteTrackResolver`:
+Two built-in factories ship: `createDefaultMediasoupRemoteTrackResolverFactory()` (publisher =
+`attachments.producerId`, subscriber = `attachments.consumerId`) and
+`createP2pRemoteTrackResolverFactory()` (matches by RTP **SSRC**, preserved end-to-end in p2p).
+
+For any other topology, build a `RemoteTrackResolver` with your own key resolvers — the publisher
+id is just whatever links a subscribed track to the published one:
 
 ```ts
-interface RemoteTrackResolver {
-  resolveRemoteOutboundTrack(inboundTrack: ObservedInboundTrack): ObservedOutboundTrack | undefined;
-  resolveRemoteInboundTracks(outboundTrack: ObservedOutboundTrack): ObservedInboundTrack[] | undefined;
-}
+import { Observer, RemoteTrackResolver } from '@observertc/observer-js';
+
+const observer = new Observer({
+  createTrackResolver: (observedCall) => new RemoteTrackResolver(observedCall, {
+    resolveOutboundTrackPublisherId: (out) => out.attachments?.mediaId as string | undefined,
+    resolveInboundTrackPublisherId:  (inb) => inb.attachments?.mediaId as string | undefined,
+    resolveInboundTrackSubscriberId: (inb) => inb.attachments?.subId  as string | undefined, // optional
+  }),
+});
 ```
 
-The application is expected to put `direction` (`'send'`/`'recv'`), `producerId`, `consumerId`,
-and `label` into `PeerConnectionSample.attachments` / track `attachments`.
+For the mediasoup factory, the application puts `producerId` / `consumerId` (and optionally
+`direction`, `label`) into the track `attachments`.
 
 ---
 
@@ -889,6 +908,11 @@ export type { JsonlFileSinkOptions, JsonlFileSinkFactoryOptions } from './sinks/
 export { InMemorySink, createInMemorySink } from './sinks/InMemorySink';
 
 export { Middleware } from './common/Middleware';
+
+// remote track correlation
+export { RemoteTrackResolver } from './utils/RemoteTrackResolver';
+export type { RemoteTrackResolvers, RemoteTrackResolverFactory } from './utils/RemoteTrackResolver';
+export { createDefaultMediasoupRemoteTrackResolverFactory, createP2pRemoteTrackResolverFactory } from './utils/RemoteTrackResolverFactories';
 ```
 
 ---

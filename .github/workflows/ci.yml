@@ -29,7 +29,14 @@ jobs:
       - name: Build
         run: yarn build
 
-      # Test suite is intentionally a placeholder for now; this step guards that
-      # it stays green and is wired up for when real tests land.
-      - name: Test
-        run: yarn test --ci
+      # Runs the suite with coverage; the coverage thresholds in jest.config.js gate the build.
+      - name: Test (with coverage)
+        run: yarn test:coverage --ci
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
