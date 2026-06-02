@@ -4,7 +4,6 @@ import { InboundTrackSample } from './schema/ClientSample';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedInboundRtp } from './ObservedInboundRtp';
 import { ObservedMediaPlayout } from './ObservedMediaPlayout';
-import { InboundTrackReport } from './Reports';
 
 export class ObservedInboundTrack implements InboundTrackSample {
 	public readonly calculatedScore: CalculatedScore = {
@@ -12,7 +11,6 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		value: undefined,
 	};
 	public appData?: Record<string, unknown>;
-	public report: InboundTrackReport;
 
 	private _visited = false;
 
@@ -31,20 +29,7 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		private readonly _inboundRtp?: ObservedInboundRtp,
 		private readonly _mediaPlayout?: ObservedMediaPlayout,
 	) {
-		this.report = {
-			trackId: this.id,
-			kind: this.kind,
-			fractionLostDistribution: {
-				gtOrEq050: 0,
-				lt001: 0,
-				lt005: 0,
-				lt010: 0,
-				lt020: 0,
-				lt050: 0,
-				count: 0,
-				sum: 0,
-			},
-		};
+		// no-op
 	}
 
 	public get score() { 
@@ -81,19 +66,5 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		this.timestamp = stats.timestamp;
 		this.calculatedScore.value = stats.score;
 		this.attachments = stats.attachments;
-
-		const fl = this._inboundRtp?.fractionLost;
-
-		if (fl !== undefined) {
-			if (fl < 0.01) this.report.fractionLostDistribution.lt001 += 1;
-			else if (fl < 0.05) this.report.fractionLostDistribution.lt005 += 1;
-			else if (fl < 0.1) this.report.fractionLostDistribution.lt010 += 1;
-			else if (fl < 0.2) this.report.fractionLostDistribution.lt020 += 1;
-			else if (fl < 0.5) this.report.fractionLostDistribution.lt050 += 1;
-			else this.report.fractionLostDistribution.gtOrEq050 += 1;
-
-			this.report.fractionLostDistribution.count += 1;
-			this.report.fractionLostDistribution.sum += fl;
-		}
 	}
 }

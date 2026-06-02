@@ -31,7 +31,8 @@ These came out of the analysis/plan and are now implemented, so they are **not**
   build + test); npm Trusted Publishing (OIDC) + provenance.
 - **Warn-don't-throw** across operational/edge conditions; `create*`/`getOrCreate*` return
   `T | undefined`.
-- **Discriminated-union config** (`update-on-interval` requires an interval at compile time).
+- **Event-driven update policies** (`update-on-any/all-...`); the interval-based policy and its
+  timer were removed — apps wanting a cadence call `update()` themselves.
 - **`sample-rejected`** event; **`accept(sample, context?)`** with transient per-accept context
   carried only to `*-updated` events (never written to `appData`).
 - **Counter-reset-safe deltas** (analysis item **A1**).
@@ -52,6 +53,13 @@ These came out of the analysis/plan and are now implemented, so they are **not**
 ## 2. Open backlog (candidates to sort & decide)
 
 ### 2.1 `ClientSampleProcessor` — middleware ingestion pipeline
+
+> **Note:** a lightweight **global accept-middleware hook** is now implemented directly on the
+> Observer — `observer.addAcceptMiddleware(...)` runs middlewares on every sample inside
+> `accept()` before dispatch (mutate/enrich/route/drop). That covers the simple in-line injection
+> case. The `ClientSampleProcessor` below remains a separate, larger idea: a standalone,
+> reusable pipeline object (with built-in middleware factories, offline-replay ergonomics, and a
+> processing envelope) that *wraps* `accept()` rather than living inside it.
 
 **Status: designed, not built.** A thin pipeline that sits *in front of* `observer.accept()`,
 built on the existing `common/Middleware.MiddlewareProcessor<T>`. The same class serves **live**
@@ -116,8 +124,8 @@ Built-in middleware factories (all optional, composable):
 | `sink(sampleSink)` | persist the sample (superseded by the per-client sink factory, but still possible) |
 
 Decoding (protobuf/base64 → `ClientSample`) stays the app's concern and runs *before* the
-processor. Offline replay: feed recorded samples sorted by timestamp; for determinism use a
-timer-free update policy (`update-on-any-client-updated`), not `update-on-interval`.
+processor. Offline replay: feed recorded samples sorted by timestamp; for determinism use
+`update-on-any-client-updated` (all update policies are event-driven / timer-free now).
 
 Location & exports: new `src/processors/ClientSampleProcessor.ts` (+ `src/processors/middlewares.ts`),
 export `ClientSampleProcessor`, `ClientSampleProcessingContext`, and the factories from `index.ts`
@@ -129,6 +137,10 @@ Client wall-clock timestamps can jump (NTP corrections, suspend/resume, bad cloc
 `normalizeTimestamps()` step (stateful per `clientId`) would enforce monotonic timestamps and
 correct skew before metrics are derived. Fits naturally as a `ClientSampleProcessor` middleware,
 but could also be a standalone helper. Needed for trustworthy rate/delta math and for replay.
+
+> Track correlation, the detector catalog, expanded metrics, and call-issue handling are designed
+> in detail in [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md).
+> §2.3 and §2.4 below are the short version.
 
 ### 2.3 Real server-side detectors (cross-client)
 
@@ -151,7 +163,13 @@ Beyond the current set: jitter-buffer delay, concealment events/samples, freeze 
 encode/decode CPU/time, quality-limitation reason breakdown, and first-class
 producer/consumer & peer-connection-direction fields (instead of relying on `attachments`).
 
-### 2.5 Per-tick snapshot API
+### 2.5 Per-tick snapshot API & report generation
+
+> **Report generation has been removed from the Observer entirely** (no `ClientReport`, no
+> per-track reports, no `client-track-report`). It will live only in the future
+> **`ClientSampleProcessor`** (§2.1). The design notes for it are in
+> [`docs/report-generation.md`](./report-generation.md): snapshots as the primitive, with
+> reporting as a collector built on top — to be implemented *there*, not on the Observer.
 
 A serializable, immutable snapshot emitted per `*-updated` tick, so consumers can subscribe to one
 coarse event instead of the fine-grained `*-updated` sub-stat firehose. Pairs well with the

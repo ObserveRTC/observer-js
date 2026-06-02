@@ -4,12 +4,10 @@ import { OutboundTrackSample } from './schema/ClientSample';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedMediaSource } from './ObservedMediaSource';
-import { OutboundTrackReport } from './Reports';
 
 export class ObservedOutboundTrack implements OutboundTrackSample {
 	private _visited = false;
 	public appData?: Record<string, unknown>;
-	public readonly report: OutboundTrackReport;
 
 	public readonly calculatedScore: CalculatedScore = {
 		weight: 1,
@@ -31,10 +29,7 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		private readonly _outboundRtps?: ObservedOutboundRtp[],
 		private readonly _mediaSource?: ObservedMediaSource,
 	) {
-		this.report = {
-			trackId: this.id,
-			kind: this.kind as 'audio' | 'video',
-		};
+		// no-op
 	}
 
 	public get score() { 

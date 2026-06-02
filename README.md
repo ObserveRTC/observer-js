@@ -176,7 +176,7 @@ client getStats()  ──►  ClientSample  ──►  observer.accept(sample, c
 |-------|-----------|------------------------|-------|
 | `Observer` | `new Observer(config?)` | — (root) | `observedCalls: Map<string, ObservedCall>`, global counters, the event bus |
 | `ObservedCall` | `observer.createObservedCall(settings)` / lazily by `accept` | `observedCalls` | `observedClients: Map<string, ObservedClient>`, call-wide metrics, `detectors`, `scoreCalculator` |
-| `ObservedClient` | `call.createObservedClient(settings)` / lazily | `observedClients` | `observedPeerConnections: Map<string, ObservedPeerConnection>`, per-client metrics, `report` |
+| `ObservedClient` | `call.createObservedClient(settings)` / lazily | `observedClients` | `observedPeerConnections: Map<string, ObservedPeerConnection>`, per-client metrics |
 | `ObservedPeerConnection` | lazily, from `sample.peerConnections[]` | `observedPeerConnections` | the 15 sub-stat maps below, transport/RTT/bitrate metrics |
 | Sub-stats | lazily, from the `PeerConnectionSample` | maps on the PC | individual WebRTC stat objects |
 
@@ -387,7 +387,6 @@ additional field(s) on top of that scope.
 | `client-metadata` | `{ metaData: ClientMetaData }` | a client meta item arrived |
 | `client-extension-stats` | `{ extensionStats: ExtensionStat }` | an app-defined extension stat arrived |
 | `client-event` | `{ event: ClientEvent }` | any client event was processed |
-| `client-track-report` | `{ report: TrackReport }` | a track was removed; final per-track report |
 
 #### Peer-connection level — scope `{ observer, observedCall, observedClient, observedPeerConnection }`
 
@@ -537,7 +536,6 @@ Key members:
 - Per-tick deltas: `deltaReceivedAudioBytes`, `deltaSentAudioBytes`, … (see source for the full set)
 - Lifecycle: `joinedAt?`, `leftAt?`, `closedAt?`, `closed`, `get score()`
 - Metadata: `browser?`, `engine?`, `platform?`, `operationSystem?`, `mediaDevices`, `mediaConstraints`
-- `readonly report: ClientReport` — cumulative report (byte/packet totals + RTT & score distributions)
 - `accept(sample, context?)`, `close()`
 
 ### `ObservedPeerConnection`
@@ -617,9 +615,6 @@ mediasoup set `PRODUCER_*` / `CONSUMER_*` / `DATA_PRODUCER_*` / `DATA_CONSUMER_*
 **`ClientMetaTypes`** (enum of known meta `type` values): `MEDIA_CONSTRAINT`, `MEDIA_DEVICE`,
 `MEDIA_DEVICES_SUPPORTED_CONSTRAINTS`, `USER_MEDIA_ERROR`, `LOCAL_SDP`, `OPERATION_SYSTEM`,
 `ENGINE`, `PLATFORM`, `BROWSER`.
-
-`Reports` exported: `ClientReport` (cumulative per-client totals + RTT/score distributions) and
-`TrackReport` (per-track final report, delivered on `client-track-report`).
 
 ---
 
@@ -894,7 +889,6 @@ export type { JsonlFileSinkOptions, JsonlFileSinkFactoryOptions } from './sinks/
 export { InMemorySink, createInMemorySink } from './sinks/InMemorySink';
 
 export { Middleware } from './common/Middleware';
-export type { TrackReport, ClientReport } from './Reports';
 ```
 
 ---

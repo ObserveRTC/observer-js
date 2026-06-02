@@ -18,7 +18,7 @@ class Executor<T> {
 	private prevIndex = -1;
 
 	constructor(
-		private readonly stack: Middleware<T>[], 
+		private readonly stack: Middleware<T>[],
 		private readonly finalCallback?: Callback<T>
 	) {
 	}
@@ -54,7 +54,7 @@ export class MiddlewareProcessor<T> implements Processor<T> {
 		if (middlewares && middlewares.length > 0) {
 			this.stack.push(...middlewares);
 		}
-		
+
 		return this;
 	}
 

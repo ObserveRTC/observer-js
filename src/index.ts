@@ -50,7 +50,3 @@ export type {
 	JsonlFileSinkFactoryOptions,
 } from './sinks';
 export { Middleware } from './common/Middleware';
-export type {
-	TrackReport,
-	ClientReport,
-} from './Reports';

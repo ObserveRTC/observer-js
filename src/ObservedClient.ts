@@ -9,9 +9,6 @@ import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
 import { parseJsonAs } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
-import { ClientReport } from './Reports';
-import { ObservedInboundTrack } from './ObservedInboundTrack';
-import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
@@ -119,8 +116,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public numberOfScoreMeasurements = 0;
 	// public totalNumberOfIssues = 0;
 
-	public readonly report: ClientReport;
-
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
@@ -139,44 +134,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this.settings = {
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
-		};
-
-		this.report = {
-			callId: this.call.callId,
-			clientId: this.clientId,
-			rttDistribution: {
-				gtOrEq300ms: 0,
-				lt50ms: 0,
-				lt150ms: 0,
-				lt300ms: 0,
-				count: 0,
-				sum: 0,
-			},
-			scoreDistribution: {
-				'0': 0,
-				'1': 0,
-				'2': 0,
-				'3': 0,
-				'4': 0,
-				'5': 0,
-				count: 0,
-				sum: 0,
-			},
-			issues: {},
-			totalAudioBytesReceived: 0,
-			totalVideoBytesReceived: 0,
-			totalAudioBytesSent: 0,
-			totalVideoBytesSent: 0,
-			totalDataChannelBytesReceived: 0,
-			totalDataChannelBytesSent: 0,
-			totalDataChannelMessagesReceived: 0,
-			totalDataChannelMessagesSent: 0,
-			totalInboundRtpBytesReceived: 0,
-			totalInboundRtpPacketsLost: 0,
-			totalInboundRtpPacketsReceived: 0,
-			totalOutboundRtpBytesSent: 0,
-			totalOutboundRtpPacketsSent: 0,
-			totalNumberOfIssues: 0,
 		};
 
 		if (this.sink) {
@@ -344,19 +301,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				}
 				if (observedPeerConnection.currentRttInMs < 50) {
 					this.deltaRttLt50Measurements += 1;
-					this.report.rttDistribution.lt50ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 150) {
 					this.deltaRttLt150Measurements += 1;
-					this.report.rttDistribution.lt150ms += 1;
 				} else if (observedPeerConnection.currentRttInMs < 300) {
 					this.deltaRttLt300Measurements += 1;
-					this.report.rttDistribution.lt300ms += 1;
 				} else if (300 <= observedPeerConnection.currentRttInMs) {
 					this.deltaRttGtOrEq300Measurements += 1;
-					this.report.rttDistribution.gtOrEq300ms += 1;
 				}
-				this.report.rttDistribution.count += 1;
-				this.report.rttDistribution.sum += observedPeerConnection.currentRttInMs;
 
 				sumOfRtts += observedPeerConnection.currentRttInMs;
 				++numberOfRttMeasurements;
@@ -370,21 +321,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// emit new attachments?
 		this.attachments = sample.attachments;
 
-		this.report.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
-		this.report.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
-		this.report.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
-		this.report.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
-		this.report.totalInboundRtpPacketsLost += this.deltaInboundPacketsLost;
-		this.report.totalInboundRtpPacketsReceived += this.deltaInboundPacketsReceived;
-		this.report.totalOutboundRtpPacketsSent += this.deltaOutboundPacketsSent;
-		this.report.totalAudioBytesReceived += this.deltaReceivedAudioBytes;
-		this.report.totalVideoBytesReceived += this.deltaReceivedVideoBytes;
-		this.report.totalAudioBytesSent += this.deltaSentAudioBytes;
-		this.report.totalVideoBytesSent += this.deltaSentVideoBytes;
-		this.report.totalInboundRtpBytesReceived += this.deltaTransportReceivedBytes;
-		this.report.totalOutboundRtpBytesSent += this.deltaTransportSentBytes;
-		this.report.totalNumberOfIssues += this.deltaNumberOfIssues;
-
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
 		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (elapsedInSeconds);
 		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
@@ -392,14 +328,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
 		this.calculatedScore.value = sample.score;
-
-		if (sample.score !== undefined) {
-			const bucket = Math.floor(sample.score).toString() as '0' | '1' | '2' | '3' | '4' | '5';
-
-			this.report.scoreDistribution[bucket] = (this.report.scoreDistribution[bucket] ?? 0) + 1;
-			this.report.scoreDistribution.count += 1;
-			this.report.scoreDistribution.sum += sample.score;
-		}
 
 		this.lastSampleTimestamp = sample.timestamp;
 		// emit update
@@ -489,8 +417,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public addIssue(issue: ClientIssue) {
 		if (this.closed) return;
-
-		this.report.issues[issue.type] = (this.report.issues[issue.type] ?? 0) + 1;
 
 		this._notify('client-issue', { ...this.eventScope, issue });
 	}
@@ -751,32 +677,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 
 			const newObservedPeerConnection = new ObservedPeerConnection(sample.peerConnectionId, this);
-			const onInboundTrackRemoved = (track: ObservedInboundTrack) => {
-				this._notify('client-track-report', {
-					...this.eventScope,
-					report: {
-						direction: 'inbound',
-						...track.report,
-					},
-				});
-			};
-			const onOutboundTrackRemoved = (track: ObservedOutboundTrack) => {
-				this._notify('client-track-report', {
-					...this.eventScope,
-					report: {
-						direction: 'outbound',
-						...track.report,
-					},
-				});
-			};
 
 			newObservedPeerConnection.once('close', () => {
-				newObservedPeerConnection?.off('removed-inbound-track', onInboundTrackRemoved);
-				newObservedPeerConnection?.off('removed-outbound-track', onOutboundTrackRemoved);
 				this.observedPeerConnections.delete(sample.peerConnectionId);
 			});
-			newObservedPeerConnection.on('removed-inbound-track', onInboundTrackRemoved);
-			newObservedPeerConnection.on('removed-outbound-track', onOutboundTrackRemoved);
 			this.observedPeerConnections.set(sample.peerConnectionId, newObservedPeerConnection);
 
 			this._notify('peer-connection-added', { ...this.eventScope, observedPeerConnection: newObservedPeerConnection });

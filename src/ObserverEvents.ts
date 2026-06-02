@@ -19,7 +19,6 @@ import type { ObservedInboundTrack } from './ObservedInboundTrack';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
-import type { TrackReport } from './Reports';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
 
 /**
@@ -80,7 +79,6 @@ export type ObserverEvents = {
 	'client-metadata': [ObservedClientScope & { metaData: ClientMetaData }];
 	'client-extension-stats': [ObservedClientScope & { extensionStats: ExtensionStat }];
 	'client-event': [ObservedClientScope & { event: ClientEvent }];
-	'client-track-report': [ObservedClientScope & { report: TrackReport }];
 
 	// peer connection level
 	'peer-connection-added': [ObservedPeerConnectionScope];
