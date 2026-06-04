@@ -55,10 +55,25 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
+      # Skip (don't fail) if this exact version is already on npm — avoids a red build when a
+      # master push didn't bump the version. (develop publishes a unique snapshot, so it's exempt.)
+      - name: Check if version already published
+        id: published
+        if: steps.ctx.outputs.branch == 'master'
+        shell: bash
+        run: |
+          NAME="$(node -p "require('./package.json').name")"
+          if npm view "$NAME@${{ steps.ctx.outputs.version }}" version >/dev/null 2>&1; then
+            echo "Version $NAME@${{ steps.ctx.outputs.version }} already published — skipping publish."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # master -> publish to the version's dist-tag ("latest" for stable, e.g. "beta" for a prerelease).
       # Auth is via OIDC (trusted publisher); provenance is attached automatically.
       - name: Publish
-        if: steps.ctx.outputs.branch == 'master'
+        if: steps.ctx.outputs.branch == 'master' && steps.published.outputs.exists == 'false'
         run: npm publish --access public --ignore-scripts --tag "${{ steps.ctx.outputs.tag }}"
 
       # develop -> publish a per-commit release candidate under a custom dist-tag.
