@@ -38,10 +38,11 @@ export type AcceptMiddlewarePayload = {
  */
 export type AcceptMiddleware = Middleware<AcceptMiddlewarePayload>;
 
-// Updates are event-driven: triggered when any/all calls have updated.
+// Updates are event-driven: triggered when any/all calls have updated. `'none'` disables the
+// automatic trigger entirely — the application must call `observer.update()` itself.
 // (Apps wanting a fixed cadence can call `observer.update()` on their own timer.)
 type ObserverUpdateConfig = {
-	updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated',
+	updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated' | 'none',
 };
 
 /** Produces the initial `appData` for a call created without an explicit `appData`. */
@@ -128,6 +129,9 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 				break;
 			case 'update-when-all-call-updated':
 				this.updater = new OnAllCallObserverUpdater(this);
+				break;
+			case 'none':
+				// No automatic updater: `observer.update()` only runs when the app calls it.
 				break;
 		}
 	}

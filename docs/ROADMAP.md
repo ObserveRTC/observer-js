@@ -144,11 +144,15 @@ Client wall-clock timestamps can jump (NTP corrections, suspend/resume, bad cloc
 correct skew before metrics are derived. Fits naturally as a `ClientSampleProcessor` middleware,
 but could also be a standalone helper. Needed for trustworthy rate/delta math and for replay.
 
+> **All detector ideas are indexed in [`docs/detectors-catalog.md`](./detectors-catalog.md).**
 > Track correlation, the detector catalog, expanded metrics, and call-issue handling are designed
 > in detail in [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md);
 > the livecalls-stats-grounded analysis of which call-level detectors are feasible (with exact
 > thresholds + what's out of scope) is in
-> [`docs/call-level-detectors-analysis.md`](./call-level-detectors-analysis.md). §2.3/§2.4 below are
+> [`docs/call-level-detectors-analysis.md`](./call-level-detectors-analysis.md); the
+> **SFU-failure** detector catalog (correlated cross-client signals when the Observer runs inside an
+> SFU — ICE-disconnect storms, forwarding stalls, egress congestion, with researched thresholds and
+> citations) is in [`docs/sfu-failure-detectors.md`](./sfu-failure-detectors.md). §2.3/§2.4 below are
 > the short version.
 
 ### 2.3 Real server-side detectors (cross-client)

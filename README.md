@@ -15,7 +15,7 @@ and emits a single, unified stream of typed events the application can react to.
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
-> **Packaging:** server-side, **Node.js ≥ 20**, shipped as a **dual ESM + CommonJS** build — so it
+> **Packaging:** server-side, **Node.js ≥ 22**, shipped as a **dual ESM + CommonJS** build — so it
 > works whether your project uses `import` (ESM) or `require()` (CommonJS). Everything — including
 > the built-in file sink — is exported from the single `@observertc/observer-js` entry.
 
@@ -52,7 +52,7 @@ npm install @observertc/observer-js
 yarn add @observertc/observer-js
 ```
 
-**Server-side, Node.js ≥ 20, dual ESM + CommonJS.** The package ships both module formats, so it
+**Server-side, Node.js ≥ 22, dual ESM + CommonJS.** The package ships both module formats, so it
 works the same whether your project is ESM or CommonJS — your import line is unchanged either way:
 
 ```ts
@@ -297,7 +297,8 @@ These return `undefined` (and warn) when the parent is closed; `createObservedCa
 "Update" means *recompute aggregated metrics and emit the `*-updated` event* at that level.
 Both the observer and each call have a configurable trigger. Updates are **event-driven** — there
 is no built-in timer. An app that wants a fixed cadence can call `observer.update()` /
-`call.update()` from its own `setInterval`.
+`call.update()` from its own `setInterval`. With `'none'`, **nothing auto-updates** — the level
+updates only when the application calls the public `update()` itself.
 
 **Observer-level** (`ObserverConfig.updatePolicy`, default `update-when-all-call-updated`):
 
@@ -305,6 +306,7 @@ is no built-in timer. An app that wants a fixed cadence can call `observer.updat
 |--------|-------------------------------------|
 | `update-on-any-call-updated` | any call updates |
 | `update-when-all-call-updated` | every call has updated since the last observer update |
+| `none` | never automatically — only when the app calls `observer.update()` |
 
 **Call-level** (`ObservedCallSettings.updatePolicy`, defaulted from
 `ObserverConfig.defaultCallUpdatePolicy`):
@@ -313,6 +315,7 @@ is no built-in timer. An app that wants a fixed cadence can call `observer.updat
 |--------|--------------------------------|
 | `update-on-any-client-updated` | any client in the call updates |
 | `update-when-all-client-updated` | every client has updated since the last call update |
+| `none` | never automatically — only when the app calls `call.update()` |
 
 ---
 
@@ -437,7 +440,7 @@ listen to them, but prefer the bus equivalents above for application logic.
 new Observer<AppData>(config?: ObserverConfig<AppData>)
 
 type ObserverConfig<AppData = Record<string, unknown>> = {
-    updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated';
+    updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated' | 'none';
     defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'];
     appData?: AppData;
     closeClientIfIdleForMs?: number;
@@ -488,7 +491,7 @@ Key members:
 
 ```ts
 type ObservedCallSettings<AppData = Record<string, unknown>> = {
-    updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated';
+    updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'none';
     callId: string;
     appData?: AppData;
     closeCallIfEmptyForMs?: number;

@@ -133,6 +133,31 @@ in the SFU or the stats backend, not here:
 - **Recorder-service health** (archive chunks, watchdog timeouts, producer swaps): from
   `recorderServiceStats` extension stats — app-specific, better handled by the app.
 
+---
+
+## Mapping the livecalls-stats UI to `observer-js`
+
+livecalls-stats is an **offline/post-hoc** debugger that mixes `ClientSample`-derived data with the
+SFU's own server reports. Mapping its views to what a **live, ClientSample-only** `observer-js`
+can do:
+
+| livecalls-stats symbol | What it does | `observer-js` mapping | Feasibility |
+|------------------------|--------------|------------------------|-------------|
+| **ConsumerVerificationModal** | missing / orphan consumers vs. producers | Detectors #5 **orphan-subscriber** (inbound resolved a publisher id but no matching publisher) and **unconsumed-publisher** | ✅ with track correlation; precise "missing" (server transport windows) ⚠️ approximate only |
+| **UnmatchedRtpSection** | RTP streams not matched to any producer/consumer (by SSRC/RID/id) | **NEW: unmatched/orphan-stream detector** — an inbound/outbound RTP whose track has a publisher id but no peer, or an RTP with no owning track | ✅ with correlation |
+| **MediaOverview** | per-stream quality timeline (good/degraded/…), active vs. paused, grouped by participant | the **stream quality classifier** (the §"foundation"), plus pause/mute state from client events; the timeline itself is the consumer's UI on top of `*-updated` / snapshots | ✅ classifier is feasible; timeline is app-side |
+| **ReloadDetectionModal** | participants sharing a transport remote IP with back-to-back join/leave (< 60 s) ⇒ a reload | **NEW: reload/rejoin detector** — correlate ICE candidate remote IPs (`ObservedIceCandidate.address`) + `joinedAt`/`leftAt` across clients of a call | ✅ feasible (post-hoc-ish; runs on close/join) |
+| **MediaPlayerSection** | one media-player's lifetime + pause/resume history | already modeled by `ObservedMediaPlayout`; expose its state/history (a small read-model addition) | ✅ per-client; app renders |
+| **ServerRecordingsSection** | recording coverage of producers by takes | recording metadata is **server-side**; only reachable here if the app sends it as `extensionStats` | ❌ out of scope (SFU/app data) |
+| **RouterMappingVerificationModal** / **RouterMappingReport** | cross-SFU pipe-transport pairing | needs the SFU's router-mapper reports | ❌ out of scope (not in `ClientSample`) |
+| **ServerData** | the SFU's per-participant truth (transports/producers/consumers/history) | the live `Observed*` tree **is** `observer-js`'s equivalent, built from `ClientSample`s rather than the SFU | n/a — conceptual analog |
+| **StudioReport** / **sessionModel** | session/topology metadata + per-participant "stints" + session window | a **session/call snapshot/report** (per-participant spans, call window) — the deferred reporting concern that belongs in the future `ClientSampleProcessor`, not the Observer | ⏳ deferred (see `report-generation.md`) |
+
+**Net new detector candidates this surfaces** (added to the catalog above): an **unmatched/orphan
+RTP-stream** detector (from `UnmatchedRtpSection`) and a **reload/rejoin** detector (from
+`ReloadDetectionModal`, via ICE remote-IP + join/leave correlation). Everything router/recording is
+confirmed out of scope because it depends on SFU-side reports `observer-js` never receives.
+
 ## Build order
 
 1. **Stream quality classifier** (foundation; per-stream state with the thresholds above).

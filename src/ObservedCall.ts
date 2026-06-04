@@ -16,10 +16,11 @@ import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
 
 const logger = createLogger('ObservedCall');
 
-// Updates are event-driven: triggered when any/all clients in the call have updated.
+// Updates are event-driven: triggered when any/all clients in the call have updated. `'none'`
+// disables the automatic trigger — the application must call `call.update()` itself.
 // (Apps wanting a fixed cadence can call `call.update()` on their own timer.)
 type ObservedCallUpdateConfig = {
-	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated',
+	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'none',
 };
 
 export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = ObservedCallUpdateConfig & {
@@ -107,6 +108,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				break;
 			case 'update-when-all-client-updated':
 				this.updater = new OnAllClientCallUpdater(this);
+				break;
+			case 'none':
+				// No automatic updater: `call.update()` only runs when the app calls it.
 				break;
 		}
 

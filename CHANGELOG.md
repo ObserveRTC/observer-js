@@ -33,8 +33,9 @@ the 1.0.0 API provides.
 - **Accept middlewares.** `observer.acceptMiddlewares` — a global, pre-dispatch chain run on every
   sample before it reaches any call/client (inspect, mutate/normalize ids, enrich).
 - **Event-driven update policies.** Observer and call aggregation triggers are
-  `update-on-any-…-updated` / `update-when-all-…-updated`. There are **no internal timers**; an app
-  that wants a fixed cadence calls `observer.update()` / `call.update()` itself.
+  `update-on-any-…-updated` / `update-when-all-…-updated` / `none`. There are **no internal timers**;
+  with `none` (or to drive a fixed cadence) the app calls the public `observer.update()` /
+  `call.update()` itself.
 - **Automatic teardown.** Optional `closeClientIfIdleForMs` and `closeCallIfEmptyForMs`; closing
   cascades down the tree and emits the matching `*-closed` / `*-removed` events.
 
@@ -88,7 +89,7 @@ the 1.0.0 API provides.
 
 ### Packaging & tooling
 
-- **Server-side, Node.js ≥ 20.** Shipped as a **dual ESM + CommonJS** build (single entry) via
+- **Server-side, Node.js ≥ 22.** Shipped as a **dual ESM + CommonJS** build (single entry) via
   `tsup`, with `.d.ts`/`.d.mts` types and sourcemaps; works with both `import` and `require()`.
 - **CI gate** (lint + typecheck + build + tested with a **coverage threshold**) and **npm Trusted
   Publishing (OIDC) with provenance**.
