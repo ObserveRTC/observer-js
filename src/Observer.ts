@@ -277,7 +277,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this._notify('observer-closed', { ...this.eventScope });
 	}
 
-	public accept(sample: ClientSample, context?: AcceptContext) {
+	public accept(sample: ClientSample, context?: AcceptContext): void {
 		if (this.closed) {
 			return this._notify('sample-rejected', { ...this.eventScope, reason: 'observer-closed', sample });
 		}
