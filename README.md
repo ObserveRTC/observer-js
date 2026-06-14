@@ -369,7 +369,7 @@ additional field(s) on top of that scope.
 | Event | Extra | Fires when |
 |-------|-------|-----------|
 | `mediasoup-router-added` | — | `observer.createObservedMediasoupRouter(...)` registered a router |
-| `mediasoup-router-matched-with-peer-connection` | `{ observedCall, observedClient, observedPeerConnection }` | a newly added peer connection's id matched one of the router's WebRTC transport ids. |
+| `mediasoup-router-matched-with-peer-connection` | `{ observedCall, observedClient, observedPeerConnection }` | a newly added peer connection's id matched one of the router's WebRTC transport ids. **Opt-in** via `matchPeerConnectionByWebRtcTransportId: true`. |
 | `mediasoup-router-removed` | — | the underlying mediasoup router closed (its `router.observer` `close` fired) |
 
 See [Mediasoup router observation](#mediasoup-router-observation) for the full design and examples.
@@ -832,11 +832,13 @@ ancestry, so you get the router **and** the matched `observedPeerConnection`, `o
 `observedCall` in one place. Stamp the `routerId` into the peer connection's / client's `appData`,
 build your own index, attach the server sample to the call in your database — whatever fits.
 
-How it works: as peer connections are observed (`peer-connection-added`), the observer checks whether
-the peer connection's id is one of the router's WebRTC transport ids. On a hit it emits — **once per
-matching peer connection** (de-duplicated by peer-connection id) — and keeps watching, so a router
-that serves many participants emits one match per participant's transport. The internal listener is
-removed automatically when the router closes or the observer closes.
+This matching is **opt-in**: pass `matchPeerConnectionByWebRtcTransportId: true` to
+`createObservedMediasoupRouter`. When enabled, as peer connections are observed
+(`peer-connection-added`) the observer checks whether the peer connection's id is one of the router's
+WebRTC transport ids; on a hit it emits — once per matching peer connection — and keeps watching, so a
+router serving many participants emits one match per participant's transport. When the flag is omitted
+or `false`, no matching is performed and the event never fires. The internal listener is removed
+automatically when the router closes or the observer closes.
 
 When the underlying mediasoup router closes, its `close` propagates to `ObservedMediasoupRouter`,
 which emits **`mediasoup-router-removed`**. That is your cue to do whatever cleanup or persistence
@@ -850,10 +852,11 @@ you want with the now-final `sample` — again, the observer itself keeps nothin
 | `routerId` | `string` | yes | your id for the router (the sample also carries `router.id`) |
 | `appData` | `Record<string, unknown>` | no | application-owned bag on the `ObservedMediasoupRouter` |
 | `attachments` | `Record<string, unknown>` | no | free-form data copied onto `sample.attachments` |
+| `matchPeerConnectionByWebRtcTransportId` | `boolean` | no | opt in to peer-connection matching: emit `mediasoup-router-matched-with-peer-connection` for each peer connection whose id matches one of the router's WebRTC transport ids. Omitted / `false` → no matching, the event never fires |
 
-Peer-connection matching is automatic — there is nothing to opt into. Returns the
-`ObservedMediasoupRouter`, or `undefined` if the observer is closed (a router with the same id
-returns the existing instance — both warn).
+Peer-connection matching is **off by default**; enable it with
+`matchPeerConnectionByWebRtcTransportId: true`. Returns the `ObservedMediasoupRouter`, or `undefined`
+if the observer is closed (a router with the same id returns the existing instance — both warn).
 
 Useful members on the returned object: `.sample` (the `MediasoupRouterSample`), `.appData`,
 `.attachments` (getter over `sample.attachments`), `.webrtcTransportIds: Set<string>`, `.id`,
@@ -870,9 +873,13 @@ const observer = new Observer();
 // 1) Feed client samples as usual so the observer knows about calls, clients & peer connections.
 //    (e.g. transport-layer: observer.accept(clientSample, context))
 
-// 2) Observe the SFU side. The observer auto-matches peer connections to this router's transports.
+// 2) Observe the SFU side, opting in to peer-connection matching for this router's transports.
 const router = /* your mediasoup router */ undefined as any;
-const observedRouter = observer.createObservedMediasoupRouter({ router, routerId: router.id });
+const observedRouter = observer.createObservedMediasoupRouter({
+  router,
+  routerId: router.id,
+  matchPeerConnectionByWebRtcTransportId: true,
+});
 
 // 3) Every peer connection whose id matches one of the router's WebRTC transport ids fires this —
 //    WE decide what to do with each pairing. The payload carries the full ancestry.

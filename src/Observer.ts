@@ -200,7 +200,12 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	}
 
 	public createObservedMediasoupRouter<T extends Record<string, unknown> = Record<string, unknown>>(
-		settings: ObservedMediasoupRouterSettings<T>,
+		settings: ObservedMediasoupRouterSettings<T> & {
+			// When `true`, the observer emits `mediasoup-router-matched-with-peer-connection` for every
+			// observed peer connection whose id matches one of this router's WebRTC transport ids.
+			// When `false` / omitted, no peer-connection matching is performed.
+			matchPeerConnectionByWebRtcTransportId?: boolean,
+		},
 	) {
 		if (this.closed) {
 			logger.warn('Attempted to create mediasoup router (id: %d) on a closed observer', settings.router.id);
@@ -218,19 +223,25 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			observedMediasoupRouter,
 			observer: this,
 		};
-		const onPeerConnectionAdded = (observedPeerConnectionScope: ObserverEvents['peer-connection-added'][0]) => {
-			if (!observedMediasoupRouter.webrtcTransportIds.has(observedPeerConnectionScope.observedPeerConnection.peerConnectionId)) return;
 
-			this.emit('mediasoup-router-matched-with-peer-connection', {
-				...observedMediasoupRouterScope,
-				...observedPeerConnectionScope,
-			});
-		};
-		const stopMatching = () => this.off('peer-connection-added', onPeerConnectionAdded);
+		// Peer-connection matching is opt-in (see `matchPeerConnectionByWebRtcTransportId`). When on,
+		// emit `mediasoup-router-matched-with-peer-connection` for each peer connection whose id matches
+		// one of the router's WebRTC transport ids; the observer stores nothing — the app owns the pairing.
+		if (settings.matchPeerConnectionByWebRtcTransportId) {
+			const onPeerConnectionAdded = (observedPeerConnectionScope: ObserverEvents['peer-connection-added'][0]) => {
+				if (!observedMediasoupRouter.webrtcTransportIds.has(observedPeerConnectionScope.observedPeerConnection.peerConnectionId)) return;
 
-		this.on('peer-connection-added', onPeerConnectionAdded);
-		this.once('observer-closed', stopMatching);
-		observedMediasoupRouter.once('close', stopMatching);
+				this.emit('mediasoup-router-matched-with-peer-connection', {
+					...observedMediasoupRouterScope,
+					...observedPeerConnectionScope,
+				});
+			};
+			const stopMatching = () => this.off('peer-connection-added', onPeerConnectionAdded);
+
+			this.on('peer-connection-added', onPeerConnectionAdded);
+			this.once('observer-closed', stopMatching);
+			observedMediasoupRouter.once('close', stopMatching);
+		}
 
 		observedMediasoupRouter.once('close', () => {
 			this.observedMediasoupRouters.delete(observedMediasoupRouter.id);
