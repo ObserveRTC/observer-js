@@ -3,12 +3,33 @@
 [![NPM version](https://img.shields.io/npm/v/@observertc/observer-js.svg)](https://www.npmjs.com/package/@observertc/observer-js)
 [![License](https://img.shields.io/npm/l/@observertc/observer-js.svg)](https://github.com/observertc/observer-js/blob/main/LICENSE)
 
+> **In one line:** feed it WebRTC `getStats()` snapshots, and get back a live, queryable model of
+> every call plus a single typed event stream to react to.
+
 `observer-js` is a **server-side Node.js library for monitoring WebRTC sessions**. A WebRTC
 application (typically an SFU or a signaling/stats backend) feeds it `ClientSample` objects —
 periodic snapshots of each participant's `RTCPeerConnection.getStats()` output plus
 application events — and `observer-js` maintains a live, in-memory model of every call,
 participant, peer connection, and media stream, derives per-interval and cumulative metrics,
 and emits a single, unified stream of typed events the application can react to.
+
+**What you can do with it:**
+
+- **Monitor calls live** — a queryable in-memory tree of every call, client, peer connection,
+  track, codec, ICE candidate and data channel, each holding current **and** cumulative metrics.
+- **React on one event bus** — subscribe once on the `Observer`; every payload carries its full
+  ancestry (`call → client → peer connection → stat`), so you never walk the tree to subscribe.
+- **Get derived metrics for free** — counter-reset-safe per-tick deltas, bitrates, jitter, RTT,
+  fraction-lost, remote-RTP (RTCP) correlation, and TURN/TCP usage from the selected candidate pair.
+- **Correlate across an SFU** — link a publisher's outbound track to every subscriber's inbound
+  track (`RemoteTrackResolver`), and observe mediasoup routers/transports/producers/consumers
+  on the server side.
+- **Detect server-only problems** — cross-client `Detector`s raise `call-issue`s for conditions no
+  single client can see (e.g. everyone in a call degrading at once).
+- **Persist every sample** — per-client sinks (JSONL file, in-memory, or your own) for archival,
+  streaming, and offline replay.
+- **Drop it in safely** — warn-don't-throw, a pluggable logger, dual **ESM + CommonJS**, and **no**
+  media-stack dependency in the core.
 
 > **Status:** `1.0.0-beta`. The API described here is current and intended to be implemented
 > against directly. This document is written to be self-sufficient: an engineer (or an AI
@@ -24,23 +45,21 @@ and emits a single, unified stream of typed events the application can react to.
 ## Table of contents
 
 1. [Installation](#installation)
-2. [Mental model](#mental-model)
-3. [Quick start](#quick-start)
-4. [Data flow](#data-flow)
-5. [Entity hierarchy](#entity-hierarchy)
-6. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
-7. [Update policies](#update-policies)
-8. [The event bus](#the-event-bus) ← the core of the API
-9. [API reference](#api-reference)
-10. [Schema types (`ClientSample`)](#schema-types-clientsample)
-11. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
-12. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
+2. [Quick start](#quick-start)
+3. [Data flow](#data-flow)
+4. [Entity hierarchy](#entity-hierarchy)
+5. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
+6. [Update policies](#update-policies)
+7. [The event bus](#the-event-bus) ← the core of the API
+8. [API reference](#api-reference)
+9. [Schema types (`ClientSample`)](#schema-types-clientsample)
+10. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
+11. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
+12. [Mediasoup router observation](#mediasoup-router-observation)
 13. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
 14. [Logging](#logging)
 15. [Error-handling philosophy](#error-handling-philosophy)
-16. [Public exports](#public-exports)
-17. [Development & extension guide](#development--extension-guide)
-18. [Not yet implemented / roadmap](#not-yet-implemented--roadmap)
+16. [Development & extension guide](#development--extension-guide)
 
 ---
 
@@ -69,31 +88,6 @@ any transport — see [Logging](#logging).
 `ClientSample` and friends are re-exported from this package, and are also published as the
 shared schema in [`@observertc/schemas`](https://github.com/observertc/schemas); samples
 produced on the client (e.g. by `@observertc/client-monitor-js`) conform to the same shape.
-
----
-
-## Mental model
-
-Five ideas are enough to use the whole library:
-
-1. **One ingestion method.** `observer.accept(sample, context?)` is how data gets in.
-   Calls, clients, and peer connections are created automatically the first time their id
-   appears in a sample.
-
-2. **A live entity tree.** `Observer → ObservedCall → ObservedClient → ObservedPeerConnection
-   → {inbound/outbound RTP, tracks, data channels, ICE, codecs, …}`. Every node holds current
-   and cumulative metrics and is reachable by id through `Map`s on its parent.
-
-3. **One event bus.** Everything worth subscribing to is emitted on the **`Observer`** itself
-   (it is an `EventEmitter`). Each event payload is an **object carrying the full ancestry**
-   of the entity it came from. You never have to walk the tree to subscribe.
-
-4. **Pull or react.** You can read fields off the entities at any time (pull), and/or react to
-   events (push). The `*-updated` events fire on each processing tick.
-
-5. **Warn, don't throw.** Operational problems (bad config, duplicate ids, closed entities,
-   malformed samples) never throw; they warn through the pluggable logger and degrade
-   gracefully (returning `undefined` or emitting `sample-rejected`).
 
 ---
 
@@ -364,6 +358,16 @@ additional field(s) on top of that scope.
 | `observer-closed` | — | `observer.close()` |
 | `sample-rejected` | `{ reason: 'observer-closed' \| 'missing-callId' \| 'missing-clientId', sample: ClientSample }` | a sample was dropped by `accept()` |
 
+#### Mediasoup level — scope `{ observer, observedMediasoupRouter }`
+
+| Event | Extra | Fires when |
+|-------|-------|-----------|
+| `mediasoup-router-added` | — | `observer.createObservedMediasoupRouter(...)` registered a router |
+| `mediasoup-router-matched-with-call` | `{ observedCall }` | the router was matched to a call — explicitly via `callId`, or by WebRTC-transport ↔ peer-connection correlation. Emitted **once per distinct call**; the observer stores **nothing** — your handler decides what to do |
+| `mediasoup-router-removed` | — | the underlying mediasoup router closed (its `router.observer` `close` fired) |
+
+See [Mediasoup router observation](#mediasoup-router-observation) for the full design and examples.
+
 #### Call level — scope `{ observer, observedCall }`
 
 | Event | Extra | Fires when |
@@ -620,6 +624,74 @@ mediasoup set `PRODUCER_*` / `CONSUMER_*` / `DATA_PRODUCER_*` / `DATA_CONSUMER_*
 `MEDIA_DEVICES_SUPPORTED_CONSTRAINTS`, `USER_MEDIA_ERROR`, `LOCAL_SDP`, `OPERATION_SYSTEM`,
 `ENGINE`, `PLATFORM`, `BROWSER`.
 
+### Worked example: a real `ClientSample`
+
+Two consecutive samples from one participant ("Guest" in room `qq0iwfnd`) of an
+edumeet/mediasoup call show what actually flows through `accept()`: a rich **join snapshot**,
+then lean **steady-state ticks**.
+
+**Sample 1 — the join snapshot.** Carries the one-off lifecycle `clientEvents` and device
+`clientMetaItems` alongside the first stats. (Abbreviated; ids and times are from the real log.)
+
+```jsonc
+{
+  "timestamp": 1780572332518,
+  "callId":   "d3dbf2f5-79be-4cb8-9d43-fb404f07ef27",
+  "clientId": "c926983c-4468-4046-ae8c-a9cabe1a1868",
+  "score": 0,                                          // no quality measured yet on the join tick
+  "attachments": { "displayName": "Guest", "roomId": "qq0iwfnd", "actualSessionId": "d3dbf2f5-…" },
+
+  "clientEvents": [                                     // chronological lifecycle (12 in the real sample)
+    { "type": "CLIENT_JOINED",                 "timestamp": 1780572324515 },
+    { "type": "PEER_CONNECTION_OPENED",        "timestamp": 1780572326790 },   // pc=b81c8d9d (media)
+    { "type": "ICE_GATHERING_STATE_CHANGED",   "timestamp": 1780572326811 },   // → gathering
+    { "type": "PEER_CONNECTION_STATE_CHANGED", "timestamp": 1780572326812 },   // → connecting
+    { "type": "PRODUCER_ADDED",                "timestamp": 1780572326821 },   // producer=1abdaf82 (audio)
+    { "type": "MEDIA_TRACK_ADDED",             "timestamp": 1780572326821 },   // track=36ae42df  (audio)
+    { "type": "PEER_CONNECTION_STATE_CHANGED", "timestamp": 1780572326827 },   // → connected
+    { "type": "PRODUCER_ADDED",                "timestamp": 1780572326837 },   // producer=ba06a35b (video)
+    { "type": "DATA_PRODUCER_CREATED",         "timestamp": 1780572326853 }
+  ],
+
+  "clientMetaItems": [                                  // environment & devices, one-off (10 in the real sample)
+    { "type": "USER_AGENT_DATA", "payload": "{…Chrome 148 / macOS…}" },
+    { "type": "MEDIA_DEVICE",    "payload": "{…\"BRIO 4K Stream Edition\"…}" }
+    // …mic / camera / speaker devices…
+  ],
+
+  "peerConnections": [
+    {
+      "peerConnectionId": "b81c8d9d-…",                // the media PC — Guest publishes to the SFU
+      "outboundRtps":      [ /* audio + video */ ],
+      "outboundTracks":    [ /* mic + camera: label, settings, capabilities */ ],
+      "remoteInboundRtps": [ /* RTCP feedback from the SFU */ ],
+      "codecs": [ /* … */ ], "iceTransports": [ /* … */ ],
+      "iceCandidatePairs": [ /* … */ ], "dataChannels": [ /* … */ ]
+    },
+    { "peerConnectionId": "8635acb7-…", "peerConnectionTransports": [ /* … */ ] }  // signaling-only PC
+  ]
+}
+```
+
+What `accept()` does with it, in order — each step emits on the bus with full ancestry:
+
+1. lazily creates the `ObservedCall` → **`call-added`**;
+2. creates the `ObservedClient` → **`client-added`**, then **`client-joined`** (from `CLIENT_JOINED`);
+3. creates an `ObservedPeerConnection` per entry → **`peer-connection-added`** (×2 here);
+4. creates an `ObservedOutboundTrack` per track → **`outbound-track-added`**, plus the matching
+   **`outbound-rtp-added`**;
+5. replays the device list as **`client-metadata`** events and the lifecycle items as
+   **`client-event`**; and finally **`client-updated`** for the whole tick.
+
+`attachments.roomId` lands on `observedClient.attachments` (read it on `client-updated`, **not** at
+creation — see [Ingestion](#ingestion-accept-context--lifecycle)).
+
+**Sample 2 — a steady-state tick** (~8 s later): same `callId` / `clientId`, **no** new
+`clientEvents` or `clientMetaItems`, just refreshed `peerConnections` stats. Each PC now scores `5`
+and the aggregate client `score` is `4.74` — a healthy call. This is the shape of nearly every
+sample: each tick refreshes metrics and fires the `*-updated` events, while the heavy join
+snapshot happens only once.
+
 ---
 
 ## Detectors (server-side extension point)
@@ -713,6 +785,135 @@ const observer = new Observer({
 
 For the mediasoup factory, the application puts `producerId` / `consumerId` (and optionally
 `direction`, `label`) into the track `attachments`.
+
+---
+
+## Mediasoup router observation
+
+Everything above is built from the **client-reported** `ClientSample`. When you run a
+[mediasoup](https://mediasoup.org) SFU you also have the **server's own** ground truth — its
+routers, transports, producers, consumers and data channels, with exact lifetimes and state
+transitions. `ObservedMediasoupRouter` captures that server-side view into a
+**`MediasoupRouterSample`**, completely independent of the client sample pipeline.
+
+### The concept
+
+You hand the observer a live mediasoup `Router`; it attaches to mediasoup's own `observer` API and,
+from then on, **passively records** the router's topology and lifecycle — with no polling and no
+changes to your media code:
+
+- new transports (`webrtc` / `plain` / `pipe` / `direct`), their selected `tuple`, and ICE state
+  transitions;
+- producers (codec, SSRCs/RIDs, `pause`/`resume`) and consumers (`pause`/`resume`,
+  `producerPaused`/`producerResumed`);
+- data producers and data consumers;
+- `createdAt` / `closedAt` for every entity above.
+
+All of it accumulates on `observedMediasoupRouter.sample` (a `MediasoupRouterSample` — see
+[`src/schema/MediasoupRouter.ts`](./src/schema/MediasoupRouter.ts)). This is a *Sample*, not a
+*Report*: it mirrors the naming of `ClientSample` and is yours to snapshot, persist, or correlate.
+
+### Matching a router to a call — by **event**, not by storage
+
+A router belongs to one or more calls, but **the observer does not store the router (or its sample)
+on the `ObservedCall`.** Instead, when a match is found it emits
+**`mediasoup-router-matched-with-call`** and steps back — *your application* decides what the
+pairing means. Stamp the `callId` into the router's `appData`, build your own index, attach the
+sample to the call in your database — whatever fits your system. The library stays unopinionated and
+loosely coupled.
+
+There are two ways a match is discovered, controlled by the settings you pass to
+`createObservedMediasoupRouter`:
+
+- **Explicit (`callId`)** — you already know the call. If that call currently exists,
+  `mediasoup-router-matched-with-call` fires immediately.
+- **Implicit (`bindCallByWebRtcTransportId: true`)** — let the observer discover it. As peer
+  connections are observed (`peer-connection-added`), the observer checks whether the peer
+  connection's id is one of the router's WebRTC transport ids. On a hit, it's a match. It emits
+  **once per distinct call**, and keeps watching so additional calls sharing the router can still
+  match later. The internal listener is removed automatically when the router closes or the observer
+  closes.
+
+When the underlying mediasoup router closes, its `close` propagates to `ObservedMediasoupRouter`,
+which emits **`mediasoup-router-removed`**. That is your cue to do whatever cleanup or persistence
+you want with the now-final `sample` — again, the observer itself keeps nothing.
+
+### Options — `observer.createObservedMediasoupRouter(settings)`
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `router` | `mediasoup.types.Router` | yes | the live router to observe; the observer attaches to `router.observer` |
+| `routerId` | `string` | yes | your id for the router (the sample also carries `router.id`) |
+| `appData` | `Record<string, unknown>` | no | application-owned bag on the `ObservedMediasoupRouter` (e.g. where you record the matched `callId`) |
+| `attachments` | `Record<string, unknown>` | no | free-form data copied onto `sample.attachments` |
+| `callId` | `string` | no | **explicit match**: emit `mediasoup-router-matched-with-call` now if this call exists |
+| `bindCallByWebRtcTransportId` | `boolean` | no | **implicit match**: discover the call(s) by correlating WebRTC transport ids with peer-connection ids |
+
+Returns the `ObservedMediasoupRouter`, or `undefined` if the observer is closed (a router with the
+same id returns the existing instance — both warn).
+
+Useful members on the returned object: `.sample` (the `MediasoupRouterSample`), `.appData`,
+`.attachments` (getter over `sample.attachments`), `.webrtcTransportIds: Set<string>`, `.id`,
+`.close()`.
+
+### Example
+
+```ts
+import { Observer } from '@observertc/observer-js';
+import type { ObservedMediasoupRouterScope, ObservedCallScope } from '@observertc/observer-js';
+
+const observer = new Observer();
+
+// 1) Feed client samples as usual so the observer knows about calls & peer connections.
+//    (e.g. transport-layer: observer.accept(clientSample, context))
+
+// 2) Observe the SFU side. Let the observer discover which call this router serves.
+const router = /* your mediasoup router */ undefined as any;
+const observedRouter = observer.createObservedMediasoupRouter({
+  router,
+  routerId: router.id,
+  bindCallByWebRtcTransportId: true, // discover the call by peer-connection correlation
+  appData: {},                        // we'll record the matched callId here
+});
+
+// 3) The observer found a call for the router — WE decide what to do with the pairing.
+observer.on('mediasoup-router-matched-with-call',
+  ({ observedMediasoupRouter, observedCall }: ObservedMediasoupRouterScope & ObservedCallScope) => {
+    // e.g. remember the association on the router's appData…
+    observedMediasoupRouter.appData.callId = observedCall.callId;
+    // …or attach the live server sample to the call in your own store:
+    myStore.linkRouterToCall(observedCall.callId, observedMediasoupRouter.sample);
+  },
+);
+
+// 4) The router closed — WE decide what to persist/forward with the final sample.
+observer.on('mediasoup-router-removed', ({ observedMediasoupRouter }: ObservedMediasoupRouterScope) => {
+  const callId = observedMediasoupRouter.appData.callId as string | undefined;
+  myStore.saveRouterSample(callId, observedMediasoupRouter.sample);
+});
+
+// (optional) react to the router being registered at all:
+observer.on('mediasoup-router-added', ({ observedMediasoupRouter }) => {
+  console.log('observing router', observedMediasoupRouter.id);
+});
+```
+
+If you already know the call, skip discovery and match explicitly:
+
+```ts
+observer.createObservedMediasoupRouter({ router, routerId: router.id, callId });
+// → `mediasoup-router-matched-with-call` fires immediately if `callId` is a known call
+```
+
+### Why event-driven instead of storing on the call
+
+- **Loose coupling.** The call model stays about client telemetry; the SFU view lives on its own
+  object and is associated only if and how *you* choose.
+- **You own the association.** One router may serve multiple calls, a call may be served by multiple
+  routers, and the right place to keep that mapping is application-specific — so the observer hands
+  you the match and the final sample and gets out of the way.
+- **No silent accumulation.** Nothing is appended to `ObservedCall`, so there is no hidden growth or
+  lifetime you have to reason about; the router sample lives exactly as long as you keep a reference.
 
 ---
 
@@ -878,48 +1079,6 @@ are caught by `accept()` and surfaced as a warning.
 
 ---
 
-## Public exports
-
-```ts
-// Entry: src/index.ts
-export { Observer } from './Observer';
-export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory } from './Observer';
-export type { ObserverEventBase, ObservedCallScope, ObservedClientScope, ObservedPeerConnectionScope } from './ObserverEvents';
-
-export { ObservedCall, ObservedClient, ObservedPeerConnection } from './…';
-export { ObservedInboundTrack, ObservedOutboundTrack } from './…';
-export { ObservedInboundRtp, ObservedOutboundRtp, ObservedRemoteInboundRtp, ObservedRemoteOutboundRtp } from './…';
-export { ObservedMediaSource, ObservedMediaPlayout, ObservedCodec, ObservedCertificate, ObservedDataChannel } from './…';
-export { ObservedIceCandidate, ObservedIceCandidatePair, ObservedIceTransport, ObservedPeerConnectionTransport } from './…';
-
-export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
-export { ClientEventTypes } from './schema/ClientEventTypes';
-export { ClientMetaTypes } from './schema/ClientMetaTypes';
-
-export { ScoreCalculator } from './scores/ScoreCalculator';
-export { Detectors } from './detectors/Detectors';
-export type { Detector } from './detectors/Detector';
-
-export { createLogger, setObserverLogger } from './common/logger';
-export type { Logger, ObserverLogger } from './common/logger';
-
-// sinks: base class (subclass it for a custom destination) + built-ins
-export { ClientSampleSink } from './sinks/ClientSampleSink';
-export type { ClientSampleSinkEvents, ClientSampleSinkFactory } from './sinks/ClientSampleSink';
-export { JsonlFileSink, createJsonlFileSink, createJsonlFileSinkFactory } from './sinks/JsonlFileSink';
-export type { JsonlFileSinkOptions, JsonlFileSinkFactoryOptions } from './sinks/JsonlFileSink';
-export { InMemorySink, createInMemorySink } from './sinks/InMemorySink';
-
-export { Middleware } from './common/Middleware';
-
-// remote track correlation
-export { RemoteTrackResolver } from './utils/RemoteTrackResolver';
-export type { RemoteTrackResolvers, RemoteTrackResolverFactory } from './utils/RemoteTrackResolver';
-export { createDefaultMediasoupRemoteTrackResolverFactory, createP2pRemoteTrackResolverFactory } from './utils/RemoteTrackResolverFactories';
-```
-
----
-
 ## Development & extension guide
 
 ```bash
@@ -968,24 +1127,6 @@ event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `up
   `observedCall.detectors.add(...)`, surface findings with `observedCall.addIssue(...)`.
 
 ---
-
-## Not yet implemented / roadmap
-
-For an agent continuing the work, these are explicitly **not** present yet:
-
-- **Tests.** There is currently only a placeholder spec. The two `accept()` methods
-  (`ObservedClient`, `ObservedPeerConnection`) are the priority for characterization tests. (A
-  CI gate running lint + typecheck + test is already in place — see `.github/workflows/ci.yml`.)
-- **Built-in detectors / quality classifier.** The registry exists; concrete server-side
-  detectors (e.g. producer→consumer delivery mismatch, quality outlier, asymmetric media) are
-  to be designed.
-- **Per-tick snapshot API.** A serializable snapshot per `*-updated` tick to replace consuming
-  the fine-grained `*-updated` events (under consideration).
-- **Monotonic-timestamp / clock-skew handling** for client clock jumps.
-- **Batch `processSamples()`** entry point for offline analysis of recorded sample streams.
-- **Expanded derived metrics** (jitter-buffer delay, concealment, freeze fraction, encode/decode
-  CPU, quality-limitation breakdown, etc.) and first-class producer/consumer & PC-direction
-  fields beyond `attachments`.
 
 ## License
 

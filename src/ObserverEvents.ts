@@ -20,6 +20,7 @@ import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
+import { ObservedMediasoupRouter } from './ObservedMediasoupRouter';
 
 /**
  * The Observer is the single event bus for the whole hierarchy. Every event
@@ -53,11 +54,20 @@ export type ObservedPeerConnectionScope = ObservedClientScope & {
 	observedPeerConnection: ObservedPeerConnection;
 };
 
+export type ObservedMediasoupRouterScope = Omit<ObserverEventBase, 'context'> & {
+	observedMediasoupRouter: ObservedMediasoupRouter;
+};
+
 export type ObserverEvents = {
 	// observer level
 	'observer-updated': [ObserverEventBase];
 	'observer-closed': [ObserverEventBase];
 	'sample-rejected': [ObserverEventBase & { reason: SampleRejectedReason, sample: ClientSample }];
+
+	// mediasoup level
+	'mediasoup-router-added': [ObservedMediasoupRouterScope];
+	'mediasoup-router-removed': [ObservedMediasoupRouterScope];
+	'mediasoup-router-matched-with-call': [ObservedMediasoupRouterScope & ObservedCallScope];
 
 	// call level
 	'call-added': [ObservedCallScope];

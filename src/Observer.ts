@@ -7,9 +7,11 @@ import { Updater } from './updaters/Updater';
 import { OnAllCallObserverUpdater } from './updaters/OnAllCallObserverUpdater';
 import { OnAnyCallObserverUpdater } from './updaters/OnAnyCallObserverUpdater';
 import type { RemoteTrackResolverFactory } from './utils/RemoteTrackResolver';
-import type { ObserverEvents, ObserverEventBase } from './ObserverEvents';
+import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } from './ObserverEvents';
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
+import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
+import { ObservedPeerConnection } from './ObservedPeerConnection';
 
 const logger = createLogger('Observer');
 
@@ -93,6 +95,8 @@ export declare interface Observer {
 export class Observer<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly observedTURN = new ObservedTURN();
 	public readonly observedCalls = new Map<string, ObservedCall>();
+	public readonly observedMediasoupRouters = new Map<string, ObservedMediasoupRouter>();
+
 	public updater?: Updater;
 
 	/** Ancestry base shared by all Observer-bus events originating at the observer. */
@@ -194,6 +198,72 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		settings: ObservedCallSettings<T>
 	): ObservedCall<T> | undefined {
 		return this.getObservedCall<T>(settings.callId) ?? this.createObservedCall<T>(settings);
+	}
+
+	public createObservedMediasoupRouter<T extends Record<string, unknown> = Record<string, unknown>>(
+		settings: ObservedMediasoupRouterSettings<T> & {
+			callId?: string,
+			bindCallByWebRtcTransportId?: boolean;
+		},
+	) {
+		if (this.closed) {
+			logger.warn('Attempted to create mediasoup router (id: %d) on a closed observer', settings.router.id);
+
+			return undefined;
+		}
+		if (this.observedMediasoupRouters.has(settings.router.id)) {
+			logger.warn('Observed Mediasoup Router (id %s) already exists; returning the existing instance', settings.router.id);
+
+			return this.observedMediasoupRouters.get(settings.router.id);
+		}
+
+		const observedMediasoupRouter = new ObservedMediasoupRouter(settings);
+		const observedMediasoupRouterScope: ObservedMediasoupRouterScope = {
+			observedMediasoupRouter,
+			observer: this,
+		};
+		// The observer does NOT store the router (or its sample) on the call. Instead, when the router is
+		// matched to a call it emits `mediasoup-router-matched-with-call` and the application decides what to
+		// do with the pairing (e.g. stamp the callId into the router's appData/attachments, index it, etc.).
+		const directCall = settings.callId ? this.observedCalls.get(settings.callId) : undefined;
+
+		if (directCall) {
+			// Explicit match: the caller already knows the call this router belongs to.
+			this.emit('mediasoup-router-matched-with-call', {
+				...observedMediasoupRouterScope,
+				observedCall: directCall,
+			});
+		} else if (settings.bindCallByWebRtcTransportId) {
+			// Implicit match: correlate the router's WebRTC transport ids with observed peer-connection ids.
+			// Emit once per distinct matched call, and keep listening so further calls can still match.
+			const matchedCallIds = new Set<string>();
+			const onPeerConnectionAdded = ({ observedPeerConnection, observedCall }: ObserverEvents['peer-connection-added'][0]) => {
+				if (!observedMediasoupRouter.webrtcTransportIds.has(observedPeerConnection.peerConnectionId)) return;
+				if (matchedCallIds.has(observedCall.callId)) return;
+
+				matchedCallIds.add(observedCall.callId);
+				this.emit('mediasoup-router-matched-with-call', {
+					...observedMediasoupRouterScope,
+					observedCall,
+				});
+			};
+			const stopMatching = () => this.off('peer-connection-added', onPeerConnectionAdded);
+
+			this.on('peer-connection-added', onPeerConnectionAdded);
+			this.once('observer-closed', stopMatching);
+			observedMediasoupRouter.once('close', stopMatching);
+		}
+
+		observedMediasoupRouter.once('close', () => {
+			this.observedMediasoupRouters.delete(observedMediasoupRouter.id);
+
+			this.emit('mediasoup-router-removed', observedMediasoupRouterScope);
+		});
+		this.observedMediasoupRouters.set(observedMediasoupRouter.id, observedMediasoupRouter);
+
+		this.emit('mediasoup-router-added', observedMediasoupRouterScope);
+
+		return observedMediasoupRouter;
 	}
 
 	public close() {

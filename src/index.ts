@@ -4,7 +4,27 @@ export type {
 	ObservedCallScope,
 	ObservedClientScope,
 	ObservedPeerConnectionScope,
+	ObservedMediasoupRouterScope,
 } from './ObserverEvents';
+export type { ObservedMediasoupRouterSettings, ObservedMediasoupRouterEvents } from './ObservedMediasoupRouter';
+export type {
+	MediasoupRouterSample,
+	MediasoupTransportSample,
+	MediasoupProducerSample,
+	MediasoupConsumerSample,
+	MediasoupDataProducerSample,
+	MediasoupDataConsumerSample,
+	MediasoupWebRtcTransportSample,
+	MediasoupPlainTransportSample,
+	MediasoupPipeTransportSample,
+	MediasoupDirectTransportSample,
+	MediasoupWebRtcTransportSampleEventMap,
+	MediasoupPlainTransportSampleEventMap,
+	MediasoupPipeTransportSampleEventMap,
+	MediasoupDirectTransportSampleEventMap,
+	MediasoupProducerSampleEvent,
+	MediasoupConsumerSampleEvent,
+} from './schema/MediasoupRouter';
 
 export { Observer } from './Observer';
 export { ObservedCall } from './ObservedCall';
@@ -21,6 +41,7 @@ export { ObservedInboundRtp } from './ObservedInboundRtp';
 export { ObservedOutboundRtp } from './ObservedOutboundRtp';
 export { ObservedRemoteInboundRtp } from './ObservedRemoteInboundRtp';
 export { ObservedRemoteOutboundRtp } from './ObservedRemoteOutboundRtp';
+export { ObservedMediasoupRouter } from './ObservedMediasoupRouter';
 export { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
 export { ObservedIceCandidate } from './ObservedIceCandidate';
 export { ObservedIceTransport } from './ObservedIceTransport';
