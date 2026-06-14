@@ -114,6 +114,15 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
 - **Detectors are server-side.** Add cross-client detectors on `ObservedCall.detectors`; do not
   re-implement signals the client already reports (those arrive as `clientIssues` → `client-issue`).
 - **Public surface goes through `index.ts`.** If you add a public class/type, export it there.
+- **Injection lifecycle (`ObservedClient.inject*`).** The `inject*` methods (attachment / event /
+  issue / metaData / extensionStat) must preserve three guarantees: (1) when called **during**
+  `accept()` (i.e. `_activeSample` is set — e.g. from a `client-updated` handler), apply to the
+  current sample immediately (append to `_activeSample` + run the same processing as the merge path);
+  (2) when called **between** samples, buffer in `_pendingInjections` for the next `accept()`; (3) on
+  `close()`, `_flushPendingInjections()` drains the buffer to state **and** the sink **before**
+  `closed` is set (because `_mergeInjections` / `add*` short-circuit once closed). The sink write
+  lives at the **end** of `accept()` so it persists the final injection-merged sample — don't move it
+  back to the top, and don't drop the close-time flush.
 - **Style.** Tab indentation; Prettier + ESLint config in the repo (`.eslintrc.json`). Provide
   explicit return types on public methods where inference can become circular (e.g. methods that
   `return this._notify(...)` need an explicit `: void`).

@@ -45,6 +45,7 @@ Key facts an LLM should rely on when answering questions or generating integrati
 - [Remote track resolution (mediasoup / SFU)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#remote-track-resolution-mediasoup--sfu): correlate a published outbound track to the inbound tracks that carry it.
 - [Mediasoup router observation](https://github.com/ObserveRTC/observer-js/blob/master/README.md#mediasoup-router-observation): observe a live mediasoup `Router` server-side; per-peer-connection matching via `mediasoup-router-matched-with-peer-connection`.
 - [Sinks (per-client sample persistence)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#sinks-per-client-sample-persistence): per-client `ClientSampleSink` (JSONL file, in-memory, or custom subclass).
+- [Injecting data into a client](https://github.com/ObserveRTC/observer-js/blob/master/README.md#injecting-data-into-a-client): merge app-side attachments / events / issues / meta / extension stats into a client's sample stream and sink (`ObservedClient.inject*`), with timing-aware delivery (current sample / next sample / flush on close).
 - [Logging](https://github.com/ObserveRTC/observer-js/blob/master/README.md#logging): plug a logger via `setObserverLogger` / `createLogger`.
 - [Error-handling philosophy](https://github.com/ObserveRTC/observer-js/blob/master/README.md#error-handling-philosophy): warn-don't-throw and the `sample-rejected` event.
 

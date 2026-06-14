@@ -119,7 +119,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
-	private _injections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
+	private _pendingInjections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
+	private _activeSample?: ClientSample;
 
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
@@ -154,12 +155,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public close() {
 		if (this.closed) return;
-		this.closed = true;
 
-		this._injections.clientEvents?.forEach((clientEvent) => this._processClientEvent(clientEvent));
-		this._injections.clientIssues?.forEach((clientIssue) => this.addIssue(clientIssue));
-		this._injections.extensionStats?.forEach((extensionStat) => this.addExtensionStats(extensionStat));
-		this._injections.clientMetaItems?.forEach((clientMetaItem) => this.addMetadata(clientMetaItem));
+		this._flushPendingInjections();
+
+		this.closed = true;
 
 		Array.from(this.observedPeerConnections.values()).forEach((peerConnection) => peerConnection.close());
 		if (!this.leftAt) {
@@ -188,8 +187,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 			return;
 		}
-
-		this.sink?.write(sample);
 
 		if (this.closeTimer) {
 			clearTimeout(this.closeTimer);
@@ -235,7 +232,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.currentMinRttInMs = undefined;
 		this.currentMaxRttInMs = undefined;
 
-		this._mergeInjections(sample);
+		this._mergePendingInjections(sample);
+
+		// From here until the end of accept, `inject*` targets this sample directly (see `_activeSample`).
+		this._activeSample = sample;
 
 		const clientEventsPostBuffer: ClientEvent[] = [];
 
@@ -348,46 +348,91 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.close();
 			}, this.settings.closeClientIfIdleForMs);
 		}
+
+		// Done processing this sample. Stop directing injections at it, then persist the FINAL,
+		// injection-merged sample to the sink (this is why the sink write is here, not at the top).
+		this._activeSample = undefined;
+		try {
+			this.sink?.write(sample);
+		} catch (err) {
+			logger.warn('ClientSampleSink.write failed for client %s: %o', this.clientId, err);
+		}
 	}
 
 	public injectMetaData(metaData: ClientMetaData) {
 		if (this.closed) return;
 
-		if (!this._injections.clientMetaItems) this._injections.clientMetaItems = [];
+		if (this._activeSample) {
+			if (!this._activeSample.clientMetaItems) this._activeSample.clientMetaItems = [];
+			this._activeSample.clientMetaItems.push(metaData);
+			this.addMetadata(metaData);
 
-		this._injections.clientMetaItems.push(metaData);
+			return;
+		}
+
+		if (!this._pendingInjections.clientMetaItems) this._pendingInjections.clientMetaItems = [];
+		this._pendingInjections.clientMetaItems.push(metaData);
 	}
 
 	public injectEvent(event: ClientEvent) {
 		if (this.closed) return;
 
-		if (!this._injections.clientEvents) this._injections.clientEvents = [];
+		if (this._activeSample) {
+			if (!this._activeSample.clientEvents) this._activeSample.clientEvents = [];
+			this._activeSample.clientEvents.push(event);
+			this._processClientEvent(event);
 
-		this._injections.clientEvents.push(event);
+			return;
+		}
+
+		if (!this._pendingInjections.clientEvents) this._pendingInjections.clientEvents = [];
+		this._pendingInjections.clientEvents.push(event);
 	}
 
 	public injectIssue(issue: ClientIssue) {
 		if (this.closed) return;
 
-		if (!this._injections.clientIssues) this._injections.clientIssues = [];
+		if (this._activeSample) {
+			if (!this._activeSample.clientIssues) this._activeSample.clientIssues = [];
+			this._activeSample.clientIssues.push(issue);
+			this.addIssue(issue);
+			++this.deltaNumberOfIssues;
 
-		this._injections.clientIssues.push(issue);
+			return;
+		}
+
+		if (!this._pendingInjections.clientIssues) this._pendingInjections.clientIssues = [];
+		this._pendingInjections.clientIssues.push(issue);
 	}
 
 	public injectExtensionStat(stat: ExtensionStat) {
 		if (this.closed) return;
 
-		if (!this._injections.extensionStats) this._injections.extensionStats = [];
+		if (this._activeSample) {
+			if (!this._activeSample.extensionStats) this._activeSample.extensionStats = [];
+			this._activeSample.extensionStats.push(stat);
+			this.addExtensionStats(stat);
 
-		this._injections.extensionStats.push(stat);
+			return;
+		}
+
+		if (!this._pendingInjections.extensionStats) this._pendingInjections.extensionStats = [];
+		this._pendingInjections.extensionStats.push(stat);
 	}
 
-	public injectAttachment(key: string, value: unknown) {
+	public injectAttachment(attachments: Record<string, unknown>) {
 		if (this.closed) return;
 
-		if (!this._injections.attachments) this._injections.attachments = {};
+		if (this._activeSample) {
+			if (!this._activeSample.attachments) this._activeSample.attachments = {};
+			Object.assign(this._activeSample.attachments, attachments);
+			this.attachments = this._activeSample.attachments;
 
-		this._injections.attachments[key] = value;
+			return;
+		}
+
+		if (!this._pendingInjections.attachments) this._pendingInjections.attachments = {};
+		Object.assign(this._pendingInjections.attachments, attachments);
 	}
 
 	public addMetadata(metadata: ClientMetaData) {
@@ -693,45 +738,73 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		return observedPeerConnection;
 	}
 
-	private _mergeInjections(sample: ClientSample): ClientSample {
+	private _mergePendingInjections(sample: ClientSample): ClientSample {
 		if (this.closed) return sample;
 
-		if (this._injections.clientEvents) {
+		if (this._pendingInjections.clientEvents) {
 			if (!sample.clientEvents) sample.clientEvents = [];
-			sample.clientEvents.push(...this._injections.clientEvents);
+			sample.clientEvents.push(...this._pendingInjections.clientEvents);
 
-			this._injections.clientEvents = undefined;
+			this._pendingInjections.clientEvents = undefined;
 		}
 
-		if (this._injections.clientIssues) {
+		if (this._pendingInjections.clientIssues) {
 			if (!sample.clientIssues) sample.clientIssues = [];
-			sample.clientIssues.push(...this._injections.clientIssues);
+			sample.clientIssues.push(...this._pendingInjections.clientIssues);
 
-			this._injections.clientIssues = undefined;
+			this._pendingInjections.clientIssues = undefined;
 		}
 
-		if (this._injections.extensionStats) {
+		if (this._pendingInjections.extensionStats) {
 			if (!sample.extensionStats) sample.extensionStats = [];
-			sample.extensionStats.push(...this._injections.extensionStats);
+			sample.extensionStats.push(...this._pendingInjections.extensionStats);
 
-			this._injections.extensionStats = undefined;
+			this._pendingInjections.extensionStats = undefined;
 		}
 
-		if (this._injections.attachments) {
+		if (this._pendingInjections.attachments) {
 			if (!sample.attachments) sample.attachments = {};
-			Object.assign(sample.attachments, this._injections.attachments);
+			Object.assign(sample.attachments, this._pendingInjections.attachments);
 
-			this._injections.attachments = undefined;
+			this._pendingInjections.attachments = undefined;
 		}
 
-		if (this._injections.clientMetaItems) {
+		if (this._pendingInjections.clientMetaItems) {
 			if (!sample.clientMetaItems) sample.clientMetaItems = [];
-			sample.clientMetaItems.push(...this._injections.clientMetaItems);
+			sample.clientMetaItems.push(...this._pendingInjections.clientMetaItems);
 
-			this._injections.clientMetaItems = undefined;
+			this._pendingInjections.clientMetaItems = undefined;
 		}
 
 		return sample;
+	}
+
+	private _flushPendingInjections() {
+		const hasPending = Boolean(
+			this._pendingInjections.clientEvents ||
+			this._pendingInjections.clientIssues ||
+			this._pendingInjections.extensionStats ||
+			this._pendingInjections.clientMetaItems ||
+			this._pendingInjections.attachments,
+		);
+
+		if (!hasPending) return;
+
+		const finalSample: ClientSample = { timestamp: Date.now() };
+
+		this._mergePendingInjections(finalSample);
+
+		for (const clientEvent of finalSample.clientEvents ?? []) this._processClientEvent(clientEvent);
+		for (const metaData of finalSample.clientMetaItems ?? []) this.addMetadata(metaData);
+		for (const issue of finalSample.clientIssues ?? []) this.addIssue(issue);
+		for (const extensionStat of finalSample.extensionStats ?? []) this.addExtensionStats(extensionStat);
+		if (finalSample.attachments) this.attachments = { ...this.attachments, ...finalSample.attachments };
+
+		try {
+			this.sink?.write(finalSample);
+		} catch (err) {
+			logger.warn('ClientSampleSink.write failed during injection flush for client %s: %o', this.clientId, err);
+		}
 	}
 
 	/** Emit an Observer-bus event scoped to this client (or a peer connection under it). */

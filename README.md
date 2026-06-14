@@ -63,9 +63,10 @@ and emits a single, unified stream of typed events the application can react to.
 11. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
 12. [Mediasoup router observation](#mediasoup-router-observation)
 13. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
-14. [Logging](#logging)
-15. [Error-handling philosophy](#error-handling-philosophy)
-16. [Development & extension guide](#development--extension-guide)
+14. [Injecting data into a client](#injecting-data-into-a-client)
+15. [Logging](#logging)
+16. [Error-handling philosophy](#error-handling-philosophy)
+17. [Development & extension guide](#development--extension-guide)
 
 ---
 
@@ -539,7 +540,7 @@ Key members:
 - `readonly sink?: ClientSampleSink` — the per-client sink (see [Sinks](#sinks-per-client-sample-persistence)), if `createClientSink` is configured; listen on it for `close`/`error`
 - **Injection API** (queue app data to be merged into the next sample processing):
   `injectEvent(ClientEvent)`, `injectIssue(ClientIssue)`, `injectMetaData(ClientMetaData)`,
-  `injectExtensionStat(ExtensionStat)`, `injectAttachment(key, value)`
+  `injectExtensionStat(ExtensionStat)`, `injectAttachment(attachments: Record<string, unknown>)`
 - **Direct add API** (process immediately): `addIssue(ClientIssue)`, `addMetadata(ClientMetaData)`,
   `addExtensionStats(ExtensionStat)`
 - Metrics (current/derived): `currentAvgRttInMs?`, `currentMinRttInMs?`, `currentMaxRttInMs?`,
@@ -1037,6 +1038,60 @@ const observer = new Observer({ createClientSink });
 `observedClient.sink?` exposes the created sink; the `client-sink-created` event delivers it on
 the bus with full ancestry. `ClientSampleSinkFactory` is
 `(p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined`.
+
+---
+
+## Injecting data into a client
+
+Sometimes the application holds data that belongs on a client's record but isn't part of the
+client-reported `ClientSample` — a room id or display name, an application-level event
+(*"recording started"*), a server-detected issue, an extension stat, or a device/meta item.
+`ObservedClient` exposes **injection** methods that merge such data into the client's sample stream,
+so it updates the live model **and** is persisted to the client's
+[sink](#sinks-per-client-sample-persistence) exactly like sampled data.
+
+| Method | Adds to the sample's | Surfaces as |
+|--------|----------------------|-------------|
+| `injectAttachment(attachments)` | `attachments` (merged via `Object.assign`) | `observedClient.attachments` |
+| `injectEvent(event: ClientEvent)` | `clientEvents` | `client-event` (plus any state the event drives) |
+| `injectIssue(issue: ClientIssue)` | `clientIssues` | `client-issue` |
+| `injectMetaData(meta: ClientMetaData)` | `clientMetaItems` | `client-metadata` |
+| `injectExtensionStat(stat: ExtensionStat)` | `extensionStats` | `client-extension-stats` |
+
+### When the injected data lands
+
+Injection is timing-aware so nothing is dropped, regardless of *when* you call it:
+
+- **During a sample's processing** — e.g. from inside a `client-updated` / `client-event` handler,
+  which run within `accept()` — the data is applied to the **current** sample immediately: reflected
+  in entity state and written to the sink as part of that sample.
+- **Between samples** — the data is buffered and merged into the **next** `accept()`'s sample.
+- **On `close()` with pending injections and no further sample** — the buffer is flushed as a final
+  synthetic sample (applied to state and written to the sink) before the sink is ended, so a
+  last-moment injection is never lost.
+
+In every case the injected data both updates the live `ObservedClient` and reaches the per-client
+sink — the sink always receives the final, **injection-merged** sample (the sink write happens at the
+end of `accept()`, after the merge).
+
+### Example
+
+```ts
+// Enrich at creation from your app's knowledge of the participant. Injecting in `client-added`
+// (which runs just before the first accept) lands on the first sample.
+observer.on('client-added', ({ observedClient }) => {
+  observedClient.injectAttachment({ roomId: lookupRoomId(observedClient.clientId) });
+});
+
+// Application-level signals at any time:
+const client = observer.getObservedCall(callId)?.getObservedClient(clientId);
+client?.injectEvent({ type: 'RECORDING_STARTED', timestamp: Date.now() });
+client?.injectIssue({ type: 'app-kicked-participant', timestamp: Date.now() });
+```
+
+`attachments` are latest-wins (like sampled `attachments`): injecting a key overwrites its previous
+value. `appData` is unaffected — injections flow into the sample/telemetry, not the app-owned
+`appData` bag (see [Ingestion](#ingestion-accept-context--lifecycle)).
 
 ## Logging
 
