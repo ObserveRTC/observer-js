@@ -1,0 +1,65 @@
+# observer-js (@observertc/observer-js)
+
+> A server-side Node.js library for monitoring WebRTC sessions. Feed it `ClientSample` objects
+> (periodic `RTCPeerConnection.getStats()` snapshots plus application events) via a single
+> `observer.accept(sample, context?)` call, and it maintains a live in-memory model of every call,
+> client, peer connection, and media stream, derives per-interval and cumulative metrics, and emits
+> one unified, typed event stream you subscribe to on the `Observer`.
+
+Key facts an LLM should rely on when answering questions or generating integration code:
+
+- Install: `npm install @observertc/observer-js`. Server-side, **Node.js ≥ 22**, **dual ESM + CommonJS**
+  (single entry — same `import` line works in either; CJS resolves to `require`).
+- One ingestion method: `observer.accept(sample, context?)`. Entities (`ObservedCall` → `ObservedClient`
+  → `ObservedPeerConnection` → sub-stats) are created **lazily** by id; never pre-create them.
+- One event bus: subscribe on the `Observer`; every payload carries full ancestry
+  (`{ observer, observedCall?, observedClient?, observedPeerConnection? }`). `*-updated` events fire each tick.
+- Update cadence is event-driven (`update-on-any-…` / `update-when-all-…` / `none`); there are **no internal
+  timers**. With `none`, call the public `observer.update()` / `observedCall.update()`.
+- Warn-don't-throw: `create*` return `T | undefined`; malformed samples emit `sample-rejected`.
+- Extension points: cross-client `Detectors` (raise `call-issue`), per-client `ClientSampleSink`s
+  (JSONL/in-memory/custom), `acceptMiddlewares` (pre-dispatch), `RemoteTrackResolver` (SFU
+  publisher↔subscriber track correlation), and server-side mediasoup router observation.
+- `appData` = application-owned, fixed at creation; `context` = transient per-`accept()`. Don't confuse them.
+- `observedClient.attachments` (e.g. `roomId`) is populated from the first `accept()`, not at creation —
+  read it on `client-updated`, not in creation-time hooks.
+
+## Documentation
+
+- [README](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/README.md): the complete, self-sufficient integration guide — install, mental model, quick start, data flow, the event bus, API reference, schema, and every extension point with examples.
+- [CHANGELOG](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/CHANGELOG.md): the full statement of features and concepts in the 1.0.0 line.
+- [AGENTS.md](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/AGENTS.md): for agents/humans modifying the library itself — build/test/lint commands, architecture, conventions, and extension recipes.
+
+## Concepts & API (README sections)
+
+- [Installation](https://github.com/ObserveRTC/observer-js/blob/master/README.md#installation): packaging, ESM/CJS, runtime requirements, dependencies.
+- [Quick start](https://github.com/ObserveRTC/observer-js/blob/master/README.md#quick-start): create an `Observer`, subscribe, and `accept()` samples.
+- [Data flow](https://github.com/ObserveRTC/observer-js/blob/master/README.md#data-flow): how a sample becomes entity updates and events.
+- [Entity hierarchy](https://github.com/ObserveRTC/observer-js/blob/master/README.md#entity-hierarchy): the `Observer → Call → Client → PeerConnection → sub-stats` tree and what each node holds.
+- [Ingestion: accept(), context & lifecycle](https://github.com/ObserveRTC/observer-js/blob/master/README.md#ingestion-accept-context--lifecycle): the single entry point, `appData` vs `context`, lazy creation, auto-teardown.
+- [Update policies](https://github.com/ObserveRTC/observer-js/blob/master/README.md#update-policies): event-driven aggregation and the `'none'` (manual `update()`) policy.
+- [The event bus](https://github.com/ObserveRTC/observer-js/blob/master/README.md#the-event-bus): the full typed event table (observer / mediasoup / call / client / peer-connection levels) and ancestry payloads.
+- [API reference](https://github.com/ObserveRTC/observer-js/blob/master/README.md#api-reference): the `Observer`, entity classes, and their public members/methods.
+- [Schema types (ClientSample)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#schema-types-clientsample): the accepted sample shape, event/meta enums, and a worked example of a real sample.
+- [Detectors (server-side extension point)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#detectors-server-side-extension-point): cross-client detection that raises `call-issue`.
+- [Remote track resolution (mediasoup / SFU)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#remote-track-resolution-mediasoup--sfu): correlate a published outbound track to the inbound tracks that carry it.
+- [Mediasoup router observation](https://github.com/ObserveRTC/observer-js/blob/master/README.md#mediasoup-router-observation): observe a live mediasoup `Router` server-side; per-peer-connection matching via `mediasoup-router-matched-with-peer-connection`.
+- [Sinks (per-client sample persistence)](https://github.com/ObserveRTC/observer-js/blob/master/README.md#sinks-per-client-sample-persistence): per-client `ClientSampleSink` (JSONL file, in-memory, or custom subclass).
+- [Logging](https://github.com/ObserveRTC/observer-js/blob/master/README.md#logging): plug a logger via `setObserverLogger` / `createLogger`.
+- [Error-handling philosophy](https://github.com/ObserveRTC/observer-js/blob/master/README.md#error-handling-philosophy): warn-don't-throw and the `sample-rejected` event.
+
+## Guides
+
+- [Logging integration](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/logging.md): the logger interface and adapters for pino / winston / console.
+
+## Optional
+
+- [npm package](https://www.npmjs.com/package/@observertc/observer-js): published builds and the rendered README.
+- [GitHub repository](https://github.com/ObserveRTC/observer-js): source, issues, and CI.
+- [CONTRIBUTING](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/CONTRIBUTING.md): how to contribute.
+- [Design note: remote track correlation & detectors](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/track-correlation-and-detectors.md): background design discussion (not part of the public API contract).
+- [Design note: call-level detectors analysis](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/call-level-detectors-analysis.md): candidate cross-client detectors.
+- [Design note: SFU-failure detectors](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/sfu-failure-detectors.md): detecting SFU-side failures from client stats.
+- [Design note: detectors catalog](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/detectors-catalog.md): the master index of detector ideas and build order.
+- [Design note: report generation (deferred)](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/report-generation.md): the deferred `ClientSampleProcessor` approach to report generation.
+- [Roadmap](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/ROADMAP.md): planned, not-yet-implemented work.

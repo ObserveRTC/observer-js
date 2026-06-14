@@ -201,10 +201,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	}
 
 	public createObservedMediasoupRouter<T extends Record<string, unknown> = Record<string, unknown>>(
-		settings: ObservedMediasoupRouterSettings<T> & {
-			callId?: string,
-			bindCallByWebRtcTransportId?: boolean;
-		},
+		settings: ObservedMediasoupRouterSettings<T>,
 	) {
 		if (this.closed) {
 			logger.warn('Attempted to create mediasoup router (id: %d) on a closed observer', settings.router.id);
@@ -222,37 +219,19 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			observedMediasoupRouter,
 			observer: this,
 		};
-		// The observer does NOT store the router (or its sample) on the call. Instead, when the router is
-		// matched to a call it emits `mediasoup-router-matched-with-call` and the application decides what to
-		// do with the pairing (e.g. stamp the callId into the router's appData/attachments, index it, etc.).
-		const directCall = settings.callId ? this.observedCalls.get(settings.callId) : undefined;
+		const onPeerConnectionAdded = (observedPeerConnectionScope: ObserverEvents['peer-connection-added'][0]) => {
+			if (!observedMediasoupRouter.webrtcTransportIds.has(observedPeerConnectionScope.observedPeerConnection.peerConnectionId)) return;
 
-		if (directCall) {
-			// Explicit match: the caller already knows the call this router belongs to.
-			this.emit('mediasoup-router-matched-with-call', {
+			this.emit('mediasoup-router-matched-with-peer-connection', {
 				...observedMediasoupRouterScope,
-				observedCall: directCall,
+				...observedPeerConnectionScope,
 			});
-		} else if (settings.bindCallByWebRtcTransportId) {
-			// Implicit match: correlate the router's WebRTC transport ids with observed peer-connection ids.
-			// Emit once per distinct matched call, and keep listening so further calls can still match.
-			const matchedCallIds = new Set<string>();
-			const onPeerConnectionAdded = ({ observedPeerConnection, observedCall }: ObserverEvents['peer-connection-added'][0]) => {
-				if (!observedMediasoupRouter.webrtcTransportIds.has(observedPeerConnection.peerConnectionId)) return;
-				if (matchedCallIds.has(observedCall.callId)) return;
+		};
+		const stopMatching = () => this.off('peer-connection-added', onPeerConnectionAdded);
 
-				matchedCallIds.add(observedCall.callId);
-				this.emit('mediasoup-router-matched-with-call', {
-					...observedMediasoupRouterScope,
-					observedCall,
-				});
-			};
-			const stopMatching = () => this.off('peer-connection-added', onPeerConnectionAdded);
-
-			this.on('peer-connection-added', onPeerConnectionAdded);
-			this.once('observer-closed', stopMatching);
-			observedMediasoupRouter.once('close', stopMatching);
-		}
+		this.on('peer-connection-added', onPeerConnectionAdded);
+		this.once('observer-closed', stopMatching);
+		observedMediasoupRouter.once('close', stopMatching);
 
 		observedMediasoupRouter.once('close', () => {
 			this.observedMediasoupRouters.delete(observedMediasoupRouter.id);

@@ -67,7 +67,7 @@ export type ObserverEvents = {
 	// mediasoup level
 	'mediasoup-router-added': [ObservedMediasoupRouterScope];
 	'mediasoup-router-removed': [ObservedMediasoupRouterScope];
-	'mediasoup-router-matched-with-call': [ObservedMediasoupRouterScope & ObservedCallScope];
+	'mediasoup-router-matched-with-peer-connection': [ObservedMediasoupRouterScope & ObservedPeerConnectionScope];
 
 	// call level
 	'call-added': [ObservedCallScope];

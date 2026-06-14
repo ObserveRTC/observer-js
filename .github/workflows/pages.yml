@@ -1,0 +1,100 @@
+name: Docs (GitHub Pages)
+
+# Publishes a minimal static site that serves `llms.txt` (the AI-doc index) at the site root,
+# alongside `llms-full.txt`, the README, the CHANGELOG, and the `docs/` markdown — all verbatim
+# (`.nojekyll`), so agents/crawlers can fetch them directly. Project Pages are served under a
+# `/<repo>/` subpath, so the discoverable file is e.g.
+#   https://<owner>.github.io/observer-js/llms.txt
+#
+# One-time setup: in the repo, Settings → Pages → "Build and deployment" → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'llms.txt'
+      - 'llms-full.txt'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'AGENTS.md'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; let an in-progress run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          set -e
+          mkdir -p _site/docs
+          # AI-doc index + one-file export, served verbatim at the site root.
+          cp llms.txt llms-full.txt _site/
+          # Human/agent-readable markdown, served raw (no Jekyll processing).
+          cp README.md CHANGELOG.md _site/
+          [ -f AGENTS.md ] && cp AGENTS.md _site/ || true
+          cp docs/*.md _site/docs/ 2>/dev/null || true
+          # Disable Jekyll so .txt/.md are served as-is (not converted to HTML).
+          touch _site/.nojekyll
+          # Minimal landing page linking the docs.
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>@observertc/observer-js — docs</title>
+            <style>
+              body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 3rem auto; padding: 0 1rem; }
+              h1 { margin-bottom: .25rem; } code { background:#f2f2f2; padding:.1em .3em; border-radius:4px; }
+              a { color:#0b62d6; } ul { padding-left: 1.2rem; }
+            </style>
+          </head>
+          <body>
+            <h1>@observertc/observer-js</h1>
+            <p>Server-side Node.js library for monitoring WebRTC sessions.</p>
+            <h2>For AI agents</h2>
+            <ul>
+              <li><a href="./llms.txt">llms.txt</a> — curated index of the documentation</li>
+              <li><a href="./llms-full.txt">llms-full.txt</a> — full docs in one file (one-shot ingestion)</li>
+            </ul>
+            <h2>Documentation</h2>
+            <ul>
+              <li><a href="./README.md">README.md</a> — complete integration guide</li>
+              <li><a href="./CHANGELOG.md">CHANGELOG.md</a></li>
+              <li><a href="./docs/logging.md">docs/logging.md</a> — logging integration</li>
+            </ul>
+            <p>Source: <a href="https://github.com/ObserveRTC/observer-js">github.com/ObserveRTC/observer-js</a> ·
+               Package: <a href="https://www.npmjs.com/package/@observertc/observer-js">npm</a></p>
+          </body>
+          </html>
+          HTML
+          echo "Assembled _site:"; ls -R _site
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

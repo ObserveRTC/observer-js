@@ -6,7 +6,6 @@ import { createLogger } from './common/logger';
 const logger = createLogger('ObservedMediasoupRouter');
 
 export type ObservedMediasoupRouterSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
-	routerId: string;
 	router: types.Router,
 	appData?: AppData;
 	attachments?: Record<string, unknown>,
