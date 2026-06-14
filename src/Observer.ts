@@ -11,7 +11,6 @@ import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } 
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
-import { ObservedPeerConnection } from './ObservedPeerConnection';
 
 const logger = createLogger('Observer');
 

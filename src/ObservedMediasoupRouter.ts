@@ -22,7 +22,7 @@ export declare interface ObservedMediasoupRouter {
 	emit<U extends keyof ObservedMediasoupRouterEvents>(event: U, ...args: ObservedMediasoupRouterEvents[U]): boolean;
 }
 
-export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter  {
+export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly router: types.Router;
 	public readonly sample: MediasoupRouterSample;
 	public appData: AppData;
@@ -85,7 +85,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			default:
 				return logger.warn(`Unsupported transport type for transport ${transport.id}: ${transportType}`);
 		}
-	}
+	};
 
 	public addWebRtcTransport(transport: types.WebRtcTransport) {
 		const history: MediasoupWebRtcTransportSampleEventMap[] = [];

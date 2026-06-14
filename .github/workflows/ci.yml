@@ -40,3 +40,23 @@ jobs:
           name: coverage
           path: coverage/
           if-no-files-found: ignore
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Regenerate llms-full.txt and fail if the committed copy is out of date.
+      - name: Regenerate llms-full.txt
+        run: node scripts/build-llms-full.mjs
+
+      - name: Verify llms-full.txt is up to date
+        run: |
+          if ! git diff --quiet -- llms-full.txt; then
+            echo "::error::llms-full.txt is stale. Run 'npm run docs:llms-full' (or 'yarn docs:llms-full') and commit the result."
+            git diff -- llms-full.txt
+            exit 1
+          fi

@@ -1,4 +1,3 @@
-
 /** mediasoup `IceState`. */
 export type IceState = 'new' | 'connected' | 'completed' | 'disconnected' | 'closed';
 
@@ -42,7 +41,6 @@ export type MediasoupRouterSample = Record<string, unknown> & {
 	transports: MediasoupTransportSample[];
 };
 
-
 type MediasoupWebRtcTransportSampleEventTypes =
 	| 'icestate-changed-to-new'
 	| 'icestate-changed-to-connected'
@@ -70,7 +68,6 @@ export type MediasoupWebRtcTransportSample = {
 	history: MediasoupWebRtcTransportSampleEventMap[];
 }
 
-
 /* ---- plain transport (mediasoup `PlainTransport`: `sctpstatechange`; `tuple` / `rtcptuple`) ---- */
 
 type MediasoupPlainTransportSampleEventTypes =
@@ -94,7 +91,6 @@ export type MediasoupPlainTransportSample = {
 	history: MediasoupPlainTransportSampleEventMap[];
 }
 
-
 /* ---- pipe transport (mediasoup `PipeTransport`: `sctpstatechange`) ---- */
 
 type MediasoupPipeTransportSampleEventTypes =
@@ -113,7 +109,6 @@ export type MediasoupPipeTransportSample = {
 	history: MediasoupPipeTransportSampleEventMap[];
 }
 
-
 /* ---- direct transport (mediasoup `DirectTransport`: no state machine; only raw `rtcp` packets) ---- */
 
 // DirectTransport has no ICE/DTLS/SCTP state changes, so there are no history event types and the
@@ -128,7 +123,6 @@ export type MediasoupDirectTransportSample = {
 	type: 'direct';
 	history: MediasoupDirectTransportSampleEventMap[];
 }
-
 
 export type MediasoupTransportSample = Record<string, unknown> & {
 	id: string;
@@ -212,7 +206,3 @@ export type MediasoupDataConsumerSample = Record<string, unknown> & {
 	label: string;
 	protocol: string;
 };
-
-
-
-

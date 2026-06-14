@@ -32,7 +32,8 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.js",
-    "test:coverage": "jest --config jest.config.js --coverage"
+    "test:coverage": "jest --config jest.config.js --coverage",
+    "docs:llms-full": "node scripts/build-llms-full.mjs"
   },
   "keywords": [
     "webrtc",
