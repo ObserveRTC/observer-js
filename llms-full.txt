@@ -257,8 +257,7 @@ observer.addAcceptMiddleware(route, filter);
 // observer.removeAcceptMiddleware(route);
 ```
 
-This is a lightweight global injection point, distinct from the larger (not-yet-built)
-`ClientSampleProcessor` pipeline in the roadmap. When no middleware is registered, `accept()`
+This is a lightweight global injection point. When no middleware is registered, `accept()`
 dispatches directly with no overhead.
 
 ### `context` (the `AcceptContext`)
@@ -421,7 +420,6 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `peer-connection-added` / `peer-connection-closed` | — | lifecycle of the PC |
 | `peer-connection-updated` | `{ context?: AcceptContext }` | the PC processed a sample |
 | `ice-connection-state-changed` / `ice-gathering-state-changed` / `connection-state-changed` | `{ state: string }` | driven by client events |
-| `selected-candidate-pair-changed` | — | *declared; not currently emitted* |
 | `inbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedInboundTrack }` | |
 | `outbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedOutboundTrack }` | |
 | `inbound-rtp-added` / `-updated` / `-removed` | `{ observedInboundRtp }` | `-updated` fires every tick |
