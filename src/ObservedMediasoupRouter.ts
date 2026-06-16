@@ -1,6 +1,16 @@
 import { EventEmitter } from 'events';
 import type { types } from 'mediasoup';
-import { MediasoupConsumerSample, MediasoupDataConsumerSample, MediasoupDataProducerSample, MediasoupProducerSample, MediasoupRouterSample, MediasoupTransportSample, MediasoupWebRtcTransportSampleEventMap, MediasoupPlainTransportSampleEventMap, MediasoupPipeTransportSampleEventMap } from './schema/MediasoupRouter';
+import {
+	MediasoupRouterSample,
+	MediasoupTransportSample,
+	MediasoupProducerSample,
+	MediasoupConsumerSample,
+	MediasoupDataProducerSample,
+	MediasoupDataConsumerSample,
+	MediasoupWebRtcTransportSampleEventMap,
+	MediasoupPlainTransportSampleEventMap,
+	MediasoupPipeTransportSampleEventMap,
+} from './schema/MediasoupRouter';
 import { createLogger } from './common/logger';
 
 const logger = createLogger('ObservedMediasoupRouter');
@@ -22,17 +32,24 @@ export declare interface ObservedMediasoupRouter {
 	emit<U extends keyof ObservedMediasoupRouterEvents>(event: U, ...args: ObservedMediasoupRouterEvents[U]): boolean;
 }
 
+/**
+ * Observes a live mediasoup `Router` by subscribing to its `observer` API and **accumulates** its
+ * topology and lifecycle into an in-memory `MediasoupRouterSample` (`observedRouter.sample`):
+ * transports, producers, consumers, data producers/consumers, their state-change history and
+ * `createdAt` / `closedAt`. The sample grows for the life of the router (closed entities are kept,
+ * with their `closedAt` set) and is yours to read, snapshot, or persist.
+ *
+ * NOTE: this is intentionally the simplest approach — everything is held in memory. For very large
+ * routers (e.g. ~100 participants producing and consuming on one router, where consumers grow as
+ * O(N²)) this can become substantial; in that case do your own periodic sampling/persistence and
+ * discard what you don't need (see the README's "Memory & large meetings" note).
+ */
 export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly router: types.Router;
-	public readonly sample: MediasoupRouterSample;
 	public appData: AppData;
+	public readonly sample: MediasoupRouterSample;
 
-	public readonly webrtcTransportIds = new Set<string>;
-
-	public get attachments() {
-		return this.sample.attachments;
-	}
-
+	public readonly webrtcTransportIds = new Set<string>();
 	public closed = false;
 
 	public constructor(
@@ -58,6 +75,19 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 	public get id() {
 		return this.router.id;
+	}
+
+	public get attachments() {
+		return this.sample.attachments;
+	}
+
+	public close() {
+		if (this.closed) return;
+
+		this.closed = true;
+		if (this.sample.closedAt === undefined) this.sample.closedAt = Date.now();
+
+		this.emit('close');
 	}
 
 	public addTransport = (transport: types.Transport) => {
@@ -90,46 +120,24 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public addWebRtcTransport(transport: types.WebRtcTransport) {
 		const history: MediasoupWebRtcTransportSampleEventMap[] = [];
 		const transportSample: MediasoupTransportSample = {
-			id: transport.id,
-			type: 'webrtc',
-			createdAt: Date.now(),
-			tuple: transport.iceSelectedTuple,
-			history,
+			id: transport.id, type: 'webrtc', createdAt: Date.now(), tuple: transport.iceSelectedTuple, history,
 		};
 
 		this.sample.transports.push(transportSample);
+		this.webrtcTransportIds.add(transport.id);
 
-		const onIceStateChange = (iceState: types.IceState) => {
-			history.push({
-				type: `icestate-changed-to-${iceState}`,
-				timestamp: Date.now(),
-			} as MediasoupWebRtcTransportSampleEventMap);
-		};
+		const onIceStateChange = (iceState: types.IceState) =>
+			history.push({ type: `icestate-changed-to-${iceState}`, timestamp: Date.now() } as MediasoupWebRtcTransportSampleEventMap);
 		const onIceSelectedTupleChange = (tuple: types.TransportTuple) => {
 			transportSample.tuple = tuple;
-			history.push({
-				type: 'iceselectedtuple-changed',
-				timestamp: Date.now(),
-				...tuple,
-			});
+			history.push({ type: 'iceselectedtuple-changed', timestamp: Date.now(), ...tuple });
 		};
 		const onDtlsStateChange = (dtlsState: types.DtlsState) => {
-			history.push({
-				type: `dtlsstate-changed-to-${dtlsState}`,
-				timestamp: Date.now(),
-			} as MediasoupWebRtcTransportSampleEventMap);
-
-			// A WebRTC transport is "connected" once the DTLS handshake completes.
-			if (dtlsState === 'connected' && transportSample.connectedAt === undefined) {
-				transportSample.connectedAt = Date.now();
-			}
+			history.push({ type: `dtlsstate-changed-to-${dtlsState}`, timestamp: Date.now() } as MediasoupWebRtcTransportSampleEventMap);
+			if (dtlsState === 'connected' && transportSample.connectedAt === undefined) transportSample.connectedAt = Date.now();
 		};
-		const onSctpStateChange = (sctpState: types.SctpState) => {
-			history.push({
-				type: `sctpstate-changed-to-${sctpState}`,
-				timestamp: Date.now(),
-			} as MediasoupWebRtcTransportSampleEventMap);
-		};
+		const onSctpStateChange = (sctpState: types.SctpState) =>
+			history.push({ type: `sctpstate-changed-to-${sctpState}`, timestamp: Date.now() } as MediasoupWebRtcTransportSampleEventMap);
 
 		this._attachTransportObserverListeners(transport, transportSample, () => {
 			transport.observer.off('icestatechange', onIceStateChange);
@@ -144,26 +152,18 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		transport.observer.on('iceselectedtuplechange', onIceSelectedTupleChange);
 		transport.observer.on('dtlsstatechange', onDtlsStateChange);
 		transport.observer.on('sctpstatechange', onSctpStateChange);
-
-		this.webrtcTransportIds.add(transport.id);
 	}
 
 	public addPlainTransport(transport: types.PlainTransport) {
 		const history: MediasoupPlainTransportSampleEventMap[] = [];
 		const transportSample: MediasoupTransportSample = {
-			id: transport.id,
-			type: 'plain',
-			createdAt: Date.now(),
-			tuple: transport.tuple,
-			rtcpTuple: transport.rtcpTuple,
-			history,
+			id: transport.id, type: 'plain', createdAt: Date.now(), tuple: transport.tuple, rtcpTuple: transport.rtcpTuple, history,
 		};
 
 		this.sample.transports.push(transportSample);
 
 		const onTuple = (tuple: types.TransportTuple) => {
 			transportSample.tuple = tuple;
-			// PlainTransport has no DTLS/ICE; the first detected RTP tuple is its "connected" moment.
 			if (transportSample.connectedAt === undefined) transportSample.connectedAt = Date.now();
 			history.push({ type: 'tuple-changed', timestamp: Date.now(), ...tuple });
 		};
@@ -172,13 +172,8 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			history.push({ type: 'rtcptuple-changed', timestamp: Date.now(), ...rtcpTuple });
 		};
 		const onSctpStateChange = (sctpState: types.SctpState) => {
-			if (sctpState === 'connected' && transportSample.connectedAt === undefined) {
-				transportSample.connectedAt = Date.now();
-			}
-			history.push({
-				type: `sctpstate-changed-to-${sctpState}`,
-				timestamp: Date.now(),
-			} as MediasoupPlainTransportSampleEventMap);
+			if (sctpState === 'connected' && transportSample.connectedAt === undefined) transportSample.connectedAt = Date.now();
+			history.push({ type: `sctpstate-changed-to-${sctpState}`, timestamp: Date.now() } as MediasoupPlainTransportSampleEventMap);
 		};
 
 		this._attachTransportObserverListeners(transport, transportSample, () => {
@@ -195,25 +190,14 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public addPipeTransport(transport: types.PipeTransport) {
 		const history: MediasoupPipeTransportSampleEventMap[] = [];
 		const transportSample: MediasoupTransportSample = {
-			id: transport.id,
-			type: 'pipe',
-			createdAt: Date.now(),
-			tuple: transport.tuple,
-			history,
+			id: transport.id, type: 'pipe', createdAt: Date.now(), tuple: transport.tuple, history,
 		};
 
 		this.sample.transports.push(transportSample);
 
 		const onSctpStateChange = (sctpState: types.SctpState) => {
-			// A PipeTransport carries no ICE/DTLS; SCTP `'connected'` is the closest observable
-			// "connected" signal (transports without SCTP simply leave `connectedAt` undefined).
-			if (sctpState === 'connected' && transportSample.connectedAt === undefined) {
-				transportSample.connectedAt = Date.now();
-			}
-			history.push({
-				type: `sctpstate-changed-to-${sctpState}`,
-				timestamp: Date.now(),
-			} as MediasoupPipeTransportSampleEventMap);
+			if (sctpState === 'connected' && transportSample.connectedAt === undefined) transportSample.connectedAt = Date.now();
+			history.push({ type: `sctpstate-changed-to-${sctpState}`, timestamp: Date.now() } as MediasoupPipeTransportSampleEventMap);
 		};
 
 		this._attachTransportObserverListeners(transport, transportSample, () => {
@@ -226,12 +210,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public addDirectTransport(transport: types.DirectTransport) {
 		const now = Date.now();
 		const transportSample: MediasoupTransportSample = {
-			id: transport.id,
-			type: 'direct',
-			createdAt: now,
-			// A DirectTransport has no network layer — it is connected the instant it exists.
-			connectedAt: now,
-			history: [],
+			id: transport.id, type: 'direct', createdAt: now, connectedAt: now, history: [],
 		};
 
 		this.sample.transports.push(transportSample);
@@ -241,45 +220,32 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 	public addProducer(transport: types.Transport, producer: types.Producer) {
 		const firstCodec = producer.rtpParameters.codecs[0];
-		const codecInfo = {
-			mimeType: firstCodec?.mimeType ?? 'unknown/unknown',
-			payloadType: firstCodec?.payloadType ?? 0,
-			clockRate: firstCodec?.clockRate ?? 0,
-			channels: firstCodec?.channels,
-			parameters: firstCodec?.parameters,
-			rtcpFeedback: firstCodec?.rtcpFeedback,
-		};
 		const producerSample: MediasoupProducerSample = {
 			id: producer.id,
+			transportId: transport.id,
 			createdAt: Date.now(),
 			kind: producer.kind,
-			codecInfo,
-			ssrcs: producer.rtpParameters.encodings?.map((encoding) => encoding.ssrc).filter((ssrc): ssrc is number => typeof ssrc === 'number'),
-			rids: producer.rtpParameters.encodings?.map((encoding) => encoding.rid).filter((rid): rid is string => typeof rid === 'string'),
+			codecInfo: {
+				mimeType: firstCodec?.mimeType ?? 'unknown/unknown',
+				payloadType: firstCodec?.payloadType ?? 0,
+				clockRate: firstCodec?.clockRate ?? 0,
+				channels: firstCodec?.channels,
+				parameters: firstCodec?.parameters,
+				rtcpFeedback: firstCodec?.rtcpFeedback,
+			},
+			ssrcs: producer.rtpParameters.encodings?.map((e) => e.ssrc).filter((s): s is number => typeof s === 'number'),
+			rids: producer.rtpParameters.encodings?.map((e) => e.rid).filter((r): r is string => typeof r === 'string'),
 			history: [],
-			transportId: transport.id,
 		};
 
 		this.sample.producers.push(producerSample);
 
-		const onPause = () => {
-			producerSample.history.push({
-				type: 'pause',
-				timestamp: Date.now(),
-			});
-		};
-
-		const onResume = () => {
-			producerSample.history.push({
-				type: 'resume',
-				timestamp: Date.now(),
-			});
-		};
+		const onPause = () => producerSample.history.push({ type: 'pause', timestamp: Date.now() });
+		const onResume = () => producerSample.history.push({ type: 'resume', timestamp: Date.now() });
 
 		producer.observer.once('close', () => {
 			producer.observer.off('pause', onPause);
 			producer.observer.off('resume', onResume);
-
 			producerSample.closedAt = Date.now();
 		});
 		producer.observer.on('pause', onPause);
@@ -298,40 +264,16 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 		this.sample.consumers.push(consumerSample);
 
-		const onPause = () => {
-			consumerSample.history.push({
-				type: 'pause',
-				timestamp: Date.now(),
-			});
-		};
-
-		const onResume = () => {
-			consumerSample.history.push({
-				type: 'resume',
-				timestamp: Date.now(),
-			});
-		};
-
-		const onProducerPause = () => {
-			consumerSample.history.push({
-				type: 'producerPaused',
-				timestamp: Date.now(),
-			});
-		};
-
-		const onProducerResume = () => {
-			consumerSample.history.push({
-				type: 'producerResumed',
-				timestamp: Date.now(),
-			});
-		};
+		const onPause = () => consumerSample.history.push({ type: 'pause', timestamp: Date.now() });
+		const onResume = () => consumerSample.history.push({ type: 'resume', timestamp: Date.now() });
+		const onProducerPause = () => consumerSample.history.push({ type: 'producerPaused', timestamp: Date.now() });
+		const onProducerResume = () => consumerSample.history.push({ type: 'producerResumed', timestamp: Date.now() });
 
 		consumer.observer.once('close', () => {
 			consumer.observer.off('pause', onPause);
 			consumer.observer.off('resume', onResume);
 			consumer.off('producerresume', onProducerResume);
 			consumer.off('producerpause', onProducerPause);
-
 			consumerSample.closedAt = Date.now();
 		});
 
@@ -352,9 +294,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 		this.sample.dataProducers.push(dataProducerSample);
 
-		dataProducer.observer.once('close', () => {
-			dataProducerSample.closedAt = Date.now();
-		});
+		dataProducer.observer.once('close', () => (dataProducerSample.closedAt = Date.now()));
 	}
 
 	public addDataConsumer(transport: types.Transport, dataConsumer: types.DataConsumer) {
@@ -369,16 +309,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 		this.sample.dataConsumers.push(dataConsumerSample);
 
-		dataConsumer.observer.once('close', () => {
-			dataConsumerSample.closedAt = Date.now();
-		});
-	}
-
-	public close() {
-		if (this.closed) return;
-
-		this.closed = true;
-		this.emit('close');
+		dataConsumer.observer.once('close', () => (dataConsumerSample.closedAt = Date.now()));
 	}
 
 	private attachRouterListeners() {
@@ -396,22 +327,10 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		transportSample: MediasoupTransportSample,
 		onClose?: () => void,
 	) {
-
-		const onNewProducer = (producer: types.Producer) => {
-			this.addProducer(transport, producer);
-		};
-
-		const onNewConsumer = (consumer: types.Consumer) => {
-			this.addConsumer(transport, consumer);
-		};
-
-		const onNewDataProducer = (dataProducer: types.DataProducer) => {
-			this.addDataProducer(transport, dataProducer);
-		};
-
-		const onNewDataConsumer = (dataConsumer: types.DataConsumer) => {
-			this.addDataConsumer(transport, dataConsumer);
-		};
+		const onNewProducer = (producer: types.Producer) => this.addProducer(transport, producer);
+		const onNewConsumer = (consumer: types.Consumer) => this.addConsumer(transport, consumer);
+		const onNewDataProducer = (dataProducer: types.DataProducer) => this.addDataProducer(transport, dataProducer);
+		const onNewDataConsumer = (dataConsumer: types.DataConsumer) => this.addDataConsumer(transport, dataConsumer);
 
 		transport.observer.once('close', () => {
 			transport.observer.off('newproducer', onNewProducer);

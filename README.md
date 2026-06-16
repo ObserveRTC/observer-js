@@ -806,19 +806,37 @@ transitions. `ObservedMediasoupRouter` captures that server-side view into a
 ### The concept
 
 You hand the observer a live mediasoup `Router`; it attaches to mediasoup's own `observer` API and,
-from then on, **passively records** the router's topology and lifecycle — with no polling and no
+from then on, **passively tracks** the router's topology and lifecycle — with no polling and no
 changes to your media code:
 
-- new transports (`webrtc` / `plain` / `pipe` / `direct`), their selected `tuple`, and ICE state
-  transitions;
+- new transports (`webrtc` / `plain` / `pipe` / `direct`), their selected `tuple`, ICE/DTLS/SCTP
+  state transitions and `connectedAt`;
 - producers (codec, SSRCs/RIDs, `pause`/`resume`) and consumers (`pause`/`resume`,
   `producerPaused`/`producerResumed`);
 - data producers and data consumers;
 - `createdAt` / `closedAt` for every entity above.
 
-All of it accumulates on `observedMediasoupRouter.sample` (a `MediasoupRouterSample` — see
-[`src/schema/MediasoupRouter.ts`](./src/schema/MediasoupRouter.ts)). This is a *Sample*, not a
-*Report*: it mirrors the naming of `ClientSample` and is yours to snapshot, persist, or correlate.
+It keeps all of this **in memory**, in a single `MediasoupRouterSample` exposed as
+`observedRouter.sample` — see [`src/schema/MediasoupRouter.ts`](./src/schema/MediasoupRouter.ts). The
+sample **accumulates for the life of the router**: closed transports/producers/consumers are kept
+(with their `closedAt` set), not removed. Read it whenever you like — it's a plain object you own.
+
+### Memory & large meetings
+
+This is intentionally the **simplest** approach — everything lives in memory and nothing is sampled
+or evicted for you. That's fine for typical rooms, but be aware of the cost at scale:
+
+- **Consumers grow as O(N²)** on a single flat router: with `N` participants each producing audio +
+  video and consuming everyone else, the sample holds roughly `2·N·(N−1)` consumer records (≈ 19,800
+  for `N` = 100).
+- The sample is **cumulative** — closed entities and their `history` are retained — so it also grows
+  with call duration and churn (renegotiation, simulcast layer changes, rejoins).
+
+A 100-participant flat router can therefore reach tens of MB and keep growing. There is **no built-in
+sink, snapshotting, or eviction** — by design. **If you run large meetings, do your own sampling:**
+on your own cadence read `observedRouter.sample` (snapshot/serialize/persist what you need), drop what
+you don't, and close routers you no longer track. (mediasoup also typically shards routers across
+workers/cores, which keeps any one router small.)
 
 ### Matching peer connections — by **event**, not by storage
 
@@ -841,32 +859,54 @@ router serving many participants emits one match per participant's transport. Wh
 or `false`, no matching is performed and the event never fires. The internal listener is removed
 automatically when the router closes or the observer closes.
 
+### Ordering contract — observe the router first
+
+Matching is **forward-only by design**, and that is sufficient because the lifecycle ordering is
+**guaranteed, not racy**:
+
+- `ObservedMediasoupRouter` works purely by **subscribing to mediasoup's `observer` API**, so it can
+  only see events that happen *after* it is created. You therefore create it the moment the router
+  exists — **before** any transport is added to it — and it captures the rest going forward.
+- A mediasoup transport is always created **on the server first**; only then can the client connect
+  to it, produce/consume, and begin shipping `ClientSample`s. So a peer connection — and the
+  `peer-connection-added` event it triggers — can never appear before its server-side WebRTC
+  transport already exists (and has been observed by the router).
+
+Put together: by the time a `peer-connection-added` fires, the router has already recorded that
+transport's id in `webrtcTransportIds`, so a single forward-looking listener catches every match. No
+back-scan of existing peer connections and no re-check on transport creation are needed — the
+observer deliberately does **not** look backwards.
+
+**Your responsibility:** call `createObservedMediasoupRouter(...)` as early as the router exists
+(before transports are added or samples are accepted). If you register the router *after* its
+transports are created or after the client's first sample, those events are already in the past and
+the corresponding matches are missed.
+
 When the underlying mediasoup router closes, its `close` propagates to `ObservedMediasoupRouter`,
-which emits **`mediasoup-router-removed`**. That is your cue to do whatever cleanup or persistence
-you want with the now-final `sample` — again, the observer itself keeps nothing.
+which sets the sample's `closedAt` and emits **`mediasoup-router-removed`** — your cue to read /
+persist the final `observedRouter.sample` and drop your reference to it.
 
 ### Options — `observer.createObservedMediasoupRouter(settings)`
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `router` | `mediasoup.types.Router` | yes | the live router to observe; the observer attaches to `router.observer` |
-| `routerId` | `string` | yes | your id for the router (the sample also carries `router.id`) |
+| `router` | `mediasoup.types.Router` | yes | the live router to observe; the observer attaches to `router.observer`. `.id` and the sample's `routerId` come from `router.id` |
 | `appData` | `Record<string, unknown>` | no | application-owned bag on the `ObservedMediasoupRouter` |
-| `attachments` | `Record<string, unknown>` | no | free-form data copied onto `sample.attachments` |
+| `attachments` | `Record<string, unknown>` | no | free-form data; carried on `sample.attachments` |
 | `matchPeerConnectionByWebRtcTransportId` | `boolean` | no | opt in to peer-connection matching: emit `mediasoup-router-matched-with-peer-connection` for each peer connection whose id matches one of the router's WebRTC transport ids. Omitted / `false` → no matching, the event never fires |
 
 Peer-connection matching is **off by default**; enable it with
 `matchPeerConnectionByWebRtcTransportId: true`. Returns the `ObservedMediasoupRouter`, or `undefined`
 if the observer is closed (a router with the same id returns the existing instance — both warn).
 
-Useful members on the returned object: `.sample` (the `MediasoupRouterSample`), `.appData`,
-`.attachments` (getter over `sample.attachments`), `.webrtcTransportIds: Set<string>`, `.id`,
-`.close()`.
+Useful members on the returned object: `.sample` (the in-memory `MediasoupRouterSample`, with
+`createdAt` / `closedAt?` on it), `.appData`, `.attachments`, `.webrtcTransportIds: Set<string>`,
+`.id`, `.close()`.
 
 ### Example
 
 ```ts
-import { Observer } from '@observertc/observer-js';
+import { Observer, InMemorySink } from '@observertc/observer-js';
 import type { ObservedMediasoupRouterScope, ObservedPeerConnectionScope } from '@observertc/observer-js';
 
 const observer = new Observer();
@@ -874,46 +914,42 @@ const observer = new Observer();
 // 1) Feed client samples as usual so the observer knows about calls, clients & peer connections.
 //    (e.g. transport-layer: observer.accept(clientSample, context))
 
-// 2) Observe the SFU side, opting in to peer-connection matching for this router's transports.
+// 2) Observe the SFU side; opt in to peer-connection matching. State accumulates in `.sample`.
 const router = /* your mediasoup router */ undefined as any;
 const observedRouter = observer.createObservedMediasoupRouter({
   router,
-  routerId: router.id,
   matchPeerConnectionByWebRtcTransportId: true,
 });
+
+// For large meetings, sample it yourself on your own cadence (see "Memory & large meetings"):
+// setInterval(() => persist(observedRouter.sample), 10_000);
 
 // 3) Every peer connection whose id matches one of the router's WebRTC transport ids fires this —
 //    WE decide what to do with each pairing. The payload carries the full ancestry.
 observer.on('mediasoup-router-matched-with-peer-connection',
-  ({ observedMediasoupRouter, observedCall, observedClient, observedPeerConnection }:
+  ({ observedMediasoupRouter, observedCall, observedPeerConnection }:
      ObservedMediasoupRouterScope & ObservedPeerConnectionScope) => {
-    // e.g. remember which router serves this peer connection / client…
     (observedPeerConnection.appData ??= {}).routerId = observedMediasoupRouter.id;
-    // …or index the server sample by call in your own store:
-    myStore.linkRouterToCall(observedCall.callId, observedMediasoupRouter.sample);
+    myStore.linkRouterToCall(observedCall.callId, observedMediasoupRouter.id);
   },
 );
 
-// 4) The router closed — WE decide what to persist/forward with the final sample.
+// 4) The router closed — read/persist the final state, then drop your reference.
 observer.on('mediasoup-router-removed', ({ observedMediasoupRouter }: ObservedMediasoupRouterScope) => {
-  myStore.saveRouterSample(observedMediasoupRouter.sample);
-});
-
-// (optional) react to the router being registered at all:
-observer.on('mediasoup-router-added', ({ observedMediasoupRouter }) => {
-  console.log('observing router', observedMediasoupRouter.id);
+  persist(observedMediasoupRouter.sample);   // its `closedAt` is set
 });
 ```
 
-### Why event-driven instead of storing on the call
+### Why event-driven matching instead of storing on the call
 
 - **Loose coupling.** The call model stays about client telemetry; the SFU view lives on its own
-  object and is associated only if and how *you* choose.
+  `ObservedMediasoupRouter` and is associated only if and how *you* choose.
 - **You own the association.** One router serves many peer connections (across clients and calls),
   and the right place to keep that mapping is application-specific — so the observer hands you each
-  peer-connection match and the final sample, and gets out of the way.
-- **No silent accumulation.** Nothing is appended to `ObservedCall`, so there is no hidden growth or
-  lifetime you have to reason about; the router sample lives exactly as long as you keep a reference.
+  peer-connection match and gets out of the way.
+- **You own the sampling.** The router sample is plain in-memory state you read on your own terms;
+  for large meetings, sample/persist it yourself (see [Memory & large meetings](#memory--large-meetings))
+  rather than relying on the library to evict — it deliberately doesn't.
 
 ---
 

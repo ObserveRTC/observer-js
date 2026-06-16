@@ -73,14 +73,16 @@ Five ideas describe the whole library:
   an `accept()`/`update()` path that accumulates metrics and emits events.
 - `Observed*.ts` — the per-stat classes (RTP, tracks, codecs, ICE, data channels, transports, …).
 - `ObserverEvents.ts` — the **typed event map** + the `Observed*Scope` ancestry payload types.
-- `ObservedMediasoupRouter.ts` — server-side mediasoup observation (attaches to a live `Router`).
+- `ObservedMediasoupRouter.ts` — server-side mediasoup observation (attaches to a live `Router`);
+  **accumulates** an in-memory `MediasoupRouterSample` (`.sample`) that grows for the router's life
+  (no built-in sink/eviction — callers sample it themselves; see the README large-meeting note).
 - `detectors/` — `Detector` interface + `Detectors` registry (server-side extension point).
 - `scores/` — `ScoreCalculator`.
 - `updaters/` — update-policy strategies (event-driven; no timers).
 - `utils/` — `RemoteTrackResolver` + built-in strategy factories.
 - `common/` — `logger`, `Middleware`/`MiddlewareProcessor`, shared utils.
 - `schema/` — sample / event / meta / mediasoup-router types (`ClientSample`, `MediasoupRouterSample`, …).
-- `sinks/` — `ClientSampleSink` base class + `JsonlFileSink` / `InMemorySink`.
+- `sinks/` — `ClientSampleSink` base class + `JsonlFileSink` / `InMemorySink` built-ins.
 - `index.ts` — the single public entry; **all public exports live here**.
 
 Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `tests/helpers/`.
@@ -145,8 +147,9 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   `ObserverConfig.createClientSink`.
 - **Add a remote-track strategy:** build a `RemoteTrackResolver` with custom
   publisher/subscriber id resolvers, or add a factory next to the existing ones in `utils/`.
-- **Add mediasoup coverage:** extend the `schema/MediasoupRouter.ts` sample types and wire the
-  matching mediasoup `observer` listeners in `ObservedMediasoupRouter.ts`.
+- **Add mediasoup coverage:** extend the per-entity sample types in `schema/MediasoupRouter.ts` and
+  wire the mediasoup `observer` listeners in `ObservedMediasoupRouter.ts` to mutate the live
+  `this.sample` records (so the new fields show up in the next snapshot).
 
 ---
 
@@ -168,6 +171,10 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   `undefined`. Read it on `client-updated`, or capture a live `observedClient` reference (e.g. from
   `client-sink-created`) for use at close time. It is latest-wins (a sample without `attachments`
   resets it).
+- **The mediasoup router sample is in-memory and cumulative (by design).** `ObservedMediasoupRouter`
+  accumulates `this.sample` and keeps closed entities (with `closedAt`) — it intentionally has **no**
+  sink/snapshot/eviction. For large routers (O(N²) consumers) this grows; callers are expected to
+  sample `.sample` themselves. Don't add automatic eviction without it being asked for; keep this simple.
 - **Don't store cross-entity associations implicitly.** Mediasoup router ↔ peer-connection matching is
   delivered as the `mediasoup-router-matched-with-peer-connection` event; the observer stores nothing
   on the call. Keep that loosely-coupled, event-driven shape for new correlations.
