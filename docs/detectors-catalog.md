@@ -13,7 +13,7 @@ Detailed rationale, thresholds and sources live in the linked design docs:
 
 **Legend.** Scope: **client** (per participant), **call** (cross-participant in one call),
 **observer** (cross-call, whole SFU). Deps: *corr* = needs track correlation
-(`createTrackResolver`); *obs-hook* = needs an observer-level detector hook; *classifier* = needs
+(`createRemoteTrackResolver`); *obs-hook* = needs an observer-level detector hook; *classifier* = needs
 the per-stream quality classifier; *issue-model* = benefits from the open/close issue lifecycle.
 
 ---

@@ -81,7 +81,7 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	 * (`createDefaultMediasoupRemoteTrackResolverFactory()` / `createP2pRemoteTrackResolverFactory()`)
 	 * or build a `RemoteTrackResolver` with custom publisher/subscriber id resolvers.
 	 */
-	createTrackResolver?: RemoteTrackResolverFactory,
+	createRemoteTrackResolver?: RemoteTrackResolverFactory,
 }
 
 export declare interface Observer {
@@ -178,7 +178,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		const observedCall = new ObservedCall(callSettings, this);
 
 		// Build the call's track resolver from the configured factory (if any).
-		observedCall.remoteTrackResolver = this.config.createTrackResolver?.(observedCall);
+		observedCall.remoteTrackResolver = this.config.createRemoteTrackResolver?.(observedCall);
 
 		observedCall.once('close', () => {
 			this.observedCalls.delete(observedCall.callId);

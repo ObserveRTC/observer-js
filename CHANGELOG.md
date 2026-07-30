@@ -56,7 +56,7 @@ the 1.0.0 API provides.
   track to the subscribed (inbound) tracks carrying it (**one publisher → many subscribers**) by a
   **publisher id** (the link key). Links are maintained directly on the tracks
   (`inboundTrack.remoteOutboundTrack`, `outboundTrack.remoteInboundTracks`).
-- **Opt-in via `ObserverConfig.createTrackResolver`**, invoked per call. Built-in factories:
+- **Opt-in via `ObserverConfig.createRemoteTrackResolver`**, invoked per call. Built-in factories:
   `createDefaultMediasoupRemoteTrackResolverFactory()` (producerId/consumerId attachments) and
   `createP2pRemoteTrackResolverFactory()` (RTP SSRC). Custom topologies supply their own
   publisher/subscriber id resolvers.

@@ -47,7 +47,7 @@ These came out of the analysis/plan and are now implemented, so they are **not**
 - **Per-client sinks**: `ClientSampleSink` base class, `JsonlFileSink` / `InMemorySink`,
   `createClientSink` factory, `client-sink-created` event, object-mode `write(sample)`.
 - **Optional track correlation**: generic `RemoteTrackResolver` (publisher→subscriber link by key)
-  + `ObserverConfig.createTrackResolver` factory + mediasoup / p2p built-in factories; links exposed
+  + `ObserverConfig.createRemoteTrackResolver` factory + mediasoup / p2p built-in factories; links exposed
   as `inboundTrack.remoteOutboundTrack` / `outboundTrack.remoteInboundTracks` (see
   [`docs/track-correlation-and-detectors.md`](./track-correlation-and-detectors.md) §1).
 - **Removed**: the entire in-Observer report subsystem (`ClientReport`/`TrackReport`,

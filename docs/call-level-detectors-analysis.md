@@ -11,7 +11,7 @@ A detector runs **live** on `call.update()` and may use:
 - **Per-stream / per-client metrics** already derived from `ClientSample`: byte/packet deltas,
   bitrates, RTT, jitter, fractionLost, and the **remote-RTP correlation** (`remote*` fields linking
   a local stream to the far side's RTCP report).
-- **Track correlation** (optional, via `ObserverConfig.createTrackResolver`): publisher→subscriber
+- **Track correlation** (optional, via `ObserverConfig.createRemoteTrackResolver`): publisher→subscriber
   links exposed as `inboundTrack.remoteOutboundTrack` and `outboundTrack.remoteInboundTracks`.
 - **Client events** (`clientEvents[]`): `PRODUCER_PAUSED/RESUMED`, `CONSUMER_PAUSED/RESUMED`,
   `MEDIA_TRACK_MUTED/UNMUTED`, `CLIENT_JOINED/LEFT`, ICE/PC state changes — essential for

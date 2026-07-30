@@ -21,7 +21,7 @@ function outboundTrackOf(observer: Observer, clientId: string, pcId: string, tra
 
 describe('RemoteTrackResolver (mediasoup factory)', () => {
 	it('links a publisher (outbound) to its subscribers (inbound) by producerId, publisher first', () => {
-		const observer = new Observer({ createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
+		const observer = new Observer({ createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
 
 		observer.accept(makeSample({
 			clientId: 'A',
@@ -44,7 +44,7 @@ describe('RemoteTrackResolver (mediasoup factory)', () => {
 	});
 
 	it('links when the subscriber arrives before the publisher', () => {
-		const observer = new Observer({ createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
+		const observer = new Observer({ createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
 
 		observer.accept(makeSample({
 			clientId: 'B',
@@ -65,7 +65,7 @@ describe('RemoteTrackResolver (mediasoup factory)', () => {
 	});
 
 	it('does not link tracks with different producer ids', () => {
-		const observer = new Observer({ createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
+		const observer = new Observer({ createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() });
 
 		observer.accept(makeSample({
 			clientId: 'A',
@@ -86,7 +86,7 @@ describe('RemoteTrackResolver (mediasoup factory)', () => {
 
 describe('RemoteTrackResolver (p2p factory)', () => {
 	it('links a publisher to a subscriber by shared SSRC', () => {
-		const observer = new Observer({ createTrackResolver: createP2pRemoteTrackResolverFactory() });
+		const observer = new Observer({ createRemoteTrackResolver: createP2pRemoteTrackResolverFactory() });
 
 		observer.accept(makeSample({
 			clientId: 'A',

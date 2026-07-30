@@ -15,7 +15,7 @@ handling) remain **design / collection** — input for the future server-side de
 ## 1. Track correlation (implemented)
 
 Correlation is **opt-in** and off by default. You enable it per observer via the
-`ObserverConfig.createTrackResolver` factory, which is invoked when each call is created and
+`ObserverConfig.createRemoteTrackResolver` factory, which is invoked when each call is created and
 returns that call's `RemoteTrackResolver` (or `undefined` for none). **`attachments` are read,
 never modified.**
 
@@ -23,7 +23,7 @@ never modified.**
 import { Observer, createDefaultMediasoupRemoteTrackResolverFactory } from '@observertc/observer-js';
 
 const observer = new Observer({
-  createTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
+  createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
 });
 ```
 
@@ -219,7 +219,7 @@ type CallIssue = {
 
 ## Suggested build order
 
-1. ~~**Correlation core**~~ — **done.** `RemoteTrackResolver` + `createTrackResolver` config +
+1. ~~**Correlation core**~~ — **done.** `RemoteTrackResolver` + `createRemoteTrackResolver` config +
    the mediasoup and p2p factories (see §1).
 2. **Issue model**: extend the issue shape (severity/key/state) + the ongoing-issue helper on the
    call; store + report call issues.
