@@ -225,11 +225,15 @@ export class ObservedPeerConnection extends EventEmitter {
 	}
 
 	public get selectedIceCandiadtePairForTurn() {
+		// The ICE server `url` is only exposed on *local* candidates (it identifies the server
+		// the candidate was obtained from); remote candidates never carry it. `turn` also
+		// matches `turns:` (TURN over TLS).
 		return this.selectedIceCandidatePairs
-			.filter((pair) =>
-				pair.getLocalCandidate()?.candidateType === 'relay' &&
-				pair.getRemoteCandidate()?.url?.startsWith('turn:')
-			);
+			.filter((pair) => {
+				const localCandidate = pair.getLocalCandidate();
+
+				return localCandidate?.candidateType === 'relay' && localCandidate?.url?.startsWith('turn') === true;
+			});
 	}
 
 	public close() {
@@ -539,12 +543,20 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.usingTURN = false;
 
 		for (const selectedCandidatePair of selectedIceCandidatePairs) {
-			if (selectedCandidatePair.getLocalCandidate()?.protocol === 'tcp') {
+			const localCandidate = selectedCandidatePair.getLocalCandidate();
+
+			if (localCandidate?.protocol === 'tcp') {
 				this.usingTCP = true;
 			}
-			if (selectedCandidatePair.getLocalCandidate()?.candidateType === 'relay' && selectedCandidatePair.getRemoteCandidate()?.url?.startsWith('turn:')) {
-				selectedCandidatePairForTurn.push(selectedCandidatePair);
+			// relay candidates are only obtained from TURN servers, so the local candidate's
+			// type alone establishes TURN usage. The server `url` is only exposed on *local*
+			// candidates (and not by every browser) — it is required only to attribute the
+			// traffic to a concrete TURN server.
+			if (localCandidate?.candidateType === 'relay') {
 				this.usingTURN = true;
+				if (localCandidate.url?.startsWith('turn')) {
+					selectedCandidatePairForTurn.push(selectedCandidatePair);
+				}
 			}
 			this.deltaTransportReceivedBytes += selectedCandidatePair.deltaBytesReceived;
 			this.deltaTransportSentBytes += selectedCandidatePair.deltaBytesSent;

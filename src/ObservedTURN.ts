@@ -53,26 +53,33 @@ export class ObservedTURN extends EventEmitter {
 	}
 
 	public addPeerConnection(peerConnection: ObservedPeerConnection) {
-		const turnPairs = peerConnection.selectedIceCandidatePairs.filter((pair) => pair.getLocalCandidate()?.candidateType === 'relay' && pair.getRemoteCandidate()?.url?.startsWith('turn:'));
+		// selected pairs whose *local* candidate is a relay candidate with a `turn(s):` url
+		// (the ICE server url is only exposed on local candidates).
+		const turnPairs = peerConnection.selectedIceCandiadtePairForTurn;
 
 		if (turnPairs.length !== 1) {
 			return (logger.warn(`Expected exactly one TURN pair, but found for peerconnection ${peerConnection.peerConnectionId}`, turnPairs.length), undefined);
 		}
 
 		const candidatePair = turnPairs[0];
-		const rawUrl = candidatePair.getRemoteCandidate()?.url;
+		const rawUrl = candidatePair.getLocalCandidate()?.url;
 
 		if (!rawUrl) {
-			return (logger.warn(`No remote candidate URL found for peerconnection ${peerConnection.peerConnectionId}`), undefined);
+			return (logger.warn(`No local candidate URL found for peerconnection ${peerConnection.peerConnectionId}`), undefined);
 		}
 
-		const turnUrl = new URL(rawUrl);
-		const turnServerUrl = `${turnUrl.protocol}//${turnUrl.hostname}:${turnUrl.port}`;
+		// A TURN url looks like `turn(s):host[:port][?transport=udp|tcp]` (RFC 7065). The WHATWG
+		// `URL` class parses these non-special schemes as opaque paths (empty hostname/port), so
+		// derive the server key by stripping the query instead of using `new URL()`.
+		const turnServerUrl = rawUrl.split('?')[0];
 		let turnServer = this.servers.get(turnServerUrl);
-        
+
 		if (!turnServer) {
 			turnServer = new ObservedTurnServer(turnServerUrl, this);
+			this.servers.set(turnServerUrl, turnServer);
 		}
+
+		turnServer.observedPeerConnections.set(peerConnection.peerConnectionId, peerConnection);
 
 		return turnServer;
 	}
