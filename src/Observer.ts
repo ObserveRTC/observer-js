@@ -11,6 +11,8 @@ import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } 
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
+import { Detectors } from './detectors/Detectors';
+import type { ClientIssue } from './schema/ClientSample';
 
 const logger = createLogger('Observer');
 
@@ -115,6 +117,14 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 	/** Global, pre-dispatch middleware chain run on every accepted sample. */
 	public readonly acceptMiddlewares = new MiddlewareProcessor<AcceptMiddlewarePayload>();
+
+	/**
+	 * Observer-scoped detector registry (ships empty), run on every `observer.update()` — the place
+	 * for findings that span **calls**, e.g. "many calls on the same SFU degraded at once". Detectors
+	 * raise findings with `observer.addIssue(...)`, surfaced on the bus as `observer-issue`.
+	 * (For findings within a single call use `observedCall.detectors`.)
+	 */
+	public readonly detectors = new Detectors();
 
 	public constructor(public readonly config: ObserverConfig<AppData> = {
 		updatePolicy: 'update-when-all-call-updated',
@@ -333,8 +343,19 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		}
 
 		this.observedTURN.update();
+		this.detectors.update();
 
 		this._notify('observer-updated', { ...this.eventScope });
+	}
+
+	/**
+	 * Raise an observer-scoped (cross-call / SFU-wide) finding. Emitted on the bus as
+	 * `observer-issue`. Intended for `observer.detectors`, but the application may call it too.
+	 */
+	public addIssue(issue: ClientIssue) {
+		if (this.closed) return;
+
+		this._notify('observer-issue', { ...this.eventScope, issue });
 	}
 
 	/** Emit an Observer-bus event. */

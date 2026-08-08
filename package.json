@@ -18,8 +18,7 @@
     }
   },
   "files": [
-    "dist",
-    "llms-full.txt"
+    "dist"
   ],
   "engines": {
     "node": ">=22"
@@ -32,8 +31,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.js",
-    "test:coverage": "jest --config jest.config.js --coverage",
-    "docs:llms-full": "node scripts/build-llms-full.mjs"
+    "test:coverage": "jest --config jest.config.js --coverage"
   },
   "keywords": [
     "webrtc",

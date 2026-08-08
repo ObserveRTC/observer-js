@@ -321,10 +321,19 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// emit new attachments?
 		this.attachments = sample.attachments;
 
-		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / (elapsedInSeconds);
-		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / (elapsedInSeconds);
-		this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / (elapsedInSeconds);
-		this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / (elapsedInSeconds);
+		// Guard the division: two samples accepted within the same millisecond make `elapsedInSeconds`
+		// 0, which previously produced Infinity/NaN bitrates that then poisoned every aggregate above.
+		if (0 < elapsedInSeconds) {
+			this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / elapsedInSeconds;
+			this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedInSeconds;
+			this.sendingAudioBitrate = (this.deltaSentAudioBytes * 8) / elapsedInSeconds;
+			this.sendingVideoBitrate = (this.deltaSentVideoBytes * 8) / elapsedInSeconds;
+		} else {
+			this.receivingAudioBitrate = 0;
+			this.receivingVideoBitrate = 0;
+			this.sendingAudioBitrate = 0;
+			this.sendingVideoBitrate = 0;
+		}
 		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
 		this.calculatedScore.value = sample.score;

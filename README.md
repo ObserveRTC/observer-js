@@ -40,11 +40,9 @@ and emits a single, unified stream of typed events the application can react to.
 > works whether your project uses `import` (ESM) or `require()` (CommonJS). Everything — including
 > the built-in file sink — is exported from the single `@observertc/observer-js` entry.
 
-> **For AI agents:** [`llms.txt`](./llms.txt) is a curated map of these docs (with a one-file
-> [`llms-full.txt`](./llms-full.txt) export for one-shot ingestion); [`AGENTS.md`](./AGENTS.md)
-> covers build/test commands and conventions for working **in** this repository. `llms-full.txt`
-> ships in the npm package (so it's available wherever the library is installed); `llms.txt` and
-> `AGENTS.md` live in the repo (and `llms.txt` belongs at the root of the docs site).
+> **For AI agents:** [`llms.txt`](./llms.txt) is a curated map of these docs (it belongs at the root
+> of the docs site); [`AGENTS.md`](./AGENTS.md) covers build/test commands and the conventions for
+> working **in** this repository.
 
 ---
 
@@ -363,6 +361,7 @@ additional field(s) on top of that scope.
 | `observer-updated` | — | `observer.update()` ran (per the observer update policy) |
 | `observer-closed` | — | `observer.close()` |
 | `sample-rejected` | `{ reason: 'observer-closed' \| 'missing-callId' \| 'missing-clientId', sample: ClientSample }` | a sample was dropped by `accept()` |
+| `observer-issue` | `{ issue: ClientIssue }` | `observer.addIssue(...)` — a cross-call / SFU-wide finding (see [observer-level detectors](#observer-level-detectors-cross-call--sfu-wide)) |
 
 #### Mediasoup level — scope `{ observer, observedMediasoupRouter }`
 
@@ -729,6 +728,88 @@ observer.on('call-added', ({ observedCall }) => {
 });
 observer.on('call-issue', ({ observedCall, issue }) => { /* react */ });
 ```
+
+### Observer-level detectors (cross-call / SFU-wide)
+
+Some findings only exist **above** call scope — "many calls on the same SFU degraded at once" is far
+more actionable than fifty individual client alerts. The same registry exists on the `Observer`,
+runs on every `observer.update()`, and raises findings through `observer.addIssue(...)`, surfaced on
+the bus as **`observer-issue`**:
+
+```ts
+observer.detectors.add({
+  name: 'sfu-wide-degradation',
+  update: () => {
+    const degradedCalls = [ ...observer.observedCalls.values() ].filter(isDegraded);
+
+    if (observer.numberOfCalls > 3 && degradedCalls.length / observer.numberOfCalls > 0.6) {
+      observer.addIssue({ type: 'SFU_WIDE_QUALITY_DEGRADATION', timestamp: Date.now() });
+    }
+  },
+});
+
+observer.on('observer-issue', ({ issue }) => alert(issue));
+```
+
+### Publisher → subscribers: `TrackDistributionAggregator`
+
+The question a single browser can never answer is *"did **everyone** receiving Alice see the same
+degradation?"*. `TrackDistributionAggregator` answers it by walking the publisher→subscriber links
+maintained by a [`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu) and summarizing one
+published track against all of its receivers:
+
+```ts
+import { TrackDistributionAggregator } from '@observertc/observer-js';
+
+const aggregator = new TrackDistributionAggregator(observedCall);
+
+for (const d of aggregator.aggregate()) {
+  d.trackId;                     // the published track
+  d.publisher.healthy;           // is the source itself fine? (+ .reasons)
+  d.numberOfReceivers;           // 17
+  d.numberOfDegradedReceivers;   // 14
+  d.degradedRatio;               // 0.82
+  d.fractionLost?.p95;           // percentile summaries across receivers
+  d.freezes;                     // { affectedReceivers, total }  — fan-out counters
+  d.plis;
+  d.receivers;                   // per-receiver entries with `degraded` + `reasons`
+}
+```
+
+Each receiver is judged against `ReceiverHealthThresholds` (loss, freezes, dropped frames,
+concealment, jitter-buffer delay, RTT — override any of them). Summaries are **medians and
+percentiles, not means**, because one participant at 1500 ms RTT would otherwise hide nine healthy
+ones. The helpers behind it (`percentile`, `median`, `summarize`, `counterDelta`, `SlidingWindow`)
+are exported for building your own detectors.
+
+### `CommonSourceDegradationDetector`
+
+The first detector built on the aggregator. It classifies where a fault lies by comparing the source
+against its receivers, and raises a `call-issue` whose `type` is one of:
+
+| Finding | Meaning |
+|---------|---------|
+| `PUBLISHER_HEALTHY_SUBSCRIBERS_DEGRADED` | source egress fine, most receivers degraded → **downstream / SFU** suspected |
+| `PUBLISHER_DEGRADED_FOR_ALL_SUBSCRIBERS` | the source itself is impaired → **publisher-side** |
+| `SINGLE_SUBSCRIBER_DEGRADED` | one receiver suffers while the rest are fine → **that receiver's network** |
+| `MULTIPLE_SUBSCRIBERS_DEGRADED` | several (but not most) receivers on the same source |
+
+```ts
+import { CommonSourceDegradationDetector } from '@observertc/observer-js';
+
+observer.on('call-added', ({ observedCall }) => {
+  observedCall.detectors.add(new CommonSourceDegradationDetector(observedCall, {
+    minReceivers: 3,             // ratios need a meaningful denominator
+    degradedRatioThreshold: 0.6, // "most receivers"
+    consecutiveTicks: 2,         // must hold 2 ticks — avoids flapping on one bad sample
+  }));
+});
+```
+
+The `call-issue` payload carries the evidence: publisher health and reasons, receiver/degraded
+counts, `degradedRatio`, `affectedClientIds`, freeze/PLI fan-out and the loss/bitrate summaries.
+It requires a configured `RemoteTrackResolver` — with no links there is nothing to compare and the
+detector stays silent.
 
 `Detector` interface and the registry:
 

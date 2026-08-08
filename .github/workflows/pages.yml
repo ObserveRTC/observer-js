@@ -1,7 +1,7 @@
 name: Docs (GitHub Pages)
 
 # Publishes a minimal static site that serves `llms.txt` (the AI-doc index) at the site root,
-# alongside `llms-full.txt`, the README, the CHANGELOG, and the `docs/` markdown — all verbatim
+# alongside the README, the CHANGELOG, and the `docs/` markdown — all verbatim
 # (`.nojekyll`), so agents/crawlers can fetch them directly. Project Pages are served under a
 # `/<repo>/` subpath, so the discoverable file is e.g.
 #   https://<owner>.github.io/observer-js/llms.txt
@@ -13,7 +13,6 @@ on:
     branches: [master]
     paths:
       - 'llms.txt'
-      - 'llms-full.txt'
       - 'README.md'
       - 'CHANGELOG.md'
       - 'AGENTS.md'
@@ -45,7 +44,7 @@ jobs:
           set -e
           mkdir -p _site/docs
           # AI-doc index + one-file export, served verbatim at the site root.
-          cp llms.txt llms-full.txt _site/
+          cp llms.txt _site/
           # Human/agent-readable markdown, served raw (no Jekyll processing).
           cp README.md CHANGELOG.md _site/
           [ -f AGENTS.md ] && cp AGENTS.md _site/ || true
@@ -72,7 +71,6 @@ jobs:
             <h2>For AI agents</h2>
             <ul>
               <li><a href="./llms.txt">llms.txt</a> — curated index of the documentation</li>
-              <li><a href="./llms-full.txt">llms-full.txt</a> — full docs in one file (one-shot ingestion)</li>
             </ul>
             <h2>Documentation</h2>
             <ul>

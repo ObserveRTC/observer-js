@@ -64,6 +64,9 @@ export type ObserverEvents = {
 	'observer-closed': [ObserverEventBase];
 	'sample-rejected': [ObserverEventBase & { reason: SampleRejectedReason, sample: ClientSample }];
 
+	/** An observer-scoped (cross-call / SFU-wide) finding raised by `observer.addIssue(...)`. */
+	'observer-issue': [ObserverEventBase & { issue: ClientIssue }];
+
 	// mediasoup level
 	'mediasoup-router-added': [ObservedMediasoupRouterScope];
 	'mediasoup-router-removed': [ObservedMediasoupRouterScope];

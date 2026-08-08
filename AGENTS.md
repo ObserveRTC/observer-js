@@ -113,8 +113,13 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   only timers and are opt-in).
 - **Explicit accumulation.** The per-sample metric accumulation in `accept()` is intentionally
   explicit and not abstracted — match that style rather than introducing clever indirection.
-- **Detectors are server-side.** Add cross-client detectors on `ObservedCall.detectors`; do not
-  re-implement signals the client already reports (those arrive as `clientIssues` → `client-issue`).
+- **Detectors are server-side.** Add cross-client detectors on `ObservedCall.detectors` (or
+  `observer.detectors` for cross-call/SFU-wide findings, raised via `observer.addIssue` →
+  `observer-issue`); do not re-implement signals the client already reports (those arrive as
+  `clientIssues` → `client-issue`). Build them on `TrackDistributionAggregator` and the helpers in
+  `utils/stats.ts` rather than hand-rolling another traversal of `remoteInboundTracks`.
+- **Summarize with percentiles, not means.** Call telemetry is skewed by single bad participants;
+  use `summarize()` / `percentile()` and "affected ratios" in detector logic.
 - **Public surface goes through `index.ts`.** If you add a public class/type, export it there.
 - **Injection lifecycle (`ObservedClient.inject*`).** The `inject*` methods (attachment / event /
   issue / metaData / extensionStat) must preserve three guarantees: (1) when called **during**

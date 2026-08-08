@@ -52,6 +52,25 @@ export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema
 export { ScoreCalculator } from './scores/ScoreCalculator';
 export { Detectors } from './detectors/Detectors';
 export type { Detector } from './detectors/Detector';
+// Cross-client detection: the publisher→subscribers aggregation primitive and the detectors on it.
+export {
+	TrackDistributionAggregator,
+	defaultReceiverHealthThresholds,
+} from './utils/TrackDistributionAggregator';
+export type {
+	ObservedTrackDistribution,
+	ReceiverDistributionEntry,
+	PublisherDistributionEntry,
+	ReceiverHealthThresholds,
+} from './utils/TrackDistributionAggregator';
+export {
+	CommonSourceDegradationDetector,
+	CommonSourceDegradationTypes,
+} from './detectors/CommonSourceDegradationDetector';
+export type { CommonSourceDegradationDetectorConfig } from './detectors/CommonSourceDegradationDetector';
+// Statistics helpers for building your own detectors.
+export { percentile, median, summarize, counterDelta, SlidingWindow } from './utils/stats';
+export type { StatsSummary, SlidingWindowEntry } from './utils/stats';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
 // Per-client sample sinks. `ClientSampleSink` is the base class to subclass for a custom

@@ -16,6 +16,18 @@ export type InboundSpec = {
 	bytesReceived?: number,
 	packetsReceived?: number,
 	packetsLost?: number,
+	freezeCount?: number,
+	pliCount?: number,
+	nackCount?: number,
+	framesReceived?: number,
+	framesDropped?: number,
+	concealedSamples?: number,
+	totalSamplesReceived?: number,
+	jitter?: number,
+	jitterBufferDelay?: number,
+	jitterBufferEmittedCount?: number,
+	frameWidth?: number,
+	frameHeight?: number,
 	/** track attachments (e.g. { producerId, consumerId }) */
 	attachments?: Record<string, unknown>,
 };
@@ -54,6 +66,8 @@ export type RemoteOutboundSpec = {
 export type IceSpec = {
 	localProtocol?: string,
 	localCandidateType?: string,
+	/** The ICE server url — per W3C webrtc-stats this is only exposed on **local** candidates. */
+	localUrl?: string,
 	remoteUrl?: string,
 	bytesReceived?: number,
 	bytesSent?: number,
@@ -96,6 +110,18 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 			bytesReceived: inb.bytesReceived ?? 0,
 			packetsReceived: inb.packetsReceived ?? 0,
 			packetsLost: inb.packetsLost ?? 0,
+			freezeCount: inb.freezeCount,
+			pliCount: inb.pliCount,
+			nackCount: inb.nackCount,
+			framesReceived: inb.framesReceived,
+			framesDropped: inb.framesDropped,
+			concealedSamples: inb.concealedSamples,
+			totalSamplesReceived: inb.totalSamplesReceived,
+			jitter: inb.jitter,
+			jitterBufferDelay: inb.jitterBufferDelay,
+			jitterBufferEmittedCount: inb.jitterBufferEmittedCount,
+			frameWidth: inb.frameWidth,
+			frameHeight: inb.frameHeight,
 		} as InboundRtpStats);
 		inboundTracks.push({ timestamp, id: inb.trackId, kind, attachments: inb.attachments });
 	}
@@ -150,7 +176,7 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 		const remoteId = `${spec.peerConnectionId}-remote`;
 		const pairId = `${spec.peerConnectionId}-pair`;
 
-		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host' });
+		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host', url: spec.ice.localUrl });
 		iceCandidates.push({ timestamp, id: remoteId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: 'host', url: spec.ice.remoteUrl });
 		iceCandidatePairs.push({
 			timestamp,

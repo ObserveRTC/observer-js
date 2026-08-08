@@ -1,6 +1,7 @@
 import { MediaKind } from './common/types';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { OutboundRtpStats, QualityLimitationDurations } from './schema/ClientSample';
+import { counterDelta } from './utils/stats';
 
 export class ObservedOutboundRtp implements OutboundRtpStats {
 	private _visited = false;
@@ -50,6 +51,18 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 	
 	public deltaPacketsSent = 0;
 	public deltaBytesSent = 0;
+
+	// Per-tick, counter-reset-safe deltas of the cumulative RTCStats counters.
+	public deltaFramesSent = 0;
+	public deltaFramesEncoded = 0;
+	public deltaKeyFramesEncoded = 0;
+	public deltaNackCount = 0;
+	public deltaPliCount = 0;
+	public deltaFirCount = 0;
+	public deltaRetransmittedPacketsSent = 0;
+	public deltaRetransmittedBytesSent = 0;
+	public deltaEncodeTime = 0;
+	public deltaQualityLimitationResolutionChanges = 0;
 
 	// Derived from the corresponding remote-inbound-rtp (receiver report), when present.
 	public remoteRttInMs?: number;
@@ -102,6 +115,16 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 		this.packetRate = 0;
 		this.deltaPacketsSent = 0;
 		this.deltaBytesSent = 0;
+		this.deltaFramesSent = 0;
+		this.deltaFramesEncoded = 0;
+		this.deltaKeyFramesEncoded = 0;
+		this.deltaNackCount = 0;
+		this.deltaPliCount = 0;
+		this.deltaFirCount = 0;
+		this.deltaRetransmittedPacketsSent = 0;
+		this.deltaRetransmittedBytesSent = 0;
+		this.deltaEncodeTime = 0;
+		this.deltaQualityLimitationResolutionChanges = 0;
 		this.remoteRttInMs = undefined;
 		this.remoteFractionLost = undefined;
 		this.remoteJitter = undefined;
@@ -119,11 +142,32 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 				this.deltaBytesSent = stats.bytesSent - this.bytesSent;
 				this.bitrate = (this.deltaBytesSent * 8) / (elapsedTimeInMs / 1000);
 			}
-			if (stats.headerBytesSent !== undefined && this.headerBytesSent !== undefined) {
-				this.payloadBitrate = ((this.deltaBytesSent ?? 0 - (stats.headerBytesSent - this.headerBytesSent)) * 8) / (elapsedTimeInMs / 1000);
-			}
-			if (this.framesSent !== undefined && stats.framesSent !== undefined) {
-				this.bitPerPixel = this.deltaBytesSent ? (this.deltaBytesSent * 8) / (this.framesSent - stats.framesSent) : 0;
+			// NOTE `??` binds looser than `-`, so the previous expression parsed as
+			// `deltaBytesSent ?? (0 - headerDelta)` and always yielded `deltaBytesSent` — i.e.
+			// payloadBitrate silently equalled bitrate and never subtracted the header bytes.
+			const deltaHeaderBytesSent = counterDelta(this.headerBytesSent, stats.headerBytesSent);
+
+			this.payloadBitrate = (Math.max(0, this.deltaBytesSent - deltaHeaderBytesSent) * 8) / (elapsedTimeInMs / 1000);
+
+			this.deltaFramesSent = counterDelta(this.framesSent, stats.framesSent);
+			this.deltaFramesEncoded = counterDelta(this.framesEncoded, stats.framesEncoded);
+			this.deltaKeyFramesEncoded = counterDelta(this.keyFramesEncoded, stats.keyFramesEncoded);
+			this.deltaNackCount = counterDelta(this.nackCount, stats.nackCount);
+			this.deltaPliCount = counterDelta(this.pliCount, stats.pliCount);
+			this.deltaFirCount = counterDelta(this.firCount, stats.firCount);
+			this.deltaRetransmittedPacketsSent = counterDelta(this.retransmittedPacketsSent, stats.retransmittedPacketsSent);
+			this.deltaRetransmittedBytesSent = counterDelta(this.retransmittedBytesSent, stats.retransmittedBytesSent);
+			this.deltaEncodeTime = counterDelta(this.totalEncodeTime, stats.totalEncodeTime);
+			this.deltaQualityLimitationResolutionChanges = counterDelta(
+				this.qualityLimitationResolutionChanges, stats.qualityLimitationResolutionChanges,
+			);
+
+			// bits per pixel of the frames sent in this tick. (The previous expression subtracted in
+			// reverse — `previous - current` — so it was always negative, and divided by frames, not pixels.)
+			const pixels = (stats.frameWidth ?? 0) * (stats.frameHeight ?? 0);
+
+			if (0 < pixels && 0 < this.deltaFramesSent) {
+				this.bitPerPixel = (this.deltaBytesSent * 8) / (this.deltaFramesSent * pixels);
 			}
 		}
 
