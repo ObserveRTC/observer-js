@@ -20,7 +20,7 @@ export type RtpCodecParameters = {
 	rtcpFeedback?: { type: string; parameter?: string }[];
 };
 
-type SampleHistoryItem<T extends string> = Record<string, unknown> & {
+type SampleHistoryItem<T extends string> = {
 	type: T,
 	timestamp: number;
 }
@@ -29,7 +29,7 @@ type SampleHistoryItem<T extends string> = Record<string, unknown> & {
 /* Sample types                                                                */
 /* -------------------------------------------------------------------------- */
 
-export type MediasoupRouterSample = Record<string, unknown> & {
+export type MediasoupRouterSample = {
 	routerId: string;
 	attachments: Record<string, unknown>;
 	createdAt: number;
@@ -124,7 +124,11 @@ export type MediasoupDirectTransportSample = {
 	history: MediasoupDirectTransportSampleEventMap[];
 }
 
-export type MediasoupTransportSample = Record<string, unknown> & {
+export type MediasoupTransportSample = {
+
+	/** Free-form application data. Attach anything here — see `ObservedMediasoupRouter`. */
+	attachments?: Record<string, unknown>;
+
 	id: string;
 	createdAt: number;
 	// The moment the transport became connected — a universal milestone every transport reaches, but
@@ -151,7 +155,11 @@ export type MediasoupProducerSampleEvent = {
 	[K in keyof MediasoupProducerSampleEventMap]: SampleHistoryItem<K>;
 }[keyof MediasoupProducerSampleEventMap];
 
-export type MediasoupProducerSample = Record<string, unknown> & {
+export type MediasoupProducerSample = {
+
+	/** Free-form application data. Attach anything here — see `ObservedMediasoupRouter`. */
+	attachments?: Record<string, unknown>;
+
 	id: string;
 	transportId: string;
 	createdAt: number;
@@ -178,7 +186,11 @@ export type MediasoupConsumerSampleEvent = {
 	[K in keyof MediasoupConsumerSampleEventMap]: SampleHistoryItem<K>;
 }[keyof MediasoupConsumerSampleEventMap];
 
-export type MediasoupConsumerSample = Record<string, unknown> & {
+export type MediasoupConsumerSample = {
+
+	/** Free-form application data. Attach anything here — see `ObservedMediasoupRouter`. */
+	attachments?: Record<string, unknown>;
+
 	id: string;
 	producerId: string;
 	transportId: string;
@@ -188,7 +200,11 @@ export type MediasoupConsumerSample = Record<string, unknown> & {
 	history: MediasoupConsumerSampleEvent[];
 };
 
-export type MediasoupDataProducerSample = Record<string, unknown> & {
+export type MediasoupDataProducerSample = {
+
+	/** Free-form application data. Attach anything here — see `ObservedMediasoupRouter`. */
+	attachments?: Record<string, unknown>;
+
 	id: string;
 	transportId: string;
 	createdAt: number;
@@ -197,7 +213,11 @@ export type MediasoupDataProducerSample = Record<string, unknown> & {
 	protocol: string;
 };
 
-export type MediasoupDataConsumerSample = Record<string, unknown> & {
+export type MediasoupDataConsumerSample = {
+
+	/** Free-form application data. Attach anything here — see `ObservedMediasoupRouter`. */
+	attachments?: Record<string, unknown>;
+
 	id: string;
 	dataProducerId: string;
 	transportId: string;

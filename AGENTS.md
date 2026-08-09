@@ -195,6 +195,11 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   `undefined`. Read it on `client-updated`, or capture a live `observedClient` reference (e.g. from
   `client-sink-created`) for use at close time. It is latest-wins (a sample without `attachments`
   resets it).
+- **Mediasoup sample extension goes through `attachments`.** Every entity sample has an
+  `attachments?: Record<string, unknown>` slot; the types deliberately have **no** index signature, so
+  don't reintroduce `Record<string, unknown> &` to allow ad-hoc top-level keys. New entity kinds need:
+  the `attachments` slot, registration in the id→sample map, an `enrich` hook entry, and
+  `<entity>-sample-added` / `-closed` events (emitted with the *live* sample object, enrichment first).
 - **The mediasoup router sample is in-memory and cumulative (by design).** `ObservedMediasoupRouter`
   accumulates `this.sample` and keeps closed entities (with `closedAt`) — it intentionally has **no**
   sink/snapshot/eviction. For large routers (O(N²) consumers) this grows; callers are expected to

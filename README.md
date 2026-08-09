@@ -1149,6 +1149,80 @@ on your own cadence read `observedRouter.sample` (snapshot/serialize/persist wha
 you don't, and close routers you no longer track. (mediasoup also typically shards routers across
 workers/cores, which keeps any one router small.)
 
+### Extending the sample, and building your own report
+
+The sample is yours to annotate. Every entity — the router, each transport, producer, consumer, data
+producer and data consumer — has an `attachments?: Record<string, unknown>` slot, and there are three
+ways to fill it, from most declarative to most ad-hoc.
+
+**1. `enrich` — mirror mediasoup's own `appData`.** The common case: your application already keeps
+`participantId`, `purpose` and similar on the mediasoup objects, and you want them on the sample.
+Runs once per entity at creation, before the corresponding event:
+
+```ts
+observer.createObservedMediasoupRouter({
+  router,
+  enrich: {
+    producer: (producer) => ({ participantId: producer.appData.participantId, purpose: producer.appData.purpose }),
+    consumer: (consumer) => ({ subscriberId: consumer.appData.subscriberId }),
+    transport: (transport) => ({ role: transport.appData.role }),
+  },
+});
+```
+
+A throwing enricher is caught and logged — it can't take the router's bookkeeping down with it.
+
+**2. Lifecycle events — enrich on the fly.** Each entity announces itself as
+`<entity>-sample-added` and `<entity>-sample-closed`, carrying **the live sample object** (not a
+copy) plus the mediasoup object it came from. Mutating it in the handler is the intended pattern:
+
+```ts
+observedRouter.on('producer-sample-added', ({ sample, producer, transport }) => {
+  sample.attachments = { ...sample.attachments, participantId: lookup(producer.id) };
+});
+
+observedRouter.on('producer-sample-closed', ({ sample }) => {
+  archive(sample);   // its `closedAt` is set
+});
+```
+
+Events: `transport-sample-added` / `-closed`, `producer-sample-added` / `-closed`,
+`consumer-sample-added` / `-closed`, `data-producer-sample-added` / `-closed`,
+`data-consumer-sample-added` / `-closed`.
+
+**3. `attachTo(id, attachments)` — annotate later, from anywhere.** When the knowledge arrives after
+the entity did (a signalling message, a database lookup that resolved):
+
+```ts
+observedRouter.attachTo(producerId, { participantId, joinedFrom: 'mobile' });   // merges
+```
+
+Ids are unique across mediasoup entity kinds, so one method covers all of them. It returns `false`
+for an unknown id rather than failing quietly — which matters when application events race the
+mediasoup ones. For direct access there are typed accessors: `getTransportSample(id)`,
+`getProducerSample(id)`, `getConsumerSample(id)`, `getDataProducerSample(id)`,
+`getDataConsumerSample(id)`. They index the *same* objects the arrays hold, so a lookup is O(1)
+instead of a `sample.producers.find(...)` scan.
+
+#### Building your own report
+
+`observedRouter.sample` is live — arrays grow and `history` entries are appended as the router runs,
+so a report built directly on it keeps changing after you think you're done. Use **`snapshot()`** for
+a detached deep copy:
+
+```ts
+const report = {
+  ...observedRouter.snapshot(),        // never moves again
+  generatedAt: Date.now(),
+  region: process.env.REGION,
+};
+```
+
+> **Note on typing.** The sample types no longer carry a `Record<string, unknown>` index signature.
+> That signature allowed arbitrary top-level keys but also silently accepted typos on real fields and
+> weakened autocomplete. Custom data belongs in `attachments`, which is typed as such. If you were
+> assigning ad-hoc keys directly onto a sample object, move them into `attachments`.
+
 ### Matching peer connections — by **event**, not by storage
 
 The observer correlates the SFU side with the client side **at the peer-connection level**: a

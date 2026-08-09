@@ -15,14 +15,56 @@ import { createLogger } from './common/logger';
 
 const logger = createLogger('ObservedMediasoupRouter');
 
+/**
+ * Declarative enrichment: return the `attachments` to stamp onto an entity's sample the moment it is
+ * created. Called once per entity, before the corresponding `*-sample-added` event.
+ *
+ * The mediasoup object is handed in, so the common case — mirroring mediasoup's own `appData`, where
+ * applications already keep `participantId`, `purpose` and friends — is a one-liner. Returning
+ * `undefined` attaches nothing.
+ */
+export type MediasoupSampleEnricher = {
+	transport?: (transport: types.Transport) => Record<string, unknown> | undefined;
+	producer?: (producer: types.Producer, transport: types.Transport) => Record<string, unknown> | undefined;
+	consumer?: (consumer: types.Consumer, transport: types.Transport) => Record<string, unknown> | undefined;
+	dataProducer?: (dataProducer: types.DataProducer, transport: types.Transport) => Record<string, unknown> | undefined;
+	dataConsumer?: (dataConsumer: types.DataConsumer, transport: types.Transport) => Record<string, unknown> | undefined;
+};
+
 export type ObservedMediasoupRouterSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	router: types.Router,
 	appData?: AppData;
 	attachments?: Record<string, unknown>,
+
+	/** Stamp `attachments` onto each entity sample as it is created. See {@link MediasoupSampleEnricher}. */
+	enrich?: MediasoupSampleEnricher,
 };
 
+/**
+ * Lifecycle hooks for building your own report.
+ *
+ * Each entity announces itself as `<entity>-sample-added` when it appears and
+ * `<entity>-sample-closed` when it goes away, carrying **the live sample object** plus the mediasoup
+ * object it came from. Mutating `sample.attachments` inside a handler is the intended way to extend
+ * a sample on the fly — the object you receive is the one held in `observedRouter.sample`, not a copy.
+ */
 export type ObservedMediasoupRouterEvents = {
 	close: [];
+
+	'transport-sample-added': [{ sample: MediasoupTransportSample, transport: types.Transport }];
+	'transport-sample-closed': [{ sample: MediasoupTransportSample, transport: types.Transport }];
+
+	'producer-sample-added': [{ sample: MediasoupProducerSample, producer: types.Producer, transport: types.Transport }];
+	'producer-sample-closed': [{ sample: MediasoupProducerSample, producer: types.Producer, transport: types.Transport }];
+
+	'consumer-sample-added': [{ sample: MediasoupConsumerSample, consumer: types.Consumer, transport: types.Transport }];
+	'consumer-sample-closed': [{ sample: MediasoupConsumerSample, consumer: types.Consumer, transport: types.Transport }];
+
+	'data-producer-sample-added': [{ sample: MediasoupDataProducerSample, dataProducer: types.DataProducer, transport: types.Transport }];
+	'data-producer-sample-closed': [{ sample: MediasoupDataProducerSample, dataProducer: types.DataProducer, transport: types.Transport }];
+
+	'data-consumer-sample-added': [{ sample: MediasoupDataConsumerSample, dataConsumer: types.DataConsumer, transport: types.Transport }];
+	'data-consumer-sample-closed': [{ sample: MediasoupDataConsumerSample, dataConsumer: types.DataConsumer, transport: types.Transport }];
 };
 
 export declare interface ObservedMediasoupRouter {
@@ -52,6 +94,15 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public readonly webrtcTransportIds = new Set<string>();
 	public closed = false;
 
+	// Id -> sample indexes over the arrays in `this.sample`, so an entity can be reached in O(1)
+	// instead of scanning (`sample.producers.find(...)`). They hold the *same* objects as the arrays.
+	private readonly _transportSamples = new Map<string, MediasoupTransportSample>();
+	private readonly _producerSamples = new Map<string, MediasoupProducerSample>();
+	private readonly _consumerSamples = new Map<string, MediasoupConsumerSample>();
+	private readonly _dataProducerSamples = new Map<string, MediasoupDataProducerSample>();
+	private readonly _dataConsumerSamples = new Map<string, MediasoupDataConsumerSample>();
+	private readonly _enrich?: MediasoupSampleEnricher;
+
 	public constructor(
 		settings: ObservedMediasoupRouterSettings<AppData>,
 	) {
@@ -59,6 +110,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 		this.router = settings.router;
 		this.appData = (settings.appData ?? {}) as AppData;
+		this._enrich = settings.enrich;
 		this.sample = {
 			routerId: this.router.id,
 			attachments: settings.attachments ?? {},
@@ -79,6 +131,71 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 
 	public get attachments() {
 		return this.sample.attachments;
+	}
+
+	/* ---------------------------------------------------------------------------------------------
+	 * Reaching individual entity samples.
+	 *
+	 * `sample.producers` (and friends) are arrays because that is the shape you want to serialize.
+	 * These accessors index the same objects by id, so annotating one entity is an O(1) lookup and a
+	 * mutation, rather than a scan that silently does nothing when the id is wrong.
+	 * ------------------------------------------------------------------------------------------- */
+
+	public getTransportSample(id: string) {
+		return this._transportSamples.get(id);
+	}
+
+	public getProducerSample(id: string) {
+		return this._producerSamples.get(id);
+	}
+
+	public getConsumerSample(id: string) {
+		return this._consumerSamples.get(id);
+	}
+
+	public getDataProducerSample(id: string) {
+		return this._dataProducerSamples.get(id);
+	}
+
+	public getDataConsumerSample(id: string) {
+		return this._dataConsumerSamples.get(id);
+	}
+
+	/**
+	 * Merge `attachments` into an entity's sample, whichever kind it is.
+	 *
+	 * Ids are unique across mediasoup entity kinds, so one method covers all of them. Returns `false`
+	 * when the id is unknown — a real answer instead of failing quietly, which matters when the
+	 * annotation is driven by application events that may race the mediasoup ones.
+	 */
+	public attachTo(id: string, attachments: Record<string, unknown>): boolean {
+		const sample = this._transportSamples.get(id)
+			?? this._producerSamples.get(id)
+			?? this._consumerSamples.get(id)
+			?? this._dataProducerSamples.get(id)
+			?? this._dataConsumerSamples.get(id);
+
+		if (!sample) return false;
+
+		sample.attachments = { ...sample.attachments, ...attachments };
+
+		return true;
+	}
+
+	/**
+	 * A **detached deep copy** of the current sample — the basis for building your own report.
+	 *
+	 * `this.sample` is live: its arrays grow and its `history` entries are appended as the router
+	 * runs, so a report built directly on it keeps changing after you think you're done. This returns
+	 * a snapshot that never moves.
+	 */
+	public snapshot(): MediasoupRouterSample {
+		// `structuredClone` is a global that isn't guaranteed everywhere the library runs (older
+		// runtimes, some test environments), so fall back to a JSON round-trip. The sample is plain
+		// serializable data by construction, which is exactly what a report needs anyway.
+		if (typeof structuredClone === 'function') return structuredClone(this.sample);
+
+		return JSON.parse(JSON.stringify(this.sample)) as MediasoupRouterSample;
 	}
 
 	public close() {
@@ -123,7 +240,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			id: transport.id, type: 'webrtc', createdAt: Date.now(), tuple: transport.iceSelectedTuple, history,
 		};
 
-		this.sample.transports.push(transportSample);
+		this._addTransportSample(transportSample, transport);
 		this.webrtcTransportIds.add(transport.id);
 
 		const onIceStateChange = (iceState: types.IceState) =>
@@ -160,7 +277,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			id: transport.id, type: 'plain', createdAt: Date.now(), tuple: transport.tuple, rtcpTuple: transport.rtcpTuple, history,
 		};
 
-		this.sample.transports.push(transportSample);
+		this._addTransportSample(transportSample, transport);
 
 		const onTuple = (tuple: types.TransportTuple) => {
 			transportSample.tuple = tuple;
@@ -193,7 +310,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			id: transport.id, type: 'pipe', createdAt: Date.now(), tuple: transport.tuple, history,
 		};
 
-		this.sample.transports.push(transportSample);
+		this._addTransportSample(transportSample, transport);
 
 		const onSctpStateChange = (sctpState: types.SctpState) => {
 			if (sctpState === 'connected' && transportSample.connectedAt === undefined) transportSample.connectedAt = Date.now();
@@ -213,7 +330,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			id: transport.id, type: 'direct', createdAt: now, connectedAt: now, history: [],
 		};
 
-		this.sample.transports.push(transportSample);
+		this._addTransportSample(transportSample, transport);
 
 		this._attachTransportObserverListeners(transport, transportSample);
 	}
@@ -238,7 +355,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			history: [],
 		};
 
-		this.sample.producers.push(producerSample);
+		this._addProducerSample(producerSample, producer, transport);
 
 		const onPause = () => producerSample.history.push({ type: 'pause', timestamp: Date.now() });
 		const onResume = () => producerSample.history.push({ type: 'resume', timestamp: Date.now() });
@@ -247,6 +364,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			producer.observer.off('pause', onPause);
 			producer.observer.off('resume', onResume);
 			producerSample.closedAt = Date.now();
+			this.emit('producer-sample-closed', { sample: producerSample, producer, transport });
 		});
 		producer.observer.on('pause', onPause);
 		producer.observer.on('resume', onResume);
@@ -262,7 +380,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			history: [],
 		};
 
-		this.sample.consumers.push(consumerSample);
+		this._addConsumerSample(consumerSample, consumer, transport);
 
 		const onPause = () => consumerSample.history.push({ type: 'pause', timestamp: Date.now() });
 		const onResume = () => consumerSample.history.push({ type: 'resume', timestamp: Date.now() });
@@ -275,6 +393,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			consumer.off('producerresume', onProducerResume);
 			consumer.off('producerpause', onProducerPause);
 			consumerSample.closedAt = Date.now();
+			this.emit('consumer-sample-closed', { sample: consumerSample, consumer, transport });
 		});
 
 		consumer.observer.on('pause', onPause);
@@ -292,9 +411,12 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			protocol: dataProducer.protocol,
 		};
 
-		this.sample.dataProducers.push(dataProducerSample);
+		this._addDataProducerSample(dataProducerSample, dataProducer, transport);
 
-		dataProducer.observer.once('close', () => (dataProducerSample.closedAt = Date.now()));
+		dataProducer.observer.once('close', () => {
+			dataProducerSample.closedAt = Date.now();
+			this.emit('data-producer-sample-closed', { sample: dataProducerSample, dataProducer, transport });
+		});
 	}
 
 	public addDataConsumer(transport: types.Transport, dataConsumer: types.DataConsumer) {
@@ -307,9 +429,12 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			protocol: dataConsumer.protocol,
 		};
 
-		this.sample.dataConsumers.push(dataConsumerSample);
+		this._addDataConsumerSample(dataConsumerSample, dataConsumer, transport);
 
-		dataConsumer.observer.once('close', () => (dataConsumerSample.closedAt = Date.now()));
+		dataConsumer.observer.once('close', () => {
+			dataConsumerSample.closedAt = Date.now();
+			this.emit('data-consumer-sample-closed', { sample: dataConsumerSample, dataConsumer, transport });
+		});
 	}
 
 	private attachRouterListeners() {
@@ -320,6 +445,68 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			this.close();
 		});
 		this.router.observer.on('newtransport', this.addTransport);
+	}
+
+	/* ---------------------------------------------------------------------------------------------
+	 * Registration: push into the sample array, index by id, run the enricher, announce.
+	 * The order matters — enrichment lands *before* the event, so a listener always sees the
+	 * declaratively-attached data and can build on it rather than race it.
+	 * ------------------------------------------------------------------------------------------- */
+
+	private _addTransportSample(sample: MediasoupTransportSample, transport: types.Transport) {
+		this.sample.transports.push(sample);
+		this._transportSamples.set(sample.id, sample);
+		this._applyEnrichment(sample, this._enrich?.transport && (() => this._enrich?.transport?.(transport)));
+		this.emit('transport-sample-added', { sample, transport });
+	}
+
+	private _addProducerSample(sample: MediasoupProducerSample, producer: types.Producer, transport: types.Transport) {
+		this.sample.producers.push(sample);
+		this._producerSamples.set(sample.id, sample);
+		this._applyEnrichment(sample, this._enrich?.producer && (() => this._enrich?.producer?.(producer, transport)));
+		this.emit('producer-sample-added', { sample, producer, transport });
+	}
+
+	private _addConsumerSample(sample: MediasoupConsumerSample, consumer: types.Consumer, transport: types.Transport) {
+		this.sample.consumers.push(sample);
+		this._consumerSamples.set(sample.id, sample);
+		this._applyEnrichment(sample, this._enrich?.consumer && (() => this._enrich?.consumer?.(consumer, transport)));
+		this.emit('consumer-sample-added', { sample, consumer, transport });
+	}
+
+	private _addDataProducerSample(sample: MediasoupDataProducerSample, dataProducer: types.DataProducer, transport: types.Transport) {
+		this.sample.dataProducers.push(sample);
+		this._dataProducerSamples.set(sample.id, sample);
+		this._applyEnrichment(sample, this._enrich?.dataProducer && (() => this._enrich?.dataProducer?.(dataProducer, transport)));
+		this.emit('data-producer-sample-added', { sample, dataProducer, transport });
+	}
+
+	private _addDataConsumerSample(sample: MediasoupDataConsumerSample, dataConsumer: types.DataConsumer, transport: types.Transport) {
+		this.sample.dataConsumers.push(sample);
+		this._dataConsumerSamples.set(sample.id, sample);
+		this._applyEnrichment(sample, this._enrich?.dataConsumer && (() => this._enrich?.dataConsumer?.(dataConsumer, transport)));
+		this.emit('data-consumer-sample-added', { sample, dataConsumer, transport });
+	}
+
+	/**
+	 * Run an enricher and merge what it returns.
+	 *
+	 * Takes a thunk rather than a value so the **invocation** is inside the guard — application code
+	 * runs here, and a throwing enricher must not take the router's bookkeeping down with it.
+	 */
+	private _applyEnrichment(
+		sample: { attachments?: Record<string, unknown> },
+		enrich?: () => Record<string, unknown> | undefined,
+	) {
+		if (!enrich) return;
+
+		try {
+			const attachments = enrich();
+
+			if (attachments) sample.attachments = { ...sample.attachments, ...attachments };
+		} catch (err) {
+			logger.warn('Mediasoup sample enricher threw for router %s: %o', this.id, err);
+		}
 	}
 
 	private _attachTransportObserverListeners(
@@ -341,6 +528,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 			onClose?.();
 
 			transportSample.closedAt = Date.now();
+			this.emit('transport-sample-closed', { sample: transportSample, transport });
 		});
 
 		transport.observer.on('newproducer', onNewProducer);

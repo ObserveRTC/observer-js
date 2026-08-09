@@ -6,7 +6,11 @@ export type {
 	ObservedPeerConnectionScope,
 	ObservedMediasoupRouterScope,
 } from './ObserverEvents';
-export type { ObservedMediasoupRouterSettings, ObservedMediasoupRouterEvents } from './ObservedMediasoupRouter';
+export type {
+	ObservedMediasoupRouterSettings,
+	ObservedMediasoupRouterEvents,
+	MediasoupSampleEnricher,
+} from './ObservedMediasoupRouter';
 export type {
 	MediasoupRouterSample,
 	MediasoupTransportSample,
