@@ -20,6 +20,7 @@ export class Detectors {
 
 	public remove(detector: Detector) {
 		this._detectors = this._detectors.filter((d) => d !== detector);
+		this._close(detector);
 	}
 
 	public update() {
@@ -33,6 +34,17 @@ export class Detectors {
 	}
 
 	public clear() {
+		const detectors = this._detectors;
+
 		this._detectors = [];
+		for (const detector of detectors) this._close(detector);
+	}
+
+	private _close(detector: Detector) {
+		try {
+			detector.close?.();
+		} catch (err) {
+			logger.warn(`Error closing detector ${detector?.name}`, err);
+		}
 	}
 }

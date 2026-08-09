@@ -120,6 +120,25 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   `utils/stats.ts` rather than hand-rolling another traversal of `remoteInboundTracks`.
 - **Summarize with percentiles, not means.** Call telemetry is skewed by single bad participants;
   use `summarize()` / `percentile()` and "affected ratios" in detector logic.
+- **Don't re-derive client verdicts.** `client-monitor-js` already decides *what* is wrong per
+  endpoint (with hysteresis and multi-signal confirmation). New detectors should consume those
+  issues via `IssueRegistry` / `ObservedClient.activeIssues` and add the part only a server can:
+  who else, what's shared, where in publisher→SFU→subscriber. Re-thresholding raw counters is the
+  fallback for clients that don't report issues, not the primary path.
+- **Document resolver-dependent detectors.** Any detector reasoning about a published track and its
+  subscribers needs a `RemoteTrackResolver`; without one it sees no distributions and stays silent.
+  Say so in the class doc and mark it 🔗 in the README table. If the *absence* of links is part of the
+  signal (as in `UnconsumedTrackDetector`), additionally check `call.remoteTrackResolver` at runtime
+  — "no subscribers" and "no resolver" are otherwise the same observation, and guessing is wrong.
+- **Compare onsets on the observer clock.** `ActiveClientIssue.observedAt`, never `raisedAt`:
+  client clocks are skewed relative to each other, and cross-client timing rules built on them turn
+  skew into phantom "synchronized" events.
+- **Never blend ICE and RTCP RTT.** They measure different round trips (ICE terminates at the SFU;
+  RTCP is end to end). Use `iceRttInMs` / `rtcpRttInMs` explicitly, or `currentRttInMs`, which
+  prefers one and falls back — it is never an average of both.
+- **Respect `counterResetBoundary`.** A codec/encoder switch resets the cumulative counters
+  (crbug/webrtc/5361); deltas are suppressed for that tick. Don't reintroduce derivation that
+  ignores it.
 - **Public surface goes through `index.ts`.** If you add a public class/type, export it there.
 - **Injection lifecycle (`ObservedClient.inject*`).** The `inject*` methods (attachment / event /
   issue / metaData / extensionStat) must preserve three guarantees: (1) when called **during**

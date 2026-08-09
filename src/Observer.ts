@@ -272,6 +272,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.closed = true;
 
 		this.observedCalls.forEach((call) => call.close());
+		// Release detectors (they may hold bus subscriptions) before announcing the close.
+		this.detectors.clear();
 
 		this._notify('observer-closed', { ...this.eventScope });
 	}

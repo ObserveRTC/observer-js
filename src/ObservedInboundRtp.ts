@@ -116,6 +116,17 @@ export class ObservedInboundRtp implements InboundRtpStats {
 	/** Fraction of the frames received in this tick that were dropped before rendering (0..1). */
 	public framesDroppedRatio?: number;
 
+	/**
+	 * `true` when the codec or decoder implementation changed in this tick.
+	 *
+	 * Chrome resets `packetsReceived`/`bytesReceived` on an SSRC when the codec switches
+	 * (crbug.com/webrtc/5361, open since 2015), which shows up as a sawtooth spike or a negative
+	 * rate. Every delta in this tick is therefore suppressed to `0` rather than reported as traffic
+	 * — otherwise a room-wide codec rollout produces a synchronized fake-degradation alert across
+	 * every participant at once.
+	 */
+	public counterResetBoundary = false;
+
 	// Derived from the corresponding remote-outbound-rtp (sender report), when present.
 	public remoteRttInMs?: number;
 	public remoteBytesSent?: number;
@@ -204,7 +215,13 @@ export class ObservedInboundRtp implements InboundRtpStats {
 
 		const elapsedTimeInMs = stats.timestamp - this.timestamp;
 
-		if (0 < elapsedTimeInMs) {
+		// crbug.com/webrtc/5361: a codec switch resets the cumulative counters on the SSRC. Treat the
+		// tick as a boundary and derive nothing from it, instead of reporting a phantom spike.
+		this.counterResetBoundary = (this.codecId !== undefined && stats.codecId !== undefined && this.codecId !== stats.codecId)
+			|| (this.decoderImplementation !== undefined && stats.decoderImplementation !== undefined
+				&& this.decoderImplementation !== stats.decoderImplementation);
+
+		if (0 < elapsedTimeInMs && !this.counterResetBoundary) {
 			const elapsedInSeconds = elapsedTimeInMs / 1000;
 
 			// All deltas are counter-reset-safe and treat a previous value of `0` as a valid baseline

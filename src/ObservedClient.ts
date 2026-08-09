@@ -12,6 +12,13 @@ import { CalculatedScore } from './scores/CalculatedScore';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
+import {
+	ActiveClientIssue,
+	ResolvedClientIssue,
+	baseIssueType,
+	isResolutionEntry,
+	parseIssuePayload,
+} from './common/ActiveClientIssue';
 
 const logger = createLogger('ObservedClient');
 
@@ -119,6 +126,17 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 	public issues: ClientIssue[] = [];
 
+	/**
+	 * The client's currently **open** stateful issues, keyed by `ClientIssue.key` — the server-side
+	 * mirror of the client monitor's own active-issue map (client-monitor-js >= 4.6.0).
+	 *
+	 * This turns point-in-time symptom reports into intervals, which is what lets detectors ask
+	 * "are these clients broken *at the same time*" instead of "did they both report something
+	 * recently". Entries are opened by a raise, closed by the matching `<type>-resolved` entry, and
+	 * force-closed when the client closes.
+	 */
+	public readonly activeIssues = new Map<string, ActiveClientIssue>();
+
 	private _pendingInjections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
 	private _activeSample?: ClientSample;
 
@@ -157,6 +175,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		if (this.closed) return;
 
 		this._flushPendingInjections();
+
+		// Close any issue the client never resolved (crash, network death, or a monitor that did not
+		// auto-resolve on close). Without this, correlators reading the active set would keep a
+		// departed client's issues open forever and fire indefinitely.
+		this.resolveActiveIssues('client-closed');
 
 		this.closed = true;
 
@@ -469,14 +492,113 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this._notify('client-metadata', { ...this.eventScope, metaData: metadata });
 	}
 
+	/**
+	 * Process one `clientIssues[]` entry.
+	 *
+	 * Entries come in two flavours (client-monitor-js >= 4.6.0):
+	 *
+	 * - a **raise** — opens an {@link ActiveClientIssue} under `issue.key` and emits `client-issue`;
+	 * - a **resolution** — `type` ends in `-resolved` and carries the same `key`; it closes the
+	 *   matching active issue and emits `client-issue-resolved`.
+	 *
+	 * Keyless entries are one-shot: reported, never tracked. A re-raise of a key already active
+	 * refreshes the payload rather than opening a second interval.
+	 */
 	public addIssue(issue: ClientIssue) {
 		if (this.closed) return;
+
+		if (isResolutionEntry(issue)) return this._resolveIssue(issue);
+
+		const now = Date.now();
+
+		if (issue.key) {
+			const payload = parseIssuePayload(issue.payload);
+			const existing = this.activeIssues.get(issue.key);
+
+			if (existing) {
+				// A re-raise: same interval, fresher payload. Do not restart `raisedAt`.
+				existing.payload = payload ?? existing.payload;
+			} else {
+				this.activeIssues.set(issue.key, {
+					key: issue.key,
+					type: baseIssueType(issue.type),
+					clientId: this.clientId,
+					raisedAt: issue.timestamp ?? now,
+					observedAt: now,
+					payload,
+					peerConnectionId: typeof payload?.peerConnectionId === 'string' ? payload.peerConnectionId : undefined,
+					trackId: typeof payload?.trackId === 'string' ? payload.trackId : undefined,
+				});
+			}
+		}
 
 		this._notify('client-issue', { ...this.eventScope, issue });
 	}
 
 	public addExtensionStats(stats: ExtensionStat) {
 		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
+	}
+
+	/**
+	 * Close every still-open issue, e.g. because the client is going away. Emits
+	 * `client-issue-resolved` for each with the given `resolvedBy`, so correlators relying on the
+	 * active set don't keep a departed client's issues open forever.
+	 */
+	public resolveActiveIssues(resolvedBy: ResolvedClientIssue['resolvedBy'] = 'client-closed') {
+		if (this.activeIssues.size === 0) return;
+
+		const now = Date.now();
+
+		for (const active of [ ...this.activeIssues.values() ]) {
+			this.activeIssues.delete(active.key);
+			this._notify('client-issue-resolved', {
+				...this.eventScope,
+				resolvedIssue: {
+					...active,
+					resolvedAt: now,
+					observedResolvedAt: now,
+					durationInMs: Math.max(0, now - active.observedAt),
+					resolvedBy,
+				},
+			});
+		}
+	}
+
+	/** Close the active issue a `<type>-resolved` entry refers to, and announce the finished interval. */
+	private _resolveIssue(issue: ClientIssue) {
+		const now = Date.now();
+		const resolutionPayload = parseIssuePayload(issue.payload);
+		const type = baseIssueType(issue.type);
+		// The resolution carries `raisedAt` as a secondary join for consumers that don't store keys.
+		const raisedAt = typeof resolutionPayload?.raisedAt === 'number' ? resolutionPayload.raisedAt : undefined;
+		const active = issue.key ? this.activeIssues.get(issue.key) : undefined;
+
+		if (active) this.activeIssues.delete(active.key);
+
+		const resolvedAt = issue.timestamp ?? now;
+		const durationInMs = typeof resolutionPayload?.durationInMs === 'number'
+			? resolutionPayload.durationInMs
+			: Math.max(0, resolvedAt - (active?.raisedAt ?? raisedAt ?? resolvedAt));
+
+		this._notify('client-issue-resolved', {
+			...this.eventScope,
+			resolvedIssue: {
+				key: active?.key ?? issue.key ?? `${this.clientId}:${type}:${raisedAt ?? resolvedAt}`,
+				type,
+				clientId: this.clientId,
+				raisedAt: active?.raisedAt ?? raisedAt ?? resolvedAt,
+				observedAt: active?.observedAt ?? now,
+				payload: active?.payload,
+				peerConnectionId: active?.peerConnectionId,
+				trackId: active?.trackId,
+				resolvedAt,
+				observedResolvedAt: now,
+				durationInMs,
+				comment: typeof resolutionPayload?.comment === 'string' ? resolutionPayload.comment : undefined,
+				resolutionPayload,
+				resolvedBy: 'client',
+			},
+		});
 	}
 
 	private _processClientEvent(event: ClientEvent, postBuffer?: ClientEvent[]) {

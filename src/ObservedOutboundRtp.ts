@@ -64,6 +64,15 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 	public deltaEncodeTime = 0;
 	public deltaQualityLimitationResolutionChanges = 0;
 
+	/**
+	 * `true` when the codec, encoder implementation or scalability mode changed in this tick.
+	 *
+	 * Chrome resets `packetsSent`/`bytesSent` on the SSRC when the codec switches
+	 * (crbug.com/webrtc/5361), producing sawtooth spikes and negative bitrates. All deltas for the
+	 * tick are suppressed so a codec change is never mistaken for a traffic event.
+	 */
+	public counterResetBoundary = false;
+
 	// Derived from the corresponding remote-inbound-rtp (receiver report), when present.
 	public remoteRttInMs?: number;
 	public remoteFractionLost?: number;
@@ -132,7 +141,14 @@ export class ObservedOutboundRtp implements OutboundRtpStats {
 
 		const elapsedTimeInMs = stats.timestamp - this.timestamp;
 
-		if (elapsedTimeInMs) {
+		// crbug.com/webrtc/5361: the cumulative counters reset on a codec/encoder switch.
+		const changed = (a?: string, b?: string) => a !== undefined && b !== undefined && a !== b;
+
+		this.counterResetBoundary = changed(this.codecId, stats.codecId)
+			|| changed(this.encoderImplementation, stats.encoderImplementation)
+			|| changed(this.scalabilityMode, stats.scalabilityMode);
+
+		if (elapsedTimeInMs && !this.counterResetBoundary) {
 			// Guard against counter resets / SSRC reuse: only accept a non-negative delta.
 			if (stats.packetsSent !== undefined && this.packetsSent !== undefined && stats.packetsSent >= this.packetsSent) {
 				this.deltaPacketsSent = stats.packetsSent - this.packetsSent;

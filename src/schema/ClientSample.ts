@@ -65,6 +65,13 @@ export type ClientIssue = {
 	type: string;
 
 	/**
+	* Identity of a **stateful** issue, shared by its raise entry and its `<type>-resolved`
+	* companion, so a server can open an active issue on the raise and close it on the match
+	* (client-monitor-js >= 4.6.0, `sendResolvedIssuesToServer`). One-shot issues have no key.
+	*/
+	key?: string;
+
+	/**
 	* The value associated with the event, if applicable.
 	*/
 	payload?: string;

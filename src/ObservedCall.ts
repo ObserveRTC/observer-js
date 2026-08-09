@@ -155,6 +155,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
 		this.closedAt = Date.now();
+		// Release detectors (they may hold bus subscriptions) before announcing the close.
+		this.detectors.clear();
 		this.emit('close');
 		this._notify('call-closed', { ...this.eventScope });
 	}

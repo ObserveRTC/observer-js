@@ -395,7 +395,8 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `client-joined` | — | first `CLIENT_JOINED` event seen |
 | `client-left` | — | `CLIENT_LEFT` seen (or inferred on close) |
 | `client-rejoined` | `{ timestamp: number }` | a later `CLIENT_JOINED` after an earlier join |
-| `client-issue` | `{ issue: ClientIssue }` | a client-reported issue arrived, or `client.addIssue(...)` |
+| `client-issue` | `{ issue: ClientIssue }` | a client-reported issue arrived, or `client.addIssue(...)`. A keyed issue also opens an entry in `observedClient.activeIssues` |
+| `client-issue-resolved` | `{ resolvedIssue: ResolvedClientIssue }` | a stateful issue ended — the client sent its `<type>-resolved` companion, or the observer force-closed it. Carries the finished interval (`durationInMs`, `resolvedBy`) — see [client issues](#client-issues-the-lifecycle-and-the-division-of-labour) |
 | `client-metadata` | `{ metaData: ClientMetaData }` | a client meta item arrived |
 | `client-extension-stats` | `{ extensionStats: ExtensionStat }` | an app-defined extension stat arrived |
 | `client-event` | `{ event: ClientEvent }` | any client event was processed |
@@ -561,10 +562,27 @@ Key members:
   `iceCandidates`, `iceCandidatePairs`, `certificates`, `selectedIceCandidatePairs`,
   `selectedIceCandiadtePairForTurn`
 - State: `connectionState?`, `iceConnectionState?`, `iceGatheringState?`, `usingTURN`, `usingTCP`
-- Metrics: `currentRttInMs?`, `currentJitter?`, `availableIncomingBitrate`,
-  `availableOutgoingBitrate`, sending/receiving bitrates, packet rates, and `total*` / `delta*`
-  byte/packet counters
+- Metrics: `currentRttInMs?`, `iceRttInMs?`, `rtcpRttInMs?`, `sfuHopRttInMs?`, `currentJitter?`,
+  `availableIncomingBitrate`, `availableOutgoingBitrate`, sending/receiving bitrates, packet rates,
+  and `total*` / `delta*` byte/packet counters
 - `accept(pcSample, context?)`, `close()`, `get score()`
+
+**Two different round trips — don't mix them.** `iceRttInMs` comes from ICE/STUN consent checks and
+measures the trip to *whatever terminates ICE*: **in an SFU topology that is the SFU**, so it is the
+client↔SFU leg. `rtcpRttInMs` comes from RTCP receiver reports and is an **end-to-end** media-path
+round trip. They are not interchangeable, and averaging them together produces a number that moves
+as streams come and go for reasons unrelated to the network. `currentRttInMs` therefore *prefers*
+RTCP and falls back to ICE — always one kind within a tick, never a blend. `sfuHopRttInMs`
+(`rtcp − ice`) estimates everything past the SFU, which separates "this client's last mile is slow"
+from "the path beyond the SFU is slow".
+
+**Counter-reset boundaries.** Chrome resets an SSRC's cumulative counters when the codec switches
+([crbug/webrtc/5361](https://bugs.chromium.org/p/webrtc/issues/detail?id=5361), open since 2015),
+which otherwise shows up as a sawtooth spike or a negative bitrate. `ObservedInboundRtp` /
+`ObservedOutboundRtp` therefore set **`counterResetBoundary`** on any tick where `codecId`,
+`encoder`/`decoderImplementation` or `scalabilityMode` changed, and suppress every delta for that
+tick. Without this, a room-wide codec rollout fires a synchronized fake-degradation alert across
+every participant at once.
 
 **Remote-RTP correlation (derived).** During `accept()`, receiver/sender reports are linked
 to the local streams by `remoteId` (fallback SSRC) and surfaced as fields:
@@ -729,6 +747,81 @@ observer.on('call-added', ({ observedCall }) => {
 observer.on('call-issue', ({ observedCall, issue }) => { /* react */ });
 ```
 
+### Client issues: the lifecycle, and the division of labour
+
+The most important thing to understand about detection in this library is **what it deliberately
+does not do**. A client running
+[`client-monitor-js`](https://github.com/ObserveRTC/client-monitor-js) already ships ~20 detectors
+that decide *what is wrong with that endpoint* — `congestion`, `cpulimitation`, `audio-concealment`,
+`freezed-video-track`, `keyframe-storm`, `video-decoder-overloaded`, `stuck-decoder`,
+`ice-disconnected`, and so on. Those verdicts are better than anything re-derived from raw counters
+server-side, because they carry hysteresis and multi-signal confirmation: `audio-concealment`
+subtracts silent concealment (raw `concealedSamples` rises during ordinary silence, so a naive
+detector flags every quiet moment); `audio-jitter-buffer-stress` requires the buffer to be grown
+**and** NetEQ to be time-stretching (a grown buffer alone means NetEQ is *succeeding*);
+`ice-disconnected` only fires once `disconnected` has persisted, so the blips ICE heals on its own
+never surface.
+
+**observer-js does not repeat that work.** Its job is the question no browser can answer: *who else
+is in this state right now, what do they have in common, and where in publisher → SFU → subscriber
+does the fault begin?*
+
+#### The wire format
+
+From client-monitor-js **4.6.0** the whole issue lifecycle reaches the server. A stateful issue
+arrives as two `clientIssues[]` entries sharing a `key`:
+
+```
+raise:      { type: 'stuck-decoder',          key, payload,                                 timestamp: raisedAt }
+resolution: { type: 'stuck-decoder-resolved', key, payload: { raisedAt, comment, …final },  timestamp: resolvedAt }
+```
+
+The observer opens an entry in `observedClient.activeIssues` on the raise and closes it on the
+matching key, emitting **`client-issue-resolved`** with the finished interval. Handled for you:
+
+- the `-resolved` **suffix** is stripped, so both entries share one logical `type`;
+- a **re-raise** of a live key refreshes the payload without restarting `raisedAt`;
+- **keyless** entries are one-shot — reported via `client-issue`, never tracked;
+- issues still open when a client closes are **force-resolved** (`resolvedBy: 'client-closed'`), and
+  the registry additionally expires stale entries, so a crashed participant can't leave an issue
+  "active" forever.
+
+#### Why intervals beat windows
+
+This turns point-in-time symptom reports into **intervals**, and that is the whole game. *"Several
+clients reported congestion in the last 10 seconds"* is a heuristic that has to guess whether the
+symptoms are still happening. *"Several clients are congested **right now, simultaneously**"* is
+ground truth, because the client says when the episode ends. Overlapping intervals are far stronger
+evidence of a shared cause than near-in-time reports.
+
+```ts
+observer.on('client-issue', ({ observedClient, issue }) => { /* opened (or one-shot) */ });
+observer.on('client-issue-resolved', ({ resolvedIssue }) => {
+  resolvedIssue.type;          // 'stuck-decoder' — suffix stripped
+  resolvedIssue.durationInMs;  // how long the episode lasted
+  resolvedIssue.resolvedBy;    // 'client' | 'timeout' | 'client-closed'
+});
+
+// the live per-client mirror
+observedClient.activeIssues;   // Map<key, ActiveClientIssue>
+```
+
+#### `IssueRegistry` — querying the active set
+
+```ts
+import { IssueRegistry } from '@observertc/observer-js';
+
+const registry = new IssueRegistry(observedCall);   // or `observer` for cross-call scope
+
+registry.cohortOf('congestion');   // { clientIds, affectedRatio, onsetSpreadInMs, … }
+registry.cohorts();                // every shared issue type, largest cohort first
+registry.byTrackIds(trackIds);     // issues attributed to a published track's receivers
+```
+
+`onsetSpreadInMs` is measured on the **observer clock**, never the client's. `raisedAt` comes from
+each participant's own machine, and comparing those across clients makes clock skew look like a
+synchronized infrastructure event.
+
 ### Observer-level detectors (cross-call / SFU-wide)
 
 Some findings only exist **above** call scope — "many calls on the same SFU degraded at once" is far
@@ -781,6 +874,145 @@ concealment, jitter-buffer delay, RTT — override any of them). Summaries are *
 percentiles, not means**, because one participant at 1500 ms RTT would otherwise hide nine healthy
 ones. The helpers behind it (`percentile`, `median`, `summarize`, `counterDelta`, `SlidingWindow`)
 are exported for building your own detectors.
+
+### Call health: `CallHealthAggregator`
+
+The second aggregation axis — the **client** axis. Where `TrackDistributionAggregator` asks "how was
+*this source* delivered?", this asks "how is *each participant* doing, sending vs receiving?":
+
+```ts
+import { CallHealthAggregator } from '@observertc/observer-js';
+
+const health = new CallHealthAggregator(observedCall).aggregate();
+
+health.degradedRatio;             // 0.82 — the number that distinguishes shared faults from individual ones
+health.inboundDegradedRatio;      // receiving side → egress/downstream suspicion
+health.outboundDegradedRatio;     // sending side  → ingress suspicion
+health.rttInMs?.median;           // percentile rollups, never means
+health.qualityLimitation;         // { cpu, bandwidth, other } client counts
+health.clients;                   // per-client entries with `reasons`, direction flags, TURN/TCP
+```
+
+### Built-in detectors
+
+All of them are **opt-in** — the library enables none by default. Register call-scoped ones on
+`observedCall.detectors` and observer-scoped ones on `observer.detectors`:
+
+> **🔗 marks detectors that require a
+> [`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu).** They reason about a published
+> track and its subscribers, so without the publisher↔subscriber links they see nothing and stay
+> **silent forever** — which looks exactly like "no problems found". Configure
+> `ObserverConfig.createRemoteTrackResolver` before registering them.
+
+**Issue-driven** (preferred — they consume the client's own verdicts):
+
+| Detector | 🔗 | Scope | Raises |
+|----------|:--:|-------|--------|
+| `ConcurrentIssueDetector` | | call **or** observer | `CONCURRENT_CLIENT_ISSUES`, `ISSUE_ONSET_BURST` |
+| `IssueFanOutDetector` | 🔗 | call | `PUBLISHED_TRACK_ISSUE_FAN_OUT`, `SINGLE_RECEIVER_ISSUE` |
+| `TrackDeliveryMismatchDetector` | 🔗 | call | `PUBLISHED_TRACK_NOT_DELIVERED`, `RECEIVER_TRACK_NOT_DELIVERED`, `PUBLISHER_TRACK_DRY` |
+
+**Metric-driven** (work without client issues — the fallback path, and the things no client issue
+can express):
+
+| Detector | 🔗 | Scope | Raises |
+|----------|:--:|-------|--------|
+| `WorstReceiverContagionDetector` | 🔗 | call | `WORST_RECEIVER_CONTAGION` |
+| `CommonSourceDegradationDetector` | 🔗 | call | `PUBLISHER_HEALTHY_SUBSCRIBERS_DEGRADED`, `PUBLISHER_DEGRADED_FOR_ALL_SUBSCRIBERS`, `SINGLE_SUBSCRIBER_DEGRADED`, `MULTIPLE_SUBSCRIBERS_DEGRADED` |
+| `PliAndFreezeFanOutDetector` | 🔗 | call | `PUBLISHER_PLI_STORM`, `PUBLISHED_VIDEO_FROZEN_FOR_MULTIPLE_RECEIVERS` |
+| `AudioImpairmentFanOutDetector` | 🔗 | call | `PUBLISHED_AUDIO_DEGRADED_FOR_MAJORITY`, `CALL_WIDE_AUDIO_JITTER_BUFFER_STRESS` |
+| `UnconsumedTrackDetector` | 🔗 | call | `UNCONSUMED_PUBLISHED_TRACK` |
+| `CallWideDegradationDetector` | | call | `CALL_WIDE_QUALITY_DEGRADATION`, `CALL_WIDE_INBOUND_DEGRADATION`, `CALL_WIDE_OUTBOUND_DEGRADATION` |
+| `IceDisruptionDetector` | | call | `CALL_ICE_DISRUPTION` |
+| `TurnServerHealthDetector` | | **observer** | `TURN_SERVER_DEGRADED` |
+
+If your clients report issues, the issue-driven pair **subsumes** the fan-out and ICE detectors —
+`IssueFanOutDetector` covers freeze/PLI/concealment fan-out generically, and `ConcurrentIssueDetector`
+with the ICE issue types replaces `IceDisruptionDetector` (and does it better: the client already
+suppresses the transient blips ICE heals by itself). Run both families only while migrating.
+
+#### `TrackDeliveryMismatchDetector` — resolving an ambiguous symptom
+
+A dry track ("no bytes are arriving") is the clearest symptom there is and, on its own, completely
+ambiguous. A receiver seeing silence cannot distinguish *the camera was switched off* from *the SFU
+stopped forwarding* from *my own consumer wedged* — all three look identical from the browser.
+
+Joining the two ends of the published track resolves it:
+
+| publisher | subscribers | verdict |
+|---|---|---|
+| sending | **all** dry | `PUBLISHED_TRACK_NOT_DELIVERED` — the forwarding path |
+| sending | **some** dry | `RECEIVER_TRACK_NOT_DELIVERED` — those consumers (in mediasoup: recreate them) |
+| dry | any dry | `PUBLISHER_TRACK_DRY` — the source stopped; **not** an SFU fault |
+
+The publisher side is judged from both available signals: its own `dry-outbound-track` issue when the
+client reports one, and the observed outbound RTP (`deltaPacketsSent`) as fallback and corroboration.
+That combination is what makes the first row trustworthy — the server can state that packets
+demonstrably left the publisher during the same interval in which every receiver got nothing.
+
+This is the "SFU forwarding mismatch" check, and it needs **no mediasoup instrumentation at all** —
+the clients' own dry-track verdicts plus the resolver links are sufficient.
+
+#### `UnconsumedTrackDetector` — reading the resolver's silence
+
+The one detector where the *absence* of links is the signal: a track still pushing packets whose
+`remoteInboundTracks` set is empty, i.e. uplink and SFU ingress spent on media nobody receives
+(everyone has the publisher hidden, a simulcast layer no viewer selects, or an app that forgot to
+stop a track). It waits `minUnconsumedDurationInMs` first, since a gap between publishing and the
+first subscription is normal at join time.
+
+Note the trap this one has to guard against, and why it checks `call.remoteTrackResolver` at runtime
+rather than trusting the flag alone: **"no subscribers" and "no resolver configured" produce the
+identical observation.** Without a resolver it would report every published track in the call as
+unconsumed.
+
+#### `WorstReceiverContagionDetector` — the one worth reading about
+
+In a correctly built SFU the RTCP feedback loop is **terminated at the server**: each receiver's
+reports drive what *that* receiver is sent. When the loop is relayed end-to-end instead, the
+publisher's bandwidth estimate collapses to the minimum across all receivers — so one participant on
+a bad 3G link silently downgrades the stream **everyone** sees. This is the "lowest common
+denominator" failure simulcast exists to prevent.
+
+It's detected as a *correlation over a window*, not a threshold: the publisher's outbound bitrate
+moving in lockstep with the **worst** receiver's inbound bitrate, while the median receiver has
+headroom — and tracking the worst receiver more closely than the median (otherwise everyone is just
+moving together, which is ordinary adaptation). The damage is invisible from every endpoint: the
+publisher sees "my bitrate dropped", each healthy receiver sees "my video got worse", and only the
+server can see the causal link.
+
+```ts
+import {
+  ConcurrentIssueDetector, IssueFanOutDetector, WorstReceiverContagionDetector,
+  CallWideDegradationDetector, TurnServerHealthDetector,
+} from '@observertc/observer-js';
+
+observer.on('call-added', ({ observedCall }) => {
+  // issue-driven: correlate the verdicts the clients already reached
+  observedCall.detectors.add(new IssueFanOutDetector(observedCall));
+  observedCall.detectors.add(new ConcurrentIssueDetector(observedCall));
+  // metric-driven: things no client issue can express
+  observedCall.detectors.add(new WorstReceiverContagionDetector(observedCall));
+  observedCall.detectors.add(new CallWideDegradationDetector(observedCall));
+});
+
+// cross-call, so these go on the observer and raise `observer-issue`
+observer.detectors.add(new TurnServerHealthDetector(observer));
+observer.detectors.add(new ConcurrentIssueDetector(observer, {
+  issueTypes: [ 'ice-disconnected', 'ice-connection-failed', 'congestion' ],
+}));
+
+observer.on('call-issue', ({ observedCall, issue }) => handle(observedCall, issue));
+observer.on('observer-issue', ({ issue }) => handle(undefined, issue));
+```
+
+Every detector takes an options object to tune `minReceivers`/`minClients`, the ratio thresholds, the
+per-entity health thresholds, and the debounce (`consecutiveTicks`, or `windowMs` + `cooldownMs` for
+the window-based ones) — so an alert needs a condition to *persist*, not just appear in one sample.
+Findings that depend on publisher↔subscriber links need a
+[`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu); without one those detectors stay
+silent. A detector may implement `close()` (called when it's removed or the call/observer closes) —
+`IceDisruptionDetector` uses it to drop the bus listeners it subscribes with.
 
 ### `CommonSourceDegradationDetector`
 

@@ -119,7 +119,37 @@ export class ObservedPeerConnection extends EventEmitter {
 	public receivingAudioBitrate = 0;
 	public receivingVideoBitrate = 0;
 
+	/**
+	 * Median round-trip time of the tick, in ms.
+	 *
+	 * Prefers {@link rtcpRttInMs} and falls back to {@link iceRttInMs}, so within one tick it always
+	 * reports **one** kind of round trip. It used to be the median of both mixed together, which was
+	 * a bug: the mixing ratio changed as streams came and went, so the value moved for reasons that
+	 * had nothing to do with the network.
+	 */
 	public currentRttInMs?: number;
+
+	/**
+	 * RTT measured by ICE/STUN consent checks, in ms — the trip to **whatever terminates ICE**. In an
+	 * SFU topology that is the SFU, so this is the client↔SFU leg, not client↔client.
+	 */
+	public iceRttInMs?: number;
+
+	/**
+	 * RTT reported by RTCP receiver reports, in ms — an **end-to-end** media-path round trip.
+	 *
+	 * Not the same trip as {@link iceRttInMs}; the difference between the two is roughly the far side
+	 * of the SFU (see {@link sfuHopRttInMs}).
+	 */
+	public rtcpRttInMs?: number;
+
+	/**
+	 * `rtcpRttInMs - iceRttInMs`, when both are known — an estimate of everything *past* the SFU.
+	 *
+	 * Useful for splitting "this client's own last mile is slow" (high `iceRttInMs`) from "the path
+	 * beyond the SFU is slow" (low ICE, high hop).
+	 */
+	public sfuHopRttInMs?: number;
 	public currentJitter?: number;
 
 	public usingTCP = false;
@@ -314,7 +344,9 @@ export class ObservedPeerConnection extends EventEmitter {
 		const now = Date.now();
 		const elapsedTimeInMs = now - this.updated;
 		const elapsedTimeInSec = elapsedTimeInMs / 1000;
-		const rttMeasurementsInSec: number[] = [];
+		// Kept in two buckets: ICE/STUN and RTCP measure different round trips and must not be blended.
+		const iceRttMeasurementsInSec: number[] = [];
+		const rtcpRttMeasurementsInSec: number[] = [];
 		const jitterMeasurements: number[] = [];
 
 		if (sample.certificates) {
@@ -351,7 +383,8 @@ export class ObservedPeerConnection extends EventEmitter {
 				if (!observedCandidatePair) continue;
 
 				if (observedCandidatePair.currentRoundTripTime) {
-					rttMeasurementsInSec.push(observedCandidatePair.currentRoundTripTime);
+					// ICE/STUN round trip — terminates at the SFU, kept apart from the RTCP one.
+					iceRttMeasurementsInSec.push(observedCandidatePair.currentRoundTripTime);
 				}
 				if (observedCandidatePair.availableIncomingBitrate) {
 					this.availableIncomingBitrate += observedCandidatePair.availableIncomingBitrate;
@@ -441,7 +474,8 @@ export class ObservedPeerConnection extends EventEmitter {
 				if (!observedRemoteInboundRtp) continue;
 
 				if (observedRemoteInboundRtp.roundTripTime) {
-					rttMeasurementsInSec.push(observedRemoteInboundRtp.roundTripTime);
+					// RTCP round trip — end to end over the media path.
+					rtcpRttMeasurementsInSec.push(observedRemoteInboundRtp.roundTripTime);
 				}
 
 				// Surface receiver-report-derived metrics on the corresponding local outbound-rtp.
@@ -525,11 +559,18 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.receivingAudioBitrate = (this.deltaReceivedAudioBytes * 8) / elapsedTimeInSec;
 		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedTimeInSec;
 
-		if (rttMeasurementsInSec.length > 0) {
-			this.currentRttInMs = getMedian(rttMeasurementsInSec, false) * 1000;
-		} else {
-			this.currentRttInMs = undefined;
-		}
+		this.iceRttInMs = 0 < iceRttMeasurementsInSec.length
+			? getMedian(iceRttMeasurementsInSec, false) * 1000
+			: undefined;
+		this.rtcpRttInMs = 0 < rtcpRttMeasurementsInSec.length
+			? getMedian(rtcpRttMeasurementsInSec, false) * 1000
+			: undefined;
+
+		// Prefer the end-to-end (RTCP) trip, fall back to ICE — never a blend of the two.
+		this.currentRttInMs = this.rtcpRttInMs ?? this.iceRttInMs;
+		this.sfuHopRttInMs = this.rtcpRttInMs !== undefined && this.iceRttInMs !== undefined
+			? Math.max(0, this.rtcpRttInMs - this.iceRttInMs)
+			: undefined;
 		if (jitterMeasurements.length > 0) {
 			this.currentJitter = getMedian(jitterMeasurements, false);
 		} else {

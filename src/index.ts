@@ -64,10 +64,82 @@ export type {
 	ReceiverHealthThresholds,
 } from './utils/TrackDistributionAggregator';
 export {
+	CallHealthAggregator,
+	defaultClientHealthThresholds,
+} from './utils/CallHealthAggregator';
+export type {
+	CallHealth,
+	ClientHealth,
+	ClientHealthThresholds,
+} from './utils/CallHealthAggregator';
+// Concrete cross-client detectors (all opt-in — register them on `call.detectors` /
+// `observer.detectors`; the library ships none of them enabled).
+export {
 	CommonSourceDegradationDetector,
 	CommonSourceDegradationTypes,
 } from './detectors/CommonSourceDegradationDetector';
 export type { CommonSourceDegradationDetectorConfig } from './detectors/CommonSourceDegradationDetector';
+export {
+	CallWideDegradationDetector,
+	CallWideDegradationTypes,
+} from './detectors/CallWideDegradationDetector';
+export type { CallWideDegradationDetectorConfig } from './detectors/CallWideDegradationDetector';
+export {
+	PliAndFreezeFanOutDetector,
+	PliAndFreezeFanOutTypes,
+} from './detectors/PliAndFreezeFanOutDetector';
+export type { PliAndFreezeFanOutDetectorConfig } from './detectors/PliAndFreezeFanOutDetector';
+export {
+	AudioImpairmentFanOutDetector,
+	AudioImpairmentFanOutTypes,
+} from './detectors/AudioImpairmentFanOutDetector';
+export type { AudioImpairmentFanOutDetectorConfig } from './detectors/AudioImpairmentFanOutDetector';
+export {
+	IceDisruptionDetector,
+	IceDisruptionTypes,
+} from './detectors/IceDisruptionDetector';
+export type { IceDisruptionDetectorConfig } from './detectors/IceDisruptionDetector';
+export {
+	TurnServerHealthDetector,
+	TurnServerHealthTypes,
+} from './detectors/TurnServerHealthDetector';
+export type { TurnServerHealthDetectorConfig, TurnServerHealth } from './detectors/TurnServerHealthDetector';
+// Issue-driven correlation: the client reports WHAT is wrong for itself, the observer correlates
+// WHO ELSE is in the same state and WHERE in publisher -> SFU -> subscriber the fault sits.
+export { IssueRegistry } from './utils/IssueRegistry';
+export type { IssueCohort, IssueRegistryConfig } from './utils/IssueRegistry';
+export {
+	RESOLVED_ISSUE_SUFFIX,
+	baseIssueType,
+	isResolutionEntry,
+	parseIssuePayload,
+} from './common/ActiveClientIssue';
+export type { ActiveClientIssue, ResolvedClientIssue } from './common/ActiveClientIssue';
+export {
+	ConcurrentIssueDetector,
+	ConcurrentIssueTypes,
+} from './detectors/ConcurrentIssueDetector';
+export type { ConcurrentIssueDetectorConfig } from './detectors/ConcurrentIssueDetector';
+export {
+	IssueFanOutDetector,
+	IssueFanOutTypes,
+} from './detectors/IssueFanOutDetector';
+export type { IssueFanOutDetectorConfig } from './detectors/IssueFanOutDetector';
+export {
+	WorstReceiverContagionDetector,
+	WorstReceiverContagionTypes,
+} from './detectors/WorstReceiverContagionDetector';
+export type { WorstReceiverContagionDetectorConfig } from './detectors/WorstReceiverContagionDetector';
+export {
+	TrackDeliveryMismatchDetector,
+	TrackDeliveryMismatchTypes,
+} from './detectors/TrackDeliveryMismatchDetector';
+export type { TrackDeliveryMismatchDetectorConfig } from './detectors/TrackDeliveryMismatchDetector';
+export {
+	UnconsumedTrackDetector,
+	UnconsumedTrackTypes,
+} from './detectors/UnconsumedTrackDetector';
+export type { UnconsumedTrackDetectorConfig } from './detectors/UnconsumedTrackDetector';
 // Statistics helpers for building your own detectors.
 export { percentile, median, summarize, counterDelta, SlidingWindow } from './utils/stats';
 export type { StatsSummary, SlidingWindowEntry } from './utils/stats';
