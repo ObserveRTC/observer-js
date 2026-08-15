@@ -40,13 +40,40 @@ declarations referenced a package consumers might not have. Runtime is unaffecte
 type-only. Install `mediasoup` yourself if you use the mediasoup integration; ignore the optional
 peer warning if you don't.
 
-**The per-detector `registry` config option is gone**, replaced by `ObserverConfig.maxIssueAgeInMs`
-— see *Performance* below.
+**The per-detector `registry` config option is gone.**
 
-**Detectors are now created automatically and are ON by default.** Previously both registries
-shipped empty and every detector was opt-in. `new Observer()` now creates all of them with default
-settings. If you were relying on an empty registry, pass `observerDetectors: null` and `callDetectors: null`.
-See *Detector configuration* below for the per-detector opt-out.
+**`updatePolicy` / `defaultCallUpdatePolicy` are gone, and so is the pluggable `Updater`.** The
+update model is now structural rather than configurable: *a call is updated when any of its clients
+is; the observer is updated when any of its calls is* — so the observer is updated exactly when any
+client anywhere is. Two booleans, both defaulting to `true`, opt out of a link in that chain:
+`ObserverConfig.autoUpdateOnCallUpdate` and `ObservedCallSettings.autoUpdateOnClientUpdate`. Set both
+`false` and drive `observer.update()` yourself for a fixed cadence.
+
+The old `'update-when-all-…'` policies are removed rather than renamed. "When all clients have
+updated" sounds appealing and deadlocks on the first client that stops sending — one silent
+participant froze the whole call's aggregation until it timed out. `src/updaters/` is deleted.
+
+**Detector configuration is gone from `ObserverConfig`, and nothing is created implicitly.**
+`observerDetectors` / `callDetectors` no longer exist as config keys; neither do `DetectorSlot` as a
+config mechanism, `defaultCallDetectorsConfig`, `defaultObserverDetectorsConfig`,
+`createCallDetectors`, `createObserverDetectors` or `detectorSlot`. `new Observer()` has **zero**
+detectors. Register what you want with `observer.addObserverDetector(...)`,
+`observer.addCallDetector(...)` and `observedCall.addDetector(...)` — see *Detector registration*
+below.
+
+**`ConcurrentIssueDetector` is split** into `CallConcurrentIssueDetector` and
+`ObserverConcurrentIssueDetector`, with `lastCohorts` renamed `lastGroups`.
+
+**`IceDisruptionDetector` is removed** — use `ObserverConcurrentIssueDetector` with the `ice-*` issue
+types. **`IssueIndex` and `TrackDistributionAggregator` are removed**; `observedCall.issueIndex` /
+`observer.issueIndex` become `activeIssuesRegistry`, and `call.trackDistributionAggregator` is gone
+in favour of walking the resolver links. **`ObservedCall.updateGeneration` is removed.**
+
+**Renames:** `concludeFrom` → `concludeCallIssue` / `concludeObserverIssue`; the `validator-settled`
+event → `validation-ready`; the validator name `simulcast-receiver-validator` → `simulcast-receivers`;
+`ResolvedClientIssue` → `ResolvedActiveClientIssue`; `isResolutionEntry` →
+`isClientIssueResolutionEntry`; `src/common/ActiveClientIssue.ts` → `src/issues/`; `SlidingWindow`
+moved out of `utils/stats.ts` into `utils/SlidingWindow.ts`.
 
 **`TurnServerHealthDetector` payload changed.** It was rewritten to the same source-of-truth
 principle: it still groups relayed clients by TURN server, but "in trouble" now comes from each
@@ -83,27 +110,66 @@ detector.
 `ClientIssue` is unchanged and still what `ObservedClient.addIssue()` / `injectIssue()` take, since
 those genuinely are wire entries.
 
-### Detector configuration
+### Detector registration is explicit — nothing is created implicitly
 
-Detectors are configured through `ObserverConfig`, mirroring `client-monitor-js` so the same mental
-model applies on both sides of the wire. Each slot is:
-
-- **omitted / `undefined`** — created with defaults
-- **an object** — created with those overrides
-- **`null`** — not created
+**There is no detector configuration in `ObserverConfig`.** `new Observer()` has zero detectors, and
+zero validators. An application says what it wants to watch, or it watches nothing.
 
 ```ts
-new Observer({
-  observerDetectors: { turnServerOutageDetector: { minClientsAtPeak: 10 } },   // observer-scoped
-  callDetectors: { iceDisruptionDetector: null },                      // call-scoped, every call
+observer.addObserverDetector('observer-concurrent-issue-detector', {
+  issueTypes: [ 'congestion', 'ice-disconnected' ],
+  minAffectedCalls: 3,
 });
+
+observer.addCallDetector('call-concurrent-issue-detector', { issueTypes: [ 'congestion' ] });
+observer.removeCallDetector('unconsumed-track-detector');
+
+observedCall.addDetector('issue-fan-out-detector', { issueTypes: [ 'freezed-video-track' ] });
 ```
 
-`observerDetectors: null` / `callDetectors: null` disables a whole scope; `ObservedCallSettings.detectors`
-overrides the call-scoped set for one call. Naming one key never disables the others — unnamed slots
-still get defaults, so disabling is always explicit. Manual registration via `detectors.add(...)`
-still works. New exports: `CallDetectorsConfig`, `ObserverDetectorsConfig`, `DetectorSlot`,
-`createCallDetectors`, `createObserverDetectors`, `detectorSlot`.
+`addObserverDetector` builds immediately onto `observer.detectors`. `addCallDetector` records into
+the new public `observer.callDetectorConfigs` map and applies to every call created **afterwards**;
+calls already open keep the set they were built with. Detectors are named by their kebab-case
+`static NAME`, and the name types the config — an unknown name, or a key belonging to a different
+detector, will not compile.
+
+Each detector now owns its defaults in its own constructor, beside the doc that explains what the
+threshold means. The central `defaultCallDetectorsConfig` / `defaultObserverDetectorsConfig` tables
+are gone, along with `DetectorSlot` as a config mechanism, `createCallDetectors`,
+`createObserverDetectors`, `detectorSlot`, `CallDetectorsConfig` and `ObserverDetectorsConfig`.
+
+> **Why the reversal?** Earlier drafts auto-created every detector from a three-state config slot.
+> A detector nobody asked for costs time on every tick and raises finding types into a handler that
+> was never written to expect them. Silence you configured is better than findings you didn't.
+
+### Issues are pushed to detectors, not polled
+
+`ActiveIssuesRegistry` (at `observedCall.activeIssuesRegistry`, propagating into
+`observer.activeIssuesRegistry`) replaces the pull-based `IssueIndex`. A detector implements
+`ActiveIssueTracker` and registers for the issue types it consumes; the registry hands them over as
+they open and close.
+
+```ts
+observer.activeIssuesRegistry.addIssueTracker('congestion', myDetector);
+observer.activeIssuesRegistry.removeIssueTracker(myDetector);
+```
+
+A detector's cost is then proportional to the issues it actually receives rather than to the number
+of participants: an `update()` that finds nothing was pushed costs one comparison, whatever the fleet
+size.
+
+**There is no wildcard subscription.** Every issue-driven detector requires an explicit, non-empty
+`issueTypes` (or `publisherIssueTypes` / `receiverIssueTypes`); the default `[]` means it is
+subscribed to nothing and will never fire. "Feed me everything and I'll work out what matters" moves
+the decision from the application — which knows its client build and its issue vocabulary — onto a
+detector that has to guess, and makes the cost of a subscription unbounded and invisible.
+
+### `client-monitor-js` >= 4.6.0 is required, with no fallback
+
+Every issue-driven detector reads the raise + `<type>-resolved` lifecycle. There is no path that
+infers these conditions from raw counters for the benefit of older clients: the client decides
+better, and maintaining a worse second implementation to be polite is how both end up wrong. Issues
+without a `key` have no lifecycle and stay one-shot — reported on `client-issue`, never registered.
 
 ### New: `TurnServerOutageDetector`
 
@@ -127,14 +193,15 @@ the server is down are both true.
 
 ### New: validators, and `SimulcastReceiverValidator`
 
-`WorstReceiverContagionDetector` is replaced by **`SimulcastReceiverValidator`**, started with
-`observer.addValidator('simulcast-receiver-validator', config)`. It still raises
+Three ship: **`SimulcastReceiverValidator`** (`simulcast-receivers`),
+**`RemoteTrackResolverValidator`** (`remote-track-resolver`) and **`CodecConsistencyValidator`**
+(`codec-consistency`). The first replaces `WorstReceiverContagionDetector` and still raises
 `WORST_RECEIVER_CONTAGION` on the bad verdict, so alerting is unchanged.
 
 **Validators finish; detectors don't.** A detector answers "is something wrong right now?" and the
 answer differs every tick. A validator answers "is this deployment built correctly?", which only
-changes on deploy — so it runs until it can decide, reports once on the new **`validator-settled`**
-event, and the observer drops it, releasing the sliding window it kept per published track.
+changes on deploy — so it runs until it can decide, reports once on the new **`validation-ready`**
+event, and the observer drops it, releasing whatever state it kept.
 `observer.validators` holds the ones currently running and is normally empty. Re-checking means
 starting another, because a deploy rather than elapsed time is what makes a structural verdict stale.
 
@@ -152,18 +219,30 @@ half the median. A validator that never sees those conditions simply never finis
 counts the times it genuinely ran.
 
 ```ts
-observer.addValidator('simulcast-receiver-validator');
-observer.on('validator-settled', ({ validator, report }) => {
+observer.addValidator('simulcast-receivers');
+observer.on('validation-ready', ({ validator, report }) => {
   if (report.ready) record(validator, report.verdict, report.checks);
 });
 ```
 
-New exports: `Validator`, `RunningValidator`, `ValidationReport`, `AvailableValidatorConfigs`,
-`ValidatorName`, `SimulcastReceiverValidator`, `defaultSimulcastReceiverValidatorConfig`.
+**`RemoteTrackResolverValidator`** — *is the resolver actually linking anything?* Five things here
+are built on publisher↔subscriber links, and every one correctly does nothing when the links are
+missing rather than guessing. So a resolver wired to the wrong id field leaves all of them
+permanently silent — and **silence is what a healthy deployment looks like too**. You would conclude
+your calls were clean when nothing was ever examined. Verdicts: `links-resolved` /
+`no-links-resolved` / `inconclusive`; raises `REMOTE_TRACK_LINKS_UNRESOLVED`.
 
-For the record this was not a performance change: the detector's marginal cost was **0.08 ms/tick** at
-20 calls × 12 participants, because it shared its aggregation with two other detectors. The wins are
-the retained per-track windows and being able to say something true about what has been verified.
+**`CodecConsistencyValidator`** — *is everyone on the same codec, and is it the one you think you
+negotiated?* A split (participants of one call on different codecs) is a real fault with a confusing
+symptom: an SFU forwarding without transcoding cannot serve them all, so some pairs see each other
+and some do not, with no error anywhere — and only something holding every participant at once can
+see it. The quieter half is the silent fallback: a deployment configured for VP9 or AV1 drops to VP8
+whenever one endpoint cannot negotiate the preference, and the team believes it shipped AV1 months
+ago. Pass `expected` and it says so. Verdicts: `codec-consistent` / `codec-split` /
+`unexpected-codec` / `inconclusive`; raises `CODEC_INCONSISTENCY`.
+
+New exports: `Validator`, `RunningValidator`, `ValidationReport`, `AvailableValidatorConfigs`,
+`ValidatorName`, and the three validator classes with their config, report and evidence types.
 
 ### Utility consolidation
 
@@ -181,14 +260,16 @@ the dead weight:
 
 ### Cross-call correlation and conclusions
 
-**`ConcurrentIssueDetector` now treats its two scopes as different questions.** At call scope it asks
-"is this meeting in trouble?"; at observer scope, "is our infrastructure in trouble?". Previously the
-observer scope was the same test with a bigger denominator, which is wrong in both directions: one
+**`ConcurrentIssueDetector` is split into two classes**, because its two scopes were two different
+questions: `CallConcurrentIssueDetector` asks "is this meeting in trouble?", and
+`ObserverConcurrentIssueDetector` asks "is our infrastructure in trouble?". One class branching on
+what it was handed meant every call site passed the other scope's fields as placeholders, and the
+observer scope behaved as the call test with a bigger denominator — wrong in both directions: one
 thirty-person meeting with congestion cleared every client threshold and raised a fleet alert for a
 single bad room, while a genuine fleet event — six broken calls out of forty — was a small share of
 all clients and got suppressed by the participant ratio.
 
-At observer scope the detector now:
+`ObserverConcurrentIssueDetector`:
 
 - requires the cohort to span at least `minAffectedCalls` **independent calls** (default `2`);
 - does **not** apply `affectedRatioThreshold` (call scope only), using `affectedCallRatioThreshold`
@@ -198,8 +279,10 @@ At observer scope the detector now:
 This is what makes `congestion` or `ice-*` opening across unrelated calls an actionable
 infrastructure signal: those clients share no room, no publisher and no host — only the servers.
 
-**New: `IssueCohort` carries the call dimension** — `callIds`, `totalCalls`, `affectedCallRatio`, and
-a `perCall` breakdown. `ActiveClientIssue` / `ResolvedClientIssue` gained `callId`.
+Each exposes `lastGroups` for tests and dashboards; the observer one carries the call dimension
+(`callIds`, `totalCalls`, `affectedCallRatio`, `perCall`), the call one does not, because at call
+scope it is always `1` and carries no information. `ActiveClientIssue` / `ResolvedActiveClientIssue`
+gained `callId`.
 
 **New: conclusions.** Every issue-driven finding now carries a `conclusion` in its payload:
 
@@ -218,7 +301,15 @@ symptom whether it is one meeting or the whole fleet. One inversion is encoded d
 `cpu-limitation` spread across independent calls concludes **`client-population`**, not
 `infrastructure`, because endpoint CPU is owned by the endpoint and breadth points at a shared client
 release or browser version rather than the SFU. Unknown issue types still get a structurally valid
-conclusion from the spread. `concludeFrom()` is exported for use in your own detectors.
+conclusion from the spread.
+
+Two functions are exported, one per scope: **`concludeCallIssue()`** and
+**`concludeObserverIssue()`**. A detector already knows its scope, and the single generic
+`concludeFrom()` forced every caller to supply the other scope's fields as placeholders —
+call-scoped detectors passing `affectedCalls: 1, totalCalls: 1` forever, observer-scoped ones
+passing a participant ratio that was deliberately never read. `concludeObserverIssue` also now
+returns `call` (not `infrastructure`) when only one call is affected, rather than dressing a single
+bad room up as a fleet event.
 
 ### Removed: the metric-driven detectors
 
@@ -233,12 +324,74 @@ and builds everything on the issue lifecycle.
 | `CommonSourceDegradationDetector` | `IssueFanOutDetector` |
 | `PliAndFreezeFanOutDetector` | `IssueFanOutDetector` (`keyframe-storm`, `freezed-video-track`) |
 | `AudioImpairmentFanOutDetector` | `IssueFanOutDetector` (`audio-concealment`, `audio-jitter-buffer-stress`) |
-| `CallWideDegradationDetector` | `ConcurrentIssueDetector` (call scope) |
+| `CallWideDegradationDetector` | `CallConcurrentIssueDetector` |
+| `IceDisruptionDetector` | `ObserverConcurrentIssueDetector` with the `ice-*` issue types |
 
-**`IceDisruptionDetector` is kept**, and is the one detector that doesn't read client issues. It
-reads ICE state *transitions*, which arrive in every sample regardless of what the client runs and
-which can occur and revert between two `update()` ticks. It subscribes to the bus and implements
-`close()` accordingly.
+**`IceDisruptionDetector` is removed too.** It was the last detector reading raw stats — ICE state
+transitions — to reach a verdict `client-monitor-js` >= 4.6.0 already reports as the keyed issues
+`ice-disconnected`, `ice-connection-failed`, `ice-transport-stalled` and `unstable-ice-path`, each
+with hysteresis behind it. The client knows whether `disconnected` persisted or healed in 200 ms; the
+observer does not. Correlating ICE trouble is now configuration, not a class:
+
+```ts
+observer.addObserverDetector('observer-concurrent-issue-detector', {
+  issueTypes: [ 'ice-disconnected', 'ice-connection-failed', 'ice-transport-stalled' ],
+});
+```
+
+### New: `ClientPopulationIssueDetector`
+
+Raises `CLIENT_POPULATION_ISSUE` (observer scope) when an issue is concentrated on **one kind of
+client** — one browser, one browser version, one OS — rather than on anything the servers own.
+
+Every other observer-scoped detector reasons "clients in unrelated calls share only the
+infrastructure, so it must be us". That is right for network symptoms and **wrong for endpoint
+ones**: `cpulimitation` across six unrelated calls is not an SFU event, because CPU is owned by the
+endpoint. `IssueConclusion` already encoded that inversion — mapping the endpoint-capacity family to
+a `client-population` fault domain — but nothing in the library computed the grouping the claim
+referred to. This detector is that computation, and it is the one correlation here that is neither
+per-call nor per-server: a client knows its own browser and nothing about anyone else's.
+
+The gate is **relative risk**, not share. "30% of Chrome 141 is unhappy" means nothing if 30% of
+everyone is; a share-based rule simply indicts whichever browser is most popular. A population
+qualifies only when it is `minRelativeRisk` times worse than the rest of the fleet, and only when the
+rest of the fleet is itself big enough (`minControlSize`) to be a measurement. Clients that never
+reported their metadata are excluded from **both** sides rather than bucketed as `'unknown'` — a
+synthetic unknown population is a mixture of every real one, so its rate means nothing.
+
+Groups by `browser` / `engine` / `platform` / `operationSystem`, one axis per instance.
+
+### New: `PublisherFaultCorroborationDetector`
+
+Raises `CORROBORATED_PUBLISHER_FAULT` (call scope) when **both ends of one published track** are
+complaining at once: the publisher about its own send path (`encoder-bottleneck`,
+`capture-bottleneck`, `dry-outbound-track`) and its subscribers about receiving it
+(`freezed-video-track`, `dry-inbound-track`).
+
+`IssueFanOutDetector` sees one end and infers the source, which is sound and still an inference — the
+identical observation is produced by the SFU mangling a perfectly healthy publisher's stream on the
+way out. This removes the inference: two independent parties, one conclusion. Its confidence is the
+highest in the library (0.9), and it is the strongest statement the library can make about where a
+fault sits. Run both — fan-out is broader and catches the forwarding case where the publisher is
+fine.
+
+### New: `SfuCongestionDetector`
+
+Raises `sfu-congestion` (observer scope) when the share of clients reporting congestion spikes
+against its own recent baseline. Add it only when the observer's calls all come from the **same SFU**
+— the finding's meaning is "these clients share only that server".
+
+It counts distinct clients reporting congestion in **fixed wall-clock buckets** rather than on the
+update tick. The tick is unevenly spaced (it fires per client update, so its rate is a function of
+how many clients are connected) and shorter than a client's sampling period, so counting on it
+compares windows of different lengths and calls the difference a signal. Each closed bucket is judged
+against a median+MAD baseline of the ones before it via `robustZScore`, plus practical-significance
+gates (`minAffectedClients`, minimum absolute and relative increase) so a statistically perfect
+signal over three clients cannot page anyone.
+
+Unlike the concurrent-issue detectors it ignores resolutions: a congested client typically fixes its
+own symptom by dropping bitrate hard, so the issue closes within seconds — but it still happened, and
+that is the evidence wanted here.
 
 ### Performance
 
@@ -251,16 +404,11 @@ of the scope and rebuilt an array. Worse, `totalClients` re-walked them once per
 scaled with **participants** instead of with the thing being asked about, so a healthy 1200-client
 fleet with no open issues did the same work as a broken one.
 
-`IssueIndex` now maintains the reverse lookups incrementally: one index per call
-(`observedCall.issueIndex`), propagating into `observer.issueIndex`, updated as issues open and close.
+`ActiveIssuesRegistry` inverts it: issues are **pushed** to the detectors that registered for their
+type as they open and close, so a detector holds only what it was given. An `update()` that finds
+nothing was pushed costs one comparison, whatever the fleet size.
 `ObservedClient.activeIssues` remains the authoritative store, so there is still exactly one copy of
-each issue in memory. Queries cost O(matching issues):
-
-| open issues (1200 clients) | `cohorts()` |
-|---|---|
-| 0 | 0.1 µs |
-| 60 | 11 µs |
-| 600 | 54 µs |
+each issue in memory.
 
 **`UnconsumedTrackDetector` no longer walks the call.** It read every published track of every peer
 connection of every client on each tick to ask "does this one have subscribers?" — a question whose
@@ -270,13 +418,14 @@ and the detector reads that. A healthy call, where every track has subscribers, 
 `size === 0` check. Measured at 60 calls × 20 participants (1 200 published tracks): **529 µs → 65 µs
 per tick.**
 
-**Per-tick derivations are memoised and shared.** `IssueFanOutDetector`,
-`TrackDeliveryMismatchDetector` and `WorstReceiverContagionDetector` each built their own
-`TrackDistributionAggregator` and recomputed the whole publisher→subscriber distribution set every
-tick — the same traversal, the same percentile sorts, three times over. They now share
-`observedCall.trackDistributionAggregator`, memoised against the new `ObservedCall.updateGeneration`
-(bumped on every accepted sample and at the start of every `update()`, so a detector driven directly
-never reads a stale aggregation).
+**Track lookups start from the affected minority.** `IssueFanOutDetector`,
+`TrackDeliveryMismatchDetector` and the simulcast check each rebuilt the whole publisher→subscriber
+distribution set every tick — the same traversal, the same percentile sorts, three times over — to
+find the handful of tracks that were actually in trouble. They now start from the issues the registry
+pushed at them and resolve *those* tracks, through the reporting client's own peer connections
+(typically one or two) rather than through the call. The shared aggregator and its
+`updateGeneration` cache key are both gone with it: a cache key that has to be bumped from two
+different places to stay correct is bookkeeping standing in for a structural fact.
 
 Alongside that: `summarize()` sorted its input three times (once per percentile) and now sorts once;
 `aggregateTrack` replaced a dozen `map`/`filter`/`reduce` passes with a single loop; and a receiver
@@ -321,18 +470,23 @@ reported congestion in the last 10 seconds".
 
 ### Correlation primitives
 
-- **`IssueIndex`** — the indexed active-issue set, at call (`observedCall.issueIndex`) **or** observer
-  (`observer.issueIndex`) scope. `cohorts`, `cohortOf`, `byTrackIds`, `byClientId`, `ofType`,
-  `ofTrack`, `ofClient`, plus expiry via `prune`. Onset spread is measured on the **observer clock**,
-  never client clocks, because skew between machines would otherwise look like a synchronized
-  infrastructure event.
-- **`TrackDistributionAggregator`** — one published track against all of its subscribers: per-receiver
-  health with reasons, percentile summaries, and freeze/PLI/concealment fan-out counters.
+- **`ActiveIssuesRegistry`** — the open client issues of a scope, plus the fan-out that pushes them
+  to registered `ActiveIssueTracker`s. Call-level registries propagate into the observer's. Onset
+  spread is measured on the **observer clock**, never client clocks, because skew between machines
+  would otherwise look like a synchronized infrastructure event.
+- **The resolver links** — `outboundTrack.remoteInboundTracks`, `inboundTrack.remoteOutboundTrack`,
+  `observedCall.unconsumedOutboundTracks`. Detectors walk these directly. (A
+  `TrackDistributionAggregator` class used to summarise every published track against its receivers
+  on every tick; it scanned the majority to find the interesting minority, which is the wrong axis.)
 - **`CallHealthAggregator`** — the client axis: per-client health split into sending vs receiving,
   percentile rollups, quality-limitation (cpu/bandwidth) counts.
-- **`utils/stats`** — `percentile`, `median`, `summarize`, `counterDelta`, `SlidingWindow`. Summaries
-  are medians and percentiles rather than means, because one participant at 1500 ms RTT would
-  otherwise hide nine healthy ones.
+- **`utils/stats`** — `percentile`, `percentileOfSorted`, `median`, `medianAbsoluteDeviation`,
+  `robustZScore`, `summarize`, `counterDelta`, `correlation`, `pageHinkley`, `mannKendall`.
+  Summaries are medians and percentiles rather than means, because one participant at 1500 ms RTT
+  would otherwise hide nine healthy ones.
+- **`SlidingWindow`** (moved to `utils/SlidingWindow.ts`) and **`TrendTester`** — the streaming home
+  for the two trend tests. Mann-Kendall answers "is this drifting?", Page-Hinkley answers "did it
+  change, and when?"; neither subsumes the other, which is why both read from one window.
 
 ### Detectors
 
@@ -345,11 +499,13 @@ The correlation set, each answering something no endpoint can:
 
 | Detector | Scope | Raises |
 |----------|-------|--------|
-| `ConcurrentIssueDetector` | call | `CONCURRENT_CLIENT_ISSUES`, `ISSUE_ONSET_BURST` |
-| `ConcurrentIssueDetector` | observer | `CROSS_CALL_CONCURRENT_ISSUES`, `CROSS_CALL_ISSUE_ONSET_BURST` |
+| `CallConcurrentIssueDetector` | call | `CONCURRENT_CLIENT_ISSUES`, `ISSUE_ONSET_BURST` |
+| `ObserverConcurrentIssueDetector` | observer | `CROSS_CALL_CONCURRENT_ISSUES`, `CROSS_CALL_ISSUE_ONSET_BURST` |
 | `IssueFanOutDetector` | call | `PUBLISHED_TRACK_ISSUE_FAN_OUT`, `SINGLE_RECEIVER_ISSUE` |
+| `PublisherFaultCorroborationDetector` | call | `CORROBORATED_PUBLISHER_FAULT` |
 | `TrackDeliveryMismatchDetector` | call | `PUBLISHED_TRACK_NOT_DELIVERED`, `RECEIVER_TRACK_NOT_DELIVERED`, `PUBLISHER_TRACK_DRY` |
 | `UnconsumedTrackDetector` | call | `UNCONSUMED_PUBLISHED_TRACK` |
+| `ClientPopulationIssueDetector` | observer | `CLIENT_POPULATION_ISSUE` |
 | `TurnServerHealthDetector` | observer | `TURN_SERVER_DEGRADED` |
 
 Infrastructure:
@@ -357,14 +513,14 @@ Infrastructure:
 | Detector | Scope | Raises |
 |----------|-------|--------|
 | `TurnServerOutageDetector` | observer | `TURN_SERVER_OUTAGE` |
-| `IceDisruptionDetector` | call | `CALL_ICE_DISRUPTION` |
+| `SfuCongestionDetector` | observer | `sfu-congestion` |
 
 Two worth calling out. **`TrackDeliveryMismatchDetector`** resolves an ambiguous symptom: a dry track
 could be a switched-off camera, a broken forwarding path, or a wedged consumer, and all three look
 identical from the browser — joining both ends of the track separates them, with no mediasoup
-instrumentation required. **`WorstReceiverContagionDetector`** catches an SFU relaying RTCP instead of
-terminating it, where one bad receiver drags the publisher's bitrate down for everyone; it's a
-windowed correlation rather than a threshold, and the damage is invisible from every endpoint.
+instrumentation required. **`PublisherFaultCorroborationDetector`** is the only finding here that
+needs no interpretation at all: the publisher and its subscribers independently report the two halves
+of one fault, so nothing is inferred.
 
 `Detector` gained an optional `close()`, called when a detector is removed or its registry is cleared
 (which now happens when the owning call/observer closes).

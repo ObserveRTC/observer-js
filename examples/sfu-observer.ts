@@ -36,30 +36,45 @@ const observer = new Observer({
 	// Release entities whose clients stopped reporting.
 	closeClientIfIdleForMs: 60_000,
 	closeCallIfEmptyForMs: 20_000,
-
-	/* --------------------------------------------------------------------------------------------
-	 * 2. Configure detectors.
-	 *
-	 * Every detector is created automatically with defaults — omitting these two keys entirely
-	 * would give the same set. Each slot takes an object to override its settings, or `null` to
-	 * skip it. Naming one key does not disable the others.
-	 *
-	 * All of them are issue-driven: they consume the verdicts client-monitor-js >= 4.6.0 already
-	 * ships and add the cross-participant conclusion on top.
-	 * ------------------------------------------------------------------------------------------ */
-
-	callDetectors: {
-		// Tuned for this demo: three participants, and we want a verdict within a couple of ticks.
-		'concurrent-issue-detector': { minClients: 3, minAffectedClients: 3 },
-	},
-
-	observerDetectors: {
-		// A single-SFU demo has no fleet to compare against, so the TURN detectors would need a
-		// control group they cannot have here.
-		'turn-server-health-detector': null,
-		'turn-server-outage-detector': null,
-	},
 });
+
+/* ------------------------------------------------------------------------------------------------
+ * 2. Configure detectors.
+ *
+ * A fresh Observer starts with **zero** detectors — nothing is created implicitly, so nothing costs
+ * time or raises a finding until you ask for it. Wire up exactly what this demo needs:
+ *
+ *   observer.addCallDetector(name, config)     — built onto every call the observer creates from
+ *                                                 now on (`observedCall.addDetector(...)` does the
+ *                                                 same for one call only)
+ *   observer.addObserverDetector(name, config) — built once, for findings that span calls
+ *
+ * All of them are issue-driven: they consume the verdicts client-monitor-js >= 4.6.0 already ships
+ * and add the cross-participant conclusion on top. None of them sees anything unless you name the
+ * issue type(s) it should watch — there is no "watch everything" option, because which of a
+ * client's issues are worth correlating is a decision only the application can make.
+ * ---------------------------------------------------------------------------------------------- */
+
+// Tuned for this demo: three participants, and we want a verdict within a couple of ticks. Watches
+// the one issue type this demo's subscribers ever raise.
+observer.addCallDetector('call-concurrent-issue-detector', {
+	issueTypes: [ 'dry-inbound-track' ],
+	minClients: 3,
+	minAffectedClients: 3,
+});
+
+// Attributes that same issue to the published track it is about, so a cohort that shares one
+// publisher is told apart from unrelated per-receiver complaints.
+observer.addCallDetector('issue-fan-out-detector', {
+	issueTypes: [ 'dry-inbound-track' ],
+});
+
+// Joins both ends of the track: Alice's own outbound RTP against her subscribers' dry reports.
+// Its defaults already look for 'dry-inbound-track' / 'dry-outbound-track'.
+observer.addCallDetector('track-delivery-mismatch-detector');
+
+// This single-SFU demo has no fleet to compare against, so the observer-scoped TURN detectors and
+// the cross-call concurrent-issue detector are left unregistered here.
 
 /* ------------------------------------------------------------------------------------------------
  * 3. React to findings.

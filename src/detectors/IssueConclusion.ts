@@ -8,8 +8,23 @@
  * holds that interpretation step so it is stated once, consistently, instead of being re-derived by
  * whoever reads the alert at 3am.
  *
- * The two inputs are the **issue family** (what the client said is wrong) and the **spread** (who
- * else has it and what they share). Neither alone concludes anything: congestion in one call is a
+ * ### Two functions, because there are two questions
+ *
+ * A detector already knows its scope — it was constructed with an `ObservedCall` or with the
+ * `Observer`. Handing that scope back to a single generic function meant every caller supplied
+ * fields the other scope needed and its own scope ignored: a call-scoped detector passing
+ * `affectedCalls: 1, totalCalls: 1` forever, an observer-scoped one passing a participant ratio that
+ * was deliberately never read. Placeholders like that are a standing invitation to read them as if
+ * they meant something.
+ *
+ * So there are two entry points, each taking only the facts its scope actually has:
+ *
+ * - {@link concludeCallIssue} — within one call. The axis is *how much of the meeting*, and whether
+ *   the affected clients all subscribe to one published track.
+ * - {@link concludeObserverIssue} — across calls. The axis is *how many independent calls*, which is
+ *   the only thing that separates "one bad room" from "our infrastructure".
+ *
+ * Neither the issue family nor the spread concludes anything alone: congestion in one call is a
  * meeting problem, congestion in six calls is an infrastructure problem, and the issue type is
  * identical in both.
  */
@@ -54,20 +69,46 @@ export type IssueConclusion = {
 	confidence: number;
 };
 
-/** The spread facts a conclusion is drawn from. */
-export type IssueSpread = {
+/** The facts a **call-scoped** conclusion is drawn from. */
+export type CallIssueSpread = {
 	issueType: string;
-	scope: 'call' | 'observer';
+
+	/** Distinct clients of this call with the issue open. */
 	affectedClients: number;
+
+	/** Participants in the call — the denominator. */
 	totalClients: number;
-	affectedCalls: number;
-	totalCalls: number;
 
 	/** True when the onsets clustered — a shared trigger rather than drift. */
 	onsetBurst: boolean;
 
-	/** Set when the cohort is the subscriber set of one published track. */
+	/**
+	 * Set when the affected clients are the subscriber set of **one published track**.
+	 *
+	 * The strongest call-scoped statement available: those clients share a publisher and nothing
+	 * else, so the receivers are exonerated and the source's path is implicated.
+	 */
 	publishedTrackId?: string;
+};
+
+/** The facts an **observer-scoped** conclusion is drawn from. */
+export type ObserverIssueSpread = {
+	issueType: string;
+
+	/** Distinct clients across the fleet with the issue open. */
+	affectedClients: number;
+
+	/** Clients in the fleet. Reported for context; it does not gate anything at this scope. */
+	totalClients: number;
+
+	/** Distinct calls containing at least one affected client. The dimension that matters here. */
+	affectedCalls: number;
+
+	/** Calls in flight. */
+	totalCalls: number;
+
+	/** True when the onsets clustered. */
+	onsetBurst: boolean;
 };
 
 type IssueFamily = {
@@ -185,22 +226,17 @@ function familyOf(issueType: string): IssueFamily {
 }
 
 /**
- * Confidence from the spread alone.
+ * Confidence for a call-scoped conclusion, from the spread alone.
  *
- * Independent calls are worth far more than participant count: five affected clients in one meeting
- * have many shared local explanations, whereas five affected clients in five meetings have exactly
- * one. A clustered onset adds to it, because simultaneity is hard to produce by coincidence.
+ * Starts low and climbs with the share of the meeting affected. A clustered onset adds to it, because
+ * simultaneity is hard to produce by coincidence, and a track-scoped group adds more still — it is a
+ * statement about a specific source rather than about the room.
  */
-function confidenceOf(spread: IssueSpread): number {
+function callConfidenceOf(spread: CallIssueSpread): number {
 	let confidence = 0.3;
 
-	if (spread.scope === 'observer') {
-		// 2 calls -> +0.2, 3 -> +0.3, 5+ -> +0.4 (saturating; the tenth call adds little)
-		confidence += Math.min(0.4, (spread.affectedCalls - 1) * 0.1);
-	}
-
 	if (0 < spread.totalClients) {
-		confidence += Math.min(0.2, (spread.affectedClients / spread.totalClients) * 0.2);
+		confidence += Math.min(0.3, (spread.affectedClients / spread.totalClients) * 0.3);
 	}
 
 	if (spread.onsetBurst) confidence += 0.2;
@@ -210,33 +246,34 @@ function confidenceOf(spread: IssueSpread): number {
 }
 
 /**
- * Draw the conclusion for one correlated cohort.
+ * Confidence for an observer-scoped conclusion.
  *
- * The domain comes from the spread, the wording from the issue family, and the confidence from how
- * hard the pattern would be to produce by coincidence.
+ * Independent calls are worth far more than participant count here: five affected clients in one
+ * meeting have many shared local explanations, whereas five affected clients in five meetings have
+ * exactly one. The call term saturates, because the tenth affected call tells you little the third
+ * did not.
  */
-export function concludeFrom(spread: IssueSpread): IssueConclusion {
+function observerConfidenceOf(spread: ObserverIssueSpread): number {
+	// 2 calls -> +0.2, 3 -> +0.3, 5+ -> +0.4
+	let confidence = 0.3 + Math.min(0.4, Math.max(0, spread.affectedCalls - 1) * 0.1);
+
+	if (spread.onsetBurst) confidence += 0.2;
+
+	return Math.min(1, Math.round(confidence * 100) / 100);
+}
+
+/**
+ * Draw the conclusion for a group of clients **within one call**.
+ *
+ * Ordered most-to-least specific: a track-scoped group is a stronger statement than a call-wide one,
+ * and a single affected endpoint is not a statement about the call at all.
+ */
+export function concludeCallIssue(spread: CallIssueSpread): IssueConclusion {
 	const family = familyOf(spread.issueType);
-	const confidence = confidenceOf(spread);
+	const confidence = callConfidenceOf(spread);
 	const affectedShare = 0 < spread.totalClients
 		? ` (${spread.affectedClients}/${spread.totalClients} clients)`
 		: '';
-
-	// Ordered most-to-least specific: a track-scoped cohort is a stronger statement than a call-wide
-	// one, and a cross-call cohort is stronger than either.
-	if (spread.scope === 'observer' && 1 < spread.affectedCalls) {
-		const domain = family.crossCallDomain ?? 'infrastructure';
-		const text = family.infrastructure;
-
-		return {
-			faultDomain: domain,
-			confidence,
-			summary: text
-				? `${text.summary} — ${spread.affectedCalls} of ${spread.totalCalls} calls${affectedShare}`
-				: `'${spread.issueType}' is open in ${spread.affectedCalls} of ${spread.totalCalls} independent calls at once${affectedShare}; they share only the infrastructure`,
-			recommendation: text?.recommendation,
-		};
-	}
 
 	if (spread.publishedTrackId !== undefined) {
 		const text = family.publishedTrack;
@@ -269,5 +306,46 @@ export function concludeFrom(spread: IssueSpread): IssueConclusion {
 		confidence,
 		summary: `'${spread.issueType}' affects a single endpoint; nothing is shared with the other participants`,
 		recommendation: 'treat as that participant\'s own device or last mile',
+	};
+}
+
+/**
+ * Draw the conclusion for a group of clients spanning **several calls**.
+ *
+ * One affected call is not an observer-scoped finding — it has an obvious local explanation and the
+ * call-scoped detector has already reported it — so that case returns `call` and says so rather than
+ * dressing it up as a fleet event.
+ *
+ * Which domain breadth implicates depends on the family, and this is the whole reason the module
+ * exists: `congestion` across unrelated calls points at the servers, `cpulimitation` across unrelated
+ * calls points at what those *endpoints* share — a client release, a browser version, shared
+ * virtualised hardware — and pointing an SFU team at the second one wastes a night.
+ */
+export function concludeObserverIssue(spread: ObserverIssueSpread): IssueConclusion {
+	const family = familyOf(spread.issueType);
+	const confidence = observerConfidenceOf(spread);
+	const affectedShare = 0 < spread.totalClients
+		? ` (${spread.affectedClients}/${spread.totalClients} clients)`
+		: '';
+
+	if (spread.affectedCalls <= 1) {
+		return {
+			faultDomain: 'call',
+			confidence,
+			summary: `'${spread.issueType}' is confined to a single call${affectedShare}; that is a meeting problem, not a fleet one`,
+			recommendation: 'look at the call-scoped finding for this call rather than at the infrastructure',
+		};
+	}
+
+	const domain = family.crossCallDomain ?? 'infrastructure';
+	const text = family.infrastructure;
+
+	return {
+		faultDomain: domain,
+		confidence,
+		summary: text
+			? `${text.summary} — ${spread.affectedCalls} of ${spread.totalCalls} calls${affectedShare}`
+			: `'${spread.issueType}' is open in ${spread.affectedCalls} of ${spread.totalCalls} independent calls at once${affectedShare}; they share only the infrastructure`,
+		recommendation: text?.recommendation,
 	};
 }

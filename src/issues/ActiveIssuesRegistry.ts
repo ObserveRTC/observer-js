@@ -4,9 +4,6 @@ import { ActiveIssueTracker } from './ActiveIssueTracker';
 
 const logger = createLogger('ActiveIssuesRegistry');
 
-/** Subscribe an {@link ActiveIssueTracker} under this type to be fed **every** issue, whatever its type. */
-export const ANY_ISSUE_TYPE = '*';
-
 /**
  * The set of client issues currently believed to be **open**, plus the fan-out that pushes them to
  * whoever asked for them.
@@ -20,8 +17,13 @@ export const ANY_ISSUE_TYPE = '*';
  *
  * ```ts
  * observer.activeIssuesRegistry.addIssueTracker('congestion', detector);
- * observer.activeIssuesRegistry.addIssueTracker(ANY_ISSUE_TYPE, auditLog);
  * ```
+ *
+ * There is **no wildcard**. A tracker names the types it consumes, and nothing else reaches it. "Feed
+ * me everything and I'll work out what matters" pushes the decision from the application — which
+ * knows its client build and its issue vocabulary — onto a detector that has to guess, and it makes
+ * the cost of a subscription unbounded and invisible. If a detector should watch five issue types,
+ * the caller lists five issue types.
  *
  * ### Two levels
  *
@@ -92,10 +94,7 @@ export class ActiveIssuesRegistry implements ActiveIssueTracker {
 		return true;
 	}
 
-	/**
-	 * Feed `tracker` every issue of `type` as it opens and closes. Pass {@link ANY_ISSUE_TYPE} for all
-	 * types — the right choice when the question is *where* trouble clusters rather than *what* it is.
-	 */
+	/** Feed `tracker` every issue of `type` as it opens and closes. One call per type; no wildcard. */
 	public addIssueTracker(type: string, tracker: ActiveIssueTracker): this {
 		this.typesToTrackers.set(
 			type,
@@ -145,11 +144,9 @@ export class ActiveIssuesRegistry implements ActiveIssueTracker {
 	 * step with it. One broken detector should not desynchronise the others.
 	 */
 	private _trackersOf(type: string, apply: (tracker: ActiveIssueTracker) => void): void {
-		const typed = this.typesToTrackers.get(type);
-		const wildcard = this.typesToTrackers.get(ANY_ISSUE_TYPE);
+		const trackers = this.typesToTrackers.get(type);
 
-		if (typed) for (const tracker of typed) this._safely(tracker, apply);
-		if (wildcard) for (const tracker of wildcard) this._safely(tracker, apply);
+		if (trackers) for (const tracker of trackers) this._safely(tracker, apply);
 	}
 
 	private _safely(target: ActiveIssueTracker, apply: (tracker: ActiveIssueTracker) => void): void {

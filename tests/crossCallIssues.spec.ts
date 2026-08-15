@@ -1,6 +1,7 @@
 import { Observer } from '../src/Observer';
-import { ConcurrentIssueDetector, ConcurrentIssueTypes, ConcurrentIssueDetectorConfig } from '../src/detectors/ConcurrentIssueDetector';
-import { concludeFrom } from '../src/detectors/IssueConclusion';
+import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueTypes, ObserverConcurrentIssueDetectorConfig } from '../src/detectors/ObserverConcurrentIssueDetector';
+import { CallConcurrentIssueDetector, CallConcurrentIssueTypes, CallConcurrentIssueDetectorConfig } from '../src/detectors/CallConcurrentIssueDetector';
+import { concludeCallIssue, concludeObserverIssue } from '../src/detectors/IssueConclusion';
 import type { ClientSample } from '../src/schema/ClientSample';
 import { payloadOf } from './helpers/issues';
 
@@ -8,16 +9,21 @@ import { payloadOf } from './helpers/issues';
  * The observer-scope question: is the *infrastructure* in trouble? Answering it needs the cohort to
  * span independent calls — one bad meeting is the call-scoped detector's business, and raising a
  * fleet alert for it would be a false positive with a very plausible-looking payload.
+ *
+ * `ConcurrentIssueDetector` (one class serving both scopes) is gone, split into
+ * `ObserverConcurrentIssueDetector` (this file's subject) and `CallConcurrentIssueDetector`. Each now
+ * requires an explicit, non-empty `issueTypes` — the old wildcard subscription is removed, so a
+ * detector built with `issueTypes: []` sees nothing and never fires.
  */
 
-// `ConcurrentIssueDetector` fills in its own defaults for whatever a partial config omits, so an
-// empty object is a valid "defaults" placeholder here. There is no exported default-config constant
-// to import any more — each detector owns its defaults, in its own constructor.
-const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
-	concurrentIssueDetector: {},
+// Each detector fills in its own defaults for whatever a partial config omits beyond `issueTypes`,
+// which is required — there is no "all types" option any more, so a placeholder config always names
+// the type these tests raise.
+const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ObserverConcurrentIssueDetectorConfig> } = {
+	concurrentIssueDetector: { issueTypes: [ 'congestion' ] },
 };
-const defaultCallDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
-	concurrentIssueDetector: {},
+const defaultCallDetectorsConfig: { concurrentIssueDetector: Partial<CallConcurrentIssueDetectorConfig> } = {
+	concurrentIssueDetector: { issueTypes: [ 'congestion' ] },
 };
 
 const raise = (type: string, key: string, timestamp: number) =>
@@ -41,19 +47,19 @@ function newObserver() {
 		// Manual update control: these tests build up state across several `accept()` calls and only
 		// want the detector to see it once, at the explicit `observer.update()` below.
 		autoUpdateOnCallUpdate: false,
-		observerDetectors: null,
-		callDetectors: null,
+		// No isolation config needed: a fresh Observer starts with zero detectors, and nothing is
+		// created implicitly, so only the detector each test builds itself can raise.
 	});
 }
 
-describe('ConcurrentIssueDetector at observer scope', () => {
+describe('ObserverConcurrentIssueDetector', () => {
 	it('raises CROSS_CALL_ISSUE_ONSET_BURST when congestion opens in several independent calls', () => {
 		const observer = newObserver();
 		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new ConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
+		const detector = new ObserverConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
 
 		observer.detectors.add(detector);
 
@@ -66,7 +72,7 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 		observer.update();
 		detector.update();
 
-		const issue = issues.find((i) => i.type === ConcurrentIssueTypes.crossCallIssueOnsetBurst);
+		const issue = issues.find((i) => i.type === ObserverConcurrentIssueTypes.crossCallIssueOnsetBurst);
 
 		expect(issue).toBeDefined();
 
@@ -90,12 +96,12 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new ConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
+		const detector = new ObserverConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
 
 		observer.detectors.add(detector);
 
-		// Same three congested clients, but all in one meeting — a local explanation exists, and the
-		// call-scoped detector already reports it.
+		// Same three congested clients, but all in one meeting — one call can never satisfy
+		// `minAffectedCalls` (default 2), and the call-scoped detector already reports this locally.
 		for (const n of [ 1, 2, 3 ]) {
 			observer.accept(sample('call-a', `a${n}`, 1000, [ raise('congestion', `a${n}-c`, 1000) ]));
 		}
@@ -114,12 +120,13 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new ConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
+		const detector = new ObserverConcurrentIssueDetector(observer, defaultObserverDetectorsConfig.concurrentIssueDetector);
 
 		observer.detectors.add(detector);
 
-		// 3 congested clients out of 30 = a 10% participant ratio, far below the 0.5 call-scope
-		// threshold. Applying that threshold here would hide every real fleet event.
+		// 3 congested clients out of 30 = a 10% participant ratio. Observer scope has no participant
+		// ratio gate (only `affectedCallRatioThreshold`, default 0 / off) — applying a call-scope-sized
+		// ratio here would hide every real fleet event.
 		for (const callId of [ 'call-a', 'call-b', 'call-c' ]) {
 			observer.accept(sample(callId, `${callId}-1`, 1000, [ raise('congestion', `${callId}-c`, 1000) ]));
 			for (let n = 2; n <= 10; n++) observer.accept(sample(callId, `${callId}-${n}`, 1000));
@@ -127,7 +134,7 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 		observer.update();
 		detector.update();
 
-		const issue = issues.find((i) => i.type === ConcurrentIssueTypes.crossCallIssueOnsetBurst);
+		const issue = issues.find((i) => i.type === ObserverConcurrentIssueTypes.crossCallIssueOnsetBurst);
 
 		expect(issue).toBeDefined();
 		expect(payloadOf(issue!).affectedRatio).toBeLessThan(0.5);
@@ -141,7 +148,7 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, minAffectedCalls: 4 });
+		const detector = new ObserverConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, minAffectedCalls: 4 });
 
 		observer.detectors.add(detector);
 
@@ -155,8 +162,10 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 
 		observer.close();
 	});
+});
 
-	it('call scope keeps its own types and its participant-ratio gate', () => {
+describe('CallConcurrentIssueDetector', () => {
+	it('keeps its own types and its participant-ratio gate', () => {
 		const observer = newObserver();
 		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
@@ -165,7 +174,7 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 		observer.accept(sample('call-a', 'a1', 1000));
 
 		const call = observer.getObservedCall('call-a')!;
-		const detector = new ConcurrentIssueDetector(call, defaultCallDetectorsConfig.concurrentIssueDetector);
+		const detector = new CallConcurrentIssueDetector(call, defaultCallDetectorsConfig.concurrentIssueDetector);
 
 		call.detectors.add(detector);
 
@@ -175,7 +184,7 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 		call.update();
 		detector.update();
 
-		const issue = issues.find((i) => i.type === ConcurrentIssueTypes.issueOnsetBurst);
+		const issue = issues.find((i) => i.type === CallConcurrentIssueTypes.issueOnsetBurst);
 
 		expect(issue).toBeDefined();
 
@@ -188,9 +197,8 @@ describe('ConcurrentIssueDetector at observer scope', () => {
 	});
 });
 
-describe('concludeFrom', () => {
+describe('concludeObserverIssue', () => {
 	const base = {
-		scope: 'observer' as const,
 		affectedClients: 6,
 		totalClients: 60,
 		affectedCalls: 6,
@@ -199,7 +207,7 @@ describe('concludeFrom', () => {
 	};
 
 	it('blames the infrastructure for congestion spread across calls', () => {
-		const conclusion = concludeFrom({ ...base, issueType: 'congestion' });
+		const conclusion = concludeObserverIssue({ ...base, issueType: 'congestion' });
 
 		expect(conclusion.faultDomain).toBe('infrastructure');
 		expect(conclusion.summary).toContain('6 of 40 calls');
@@ -209,25 +217,41 @@ describe('concludeFrom', () => {
 	// The nuance worth having: breadth does not always mean "the server". CPU is owned by the
 	// endpoint, so the same spread points at what those endpoints share instead.
 	it('blames the client population, not the servers, for CPU limitation spread across calls', () => {
-		const conclusion = concludeFrom({ ...base, issueType: 'cpu-limitation' });
+		const conclusion = concludeObserverIssue({ ...base, issueType: 'cpu-limitation' });
 
 		expect(conclusion.faultDomain).toBe('client-population');
 		expect(conclusion.recommendation).toMatch(/client release|browser|hardware/i);
 	});
 
 	it('blames connectivity infrastructure for ICE issues spread across calls', () => {
-		expect(concludeFrom({ ...base, issueType: 'ice-disconnected' }).recommendation)
+		expect(concludeObserverIssue({ ...base, issueType: 'ice-disconnected' }).recommendation)
 			.toMatch(/TURN|reachability/i);
 	});
 
-	it('attributes a track-scoped cohort to the published track', () => {
-		const conclusion = concludeFrom({
+	it('falls back cleanly for an issue type it has never heard of', () => {
+		const conclusion = concludeObserverIssue({ ...base, issueType: 'my-custom-app-issue' });
+
+		expect(conclusion.faultDomain).toBe('infrastructure');
+		expect(conclusion.summary).toContain('my-custom-app-issue');
+		expect(conclusion.summary).toContain('independent calls');
+	});
+
+	// A single affected call is not a fleet finding, whatever the client count says: it has an
+	// obvious local explanation and the call-scoped detector has already reported it.
+	it('refuses to call a single-call spread an infrastructure problem', () => {
+		const conclusion = concludeObserverIssue({ ...base, affectedCalls: 1, issueType: 'congestion' });
+
+		expect(conclusion.faultDomain).toBe('call');
+		expect(conclusion.summary).toMatch(/single call/i);
+	});
+});
+
+describe('concludeCallIssue', () => {
+	it('attributes a track-scoped group to the published track', () => {
+		const conclusion = concludeCallIssue({
 			issueType: 'audio-concealment',
-			scope: 'call',
 			affectedClients: 4,
 			totalClients: 5,
-			affectedCalls: 1,
-			totalCalls: 1,
 			onsetBurst: false,
 			publishedTrackId: 'track-1',
 		});
@@ -237,22 +261,23 @@ describe('concludeFrom', () => {
 		expect(conclusion.recommendation).toMatch(/uplink|forwarding/i);
 	});
 
-	it('falls back cleanly for an issue type it has never heard of', () => {
-		const conclusion = concludeFrom({ ...base, issueType: 'my-custom-app-issue' });
+	it('attributes a call-wide group to the call', () => {
+		const conclusion = concludeCallIssue({
+			issueType: 'congestion',
+			affectedClients: 5,
+			totalClients: 8,
+			onsetBurst: true,
+		});
 
-		expect(conclusion.faultDomain).toBe('infrastructure');
-		expect(conclusion.summary).toContain('my-custom-app-issue');
-		expect(conclusion.summary).toContain('independent calls');
+		expect(conclusion.faultDomain).toBe('call');
+		expect(conclusion.summary).toMatch(/call/i);
 	});
 
 	it('attributes a lone client to its own endpoint', () => {
-		const conclusion = concludeFrom({
+		const conclusion = concludeCallIssue({
 			issueType: 'congestion',
-			scope: 'call',
 			affectedClients: 1,
 			totalClients: 8,
-			affectedCalls: 1,
-			totalCalls: 1,
 			onsetBurst: false,
 		});
 

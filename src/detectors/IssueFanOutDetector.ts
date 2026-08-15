@@ -3,8 +3,7 @@ import type { ObservedCall } from '../ObservedCall';
 import type { ObservedOutboundTrack } from '../ObservedOutboundTrack';
 import type { ActiveClientIssue } from '../issues/ActiveClientIssue';
 import type { ActiveIssueTracker } from '../issues/ActiveIssueTracker';
-import { ANY_ISSUE_TYPE } from '../issues/ActiveIssuesRegistry';
-import { concludeFrom } from './IssueConclusion';
+import { concludeCallIssue } from './IssueConclusion';
 
 export const IssueFanOutTypes = {
 	/** Most receivers of one published track have the same issue open → the fault follows the source. */
@@ -16,7 +15,15 @@ export const IssueFanOutTypes = {
 
 export type IssueFanOutDetectorConfig = {
 
-	/** Only consider these issue types. Empty (default) = every type the receivers report. */
+	/**
+	 * The receiver-side issue types to attribute to publishers. **Required, and must not be empty** —
+	 * the detector subscribes to exactly these.
+	 *
+	 * There is no "all types" option. Which of a receiver's complaints are worth blaming a publisher
+	 * for is application knowledge: `freezed-video-track` fanning out across a track's subscribers
+	 * implicates the source, `cpulimitation` fanning out the same way implicates the receivers'
+	 * hardware and would be a false accusation.
+	 */
 	issueTypes: string[];
 
 	/** Minimum receivers of the track before a ratio is meaningful. Default `3`. */
@@ -89,9 +96,7 @@ export class IssueFanOutDetector implements Detector, ActiveIssueTracker {
 			...config,
 		};
 
-		const subscribeTo = 0 < this._config.issueTypes.length ? this._config.issueTypes : [ ANY_ISSUE_TYPE ];
-
-		for (const type of subscribeTo) {
+		for (const type of this._config.issueTypes) {
 			this._call.activeIssuesRegistry.addIssueTracker(type, this);
 		}
 	}
@@ -175,13 +180,10 @@ export class IssueFanOutDetector implements Detector, ActiveIssueTracker {
 
 				// What the fan-out implies. A track-scoped group is a strong statement: the affected
 				// clients share a publisher and nothing else, so the receivers are exonerated.
-				const conclusion = concludeFrom({
+				const conclusion = concludeCallIssue({
 					issueType,
-					scope: 'call',
 					affectedClients: clientIds.size,
 					totalClients: numberOfReceivers,
-					affectedCalls: 1,
-					totalCalls: 1,
 					onsetBurst: false,
 					publishedTrackId: isFanOut ? publisher.id : undefined,
 				});

@@ -70,15 +70,15 @@ export type {
 	ClientHealth,
 	ClientHealthThresholds,
 } from './utils/CallHealthAggregator';
-// Detector auto-creation: `ObserverConfig.observerDetectors` / `.callDetectors` build these on
-// construction. Each slot is `undefined` (defaults), an object (overrides), or `null` (don't create).
-export { OBSERVER_SCOPE_DETECTOR_NAMES, CALL_SCOPE_DETECTOR_NAMES } from './Observer';
-export type { DetectorSlot } from './Observer';
+// Detectors are never created implicitly. Register observer-scoped ones with
+// `observer.addObserverDetector(name, config)` and call-scoped ones with
+// `observer.addCallDetector(name, config)` (stored in `observer.callDetectorConfigs`, applied to
+// every call the observer creates) or `observedCall.addDetector(name, config)` for one call.
 // Issue-driven correlation: the client reports WHAT is wrong for itself, the observer correlates
 // WHO ELSE is in the same state and WHERE in publisher -> SFU -> subscriber the fault sits.
 // Issues are PUSHED to whoever registered for them rather than scanned for; a detector implements
 // `ActiveIssueTracker` and is fed the types it consumes.
-export { ActiveIssuesRegistry, ANY_ISSUE_TYPE } from './issues/ActiveIssuesRegistry';
+export { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
 export { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
 export type { ActiveIssueTracker } from './issues/ActiveIssueTracker';
 export {
@@ -91,16 +91,50 @@ export type { ActiveClientIssue, ResolvedActiveClientIssue } from './issues/Acti
 // delivered to an in-process handler, so its payload is the object itself — no stringify/parse.
 export { issuePayloadOf, issuePayloadAsString } from './common/ObserverIssue';
 export type { ObserverIssue } from './common/ObserverIssue';
+// "Is this meeting in trouble?" and "is our infrastructure in trouble?" are separate detectors with
+// separate gates and separate findings — not one detector branching on what it was handed.
 export {
-	ConcurrentIssueDetector,
-	ConcurrentIssueTypes,
-} from './detectors/ConcurrentIssueDetector';
-export type { ConcurrentIssueDetectorConfig, ConcurrentIssueGroup } from './detectors/ConcurrentIssueDetector';
+	CallConcurrentIssueDetector,
+	CallConcurrentIssueTypes,
+} from './detectors/CallConcurrentIssueDetector';
+export type {
+	CallConcurrentIssueDetectorConfig,
+	CallConcurrentIssueGroup,
+} from './detectors/CallConcurrentIssueDetector';
+export {
+	ObserverConcurrentIssueDetector,
+	ObserverConcurrentIssueTypes,
+} from './detectors/ObserverConcurrentIssueDetector';
+export type {
+	ObserverConcurrentIssueDetectorConfig,
+	ObserverConcurrentIssueGroup,
+} from './detectors/ObserverConcurrentIssueDetector';
 export {
 	IssueFanOutDetector,
 	IssueFanOutTypes,
 } from './detectors/IssueFanOutDetector';
 export type { IssueFanOutDetectorConfig } from './detectors/IssueFanOutDetector';
+// Both ends of one published track complaining at once — the source is implicated, not inferred.
+export {
+	PublisherFaultCorroborationDetector,
+	PublisherFaultTypes,
+} from './detectors/PublisherFaultCorroborationDetector';
+export type {
+	PublisherFaultCorroborationDetectorConfig,
+	CorroboratedPublisherFault,
+} from './detectors/PublisherFaultCorroborationDetector';
+// The one correlation that is neither per-call nor per-server: an issue concentrated on one browser,
+// one browser version or one OS. Endpoint symptoms spread across unrelated calls implicate the
+// clients, not the SFU.
+export {
+	ClientPopulationIssueDetector,
+	ClientPopulationIssueTypes,
+} from './detectors/ClientPopulationIssueDetector';
+export type {
+	ClientPopulationIssueDetectorConfig,
+	ClientPopulationAxis,
+	ClientPopulation,
+} from './detectors/ClientPopulationIssueDetector';
 export {
 	SfuCongestionDetector,
 } from './detectors/SfuCongestionDetector';
@@ -130,14 +164,14 @@ export {
 	UnconsumedTrackTypes,
 } from './detectors/UnconsumedTrackDetector';
 export type { UnconsumedTrackDetectorConfig } from './detectors/UnconsumedTrackDetector';
-// `IceDisruptionDetector` reads ICE state *transitions* rather than quality metrics, so no client
-// issue replaces it: it is the fallback for clients without issue reporting, and the only detector
-// that catches flaps occurring between two `update()` ticks.
-export {
-	IceDisruptionDetector,
-	IceDisruptionTypes,
-} from './detectors/IceDisruptionDetector';
-export type { IceDisruptionDetectorConfig } from './detectors/IceDisruptionDetector';
+// NOTE there is no ICE detector here. ICE trouble is reported by client-monitor-js >= 4.6.0 as the
+// keyed issues `ice-disconnected` / `ice-connection-failed` / `ice-transport-stalled` /
+// `unstable-ice-path`, with hysteresis behind each verdict. Correlating them is a matter of config,
+// not of another class:
+//
+//   observer.addObserverDetector('observer-concurrent-issue-detector', {
+//     issueTypes: [ 'ice-disconnected', 'ice-connection-failed', 'ice-transport-stalled' ],
+//   });
 // Validators: one-shot structural checks. A detector answers "is something wrong right now?" and runs
 // forever; a validator answers "is this deployment built correctly?", reports once, and is dropped.
 // Start one with `observer.addValidator(name, config)`.
@@ -152,9 +186,32 @@ export type {
 	SimulcastReceiverReportPayload,
 	SimulcastReceiverEvidence,
 } from './validators/SimulcastReceiverValidator';
+export {
+	RemoteTrackResolverValidator,
+	UNRESOLVED_TRACK_LINKS_ISSUE,
+} from './validators/RemoteTrackResolverValidator';
+export type {
+	RemoteTrackResolverValidatorConfig,
+	RemoteTrackResolverReportPayload,
+	RemoteTrackLinkEvidence,
+} from './validators/RemoteTrackResolverValidator';
+export {
+	CodecConsistencyValidator,
+	CODEC_MISMATCH_ISSUE,
+} from './validators/CodecConsistencyValidator';
+export type {
+	CodecConsistencyValidatorConfig,
+	CodecConsistencyReportPayload,
+	CodecEvidence,
+} from './validators/CodecConsistencyValidator';
 // The interpretation layer: what a correlated cohort implies, and where to look.
-export { concludeFrom } from './detectors/IssueConclusion';
-export type { IssueConclusion, IssueFaultDomain, IssueSpread } from './detectors/IssueConclusion';
+export { concludeCallIssue, concludeObserverIssue } from './detectors/IssueConclusion';
+export type {
+	IssueConclusion,
+	IssueFaultDomain,
+	CallIssueSpread,
+	ObserverIssueSpread,
+} from './detectors/IssueConclusion';
 // Statistics helpers for building your own detectors.
 export {
 	percentile,

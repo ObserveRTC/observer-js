@@ -1,4 +1,6 @@
 import type { SimulcastReceiverValidator, SimulcastReceiverValidatorConfig } from './SimulcastReceiverValidator';
+import type { RemoteTrackResolverValidator, RemoteTrackResolverValidatorConfig } from './RemoteTrackResolverValidator';
+import type { CodecConsistencyValidator, CodecConsistencyValidatorConfig } from './CodecConsistencyValidator';
 
 /**
  * The validators `observer.addValidator(name, config)` knows how to build, and the config each takes.
@@ -10,6 +12,8 @@ import type { SimulcastReceiverValidator, SimulcastReceiverValidatorConfig } fro
  */
 export type AvailableValidatorConfigs = {
 	[SimulcastReceiverValidator.NAME]: SimulcastReceiverValidatorConfig,
+	[RemoteTrackResolverValidator.NAME]: RemoteTrackResolverValidatorConfig,
+	[CodecConsistencyValidator.NAME]: CodecConsistencyValidatorConfig,
 };
 
 /** A validator name that can be started. */

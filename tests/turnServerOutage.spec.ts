@@ -51,8 +51,6 @@ const directSample = (clientId: string, timestamp: number): ClientSample => make
 function newObserver() {
 	return new Observer({
 		autoUpdateOnCallUpdate: false,
-		observerDetectors: null,
-		callDetectors: null,
 	});
 }
 

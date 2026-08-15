@@ -15,14 +15,13 @@ import type { ObserverIssue } from './common/ObserverIssue';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
 import type { Detector } from './detectors/Detector';
 import { SfuCongestionDetector } from './detectors/SfuCongestionDetector';
-import { IceDisruptionDetector } from './detectors/IceDisruptionDetector';
-import { ConcurrentIssueDetector } from './detectors/ConcurrentIssueDetector';
+import { ObserverConcurrentIssueDetector } from './detectors/ObserverConcurrentIssueDetector';
+import { ClientPopulationIssueDetector } from './detectors/ClientPopulationIssueDetector';
 import { TurnServerHealthDetector } from './detectors/TurnServerHealthDetector';
 import { TurnServerOutageDetector } from './detectors/TurnServerOutageDetector';
-import { UnconsumedTrackDetector } from './detectors/UnconsumedTrackDetector';
-import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatchDetector';
-import { IssueFanOutDetector } from './detectors/IssueFanOutDetector';
 import { SimulcastReceiverValidator } from './validators/SimulcastReceiverValidator';
+import { RemoteTrackResolverValidator } from './validators/RemoteTrackResolverValidator';
+import { CodecConsistencyValidator } from './validators/CodecConsistencyValidator';
 
 const logger = createLogger('Observer');
 
@@ -110,78 +109,7 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	 */
 	createRemoteTrackResolver?: RemoteTrackResolverFactory,
 
-	/**
-	 * Observer-scoped detectors — those reasoning **across calls** — created on construction.
-	 *
-	 * Each key follows {@link DetectorSlot}: omitted → created with its defaults, an object → those
-	 * keys merged over the defaults, `null` → not created. Omitting the whole property creates all of
-	 * them; set it to `null` to run with no observer-scoped detectors at all.
-	 *
-	 * ```ts
-	 * new Observer({
-	 *   observerDetectors: {
-	 *     'turn-server-outage-detector': { minClientsAtPeak: 10 },
-	 *     'concurrent-issue-detector': null,
-	 *   },
-	 * });
-	 * ```
-	 */
-	observerDetectors?: {
-		[K in keyof AvailableObserverScopeDetectorsConfigs]?: DetectorSlot<AvailableObserverScopeDetectorsConfigs[K]>;
-	} | null
-
-	/**
-	 * Call-scoped detectors, applied to **every call** this observer creates. Same three-state
-	 * semantics as `observerDetectors`.
-	 */
-	callDetectors?: {
-		[K in keyof AvailableCallScopeDetectorsConfigs]?: DetectorSlot<AvailableCallScopeDetectorsConfigs[K]>;
-	} | null
-
 }
-
-/**
- * Per-detector configuration slot.
- *
- * Three states, and the distinction between the last two is the point:
- *
- * - **omitted / `undefined`** — the detector is created with its own defaults.
- * - **an object** — created with those keys merged over its defaults.
- * - **`null`** — *not created at all*.
- *
- * This mirrors `client-monitor-js` deliberately: the same mental model should apply on both sides of
- * the wire. `undefined` cannot mean "off", because that would make every detector opt-in and the
- * common case (`new Observer()`) would silently detect nothing.
- *
- * Each detector owns its own defaults, in its constructor, next to the doc that explains what the
- * threshold means. Read them there.
- */
-export type DetectorSlot<T> = Partial<T> | null;
-
-/**
- * Every observer-scoped detector, in creation order.
- *
- * Listed explicitly rather than derived from a type, because the three-state slot semantics need to
- * iterate the *complete* set — including the keys the caller never mentioned, which is exactly the
- * set a `Object.entries(config)` loop cannot see. Adding a detector without adding it here means it
- * is never created by default, so the compiler is made to care: the array is typed as the full key
- * set, and a missing entry fails to type-check.
- */
-export const OBSERVER_SCOPE_DETECTOR_NAMES: readonly (keyof AvailableObserverScopeDetectorsConfigs)[] = [
-	SfuCongestionDetector.NAME,
-	IceDisruptionDetector.NAME,
-	ConcurrentIssueDetector.NAME,
-	TurnServerHealthDetector.NAME,
-	TurnServerOutageDetector.NAME,
-];
-
-/** Every call-scoped detector, created for each call. See {@link OBSERVER_SCOPE_DETECTOR_NAMES}. */
-export const CALL_SCOPE_DETECTOR_NAMES: readonly (keyof AvailableCallScopeDetectorsConfigs)[] = [
-	UnconsumedTrackDetector.NAME,
-	TrackDeliveryMismatchDetector.NAME,
-	ConcurrentIssueDetector.NAME,
-	IssueFanOutDetector.NAME,
-];
 
 export declare interface Observer {
 	on<U extends keyof ObserverEvents>(event: U, listener: (...args: ObserverEvents[U]) => void): this;
@@ -233,9 +161,30 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	 * findings with `observer.addIssue(...)`, surfaced on the bus as `observer-issue`.
 	 * (For findings within a single call use `observedCall.detectors`.)
 	 *
-	 * Populated from `config.detectors` at construction; add your own with `detectors.add(...)`.
+	 * Starts **empty**. Populate it with {@link addObserverDetector}, or `detectors.add(...)` for an
+	 * instance you built yourself.
 	 */
 	public readonly detectors = new Detectors();
+
+	/**
+	 * The call-scoped detectors to build on **every** call this observer creates, in registration
+	 * order. Written by {@link addCallDetector}; read by `createObservedCall`.
+	 *
+	 * Nothing is created implicitly. There is no detector configuration in `ObserverConfig` and no
+	 * default set, because a detector that nobody asked for is a detector nobody will act on: it costs
+	 * time on every tick and raises findings into a handler that was not written to expect them. An
+	 * application says what it wants to watch, or it watches nothing.
+	 *
+	 * ```ts
+	 * observer.addCallDetector('call-concurrent-issue-detector', {
+	 *   issueTypes: [ 'congestion', 'ice-disconnected' ],
+	 * });
+	 * ```
+	 */
+	public readonly callDetectorConfigs = new Map<
+	keyof AvailableCallScopeDetectorsConfigs,
+	Partial<AvailableCallScopeDetectorsConfigs[keyof AvailableCallScopeDetectorsConfigs]>
+	>();
 
 	public constructor(config: Partial<ObserverConfig<AppData>> = {}) {
 		super();
@@ -250,17 +199,6 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			...config,
 		};
 
-		if (this.config.observerDetectors !== null) {
-			const slots = this.config.observerDetectors ?? {};
-
-			for (const name of OBSERVER_SCOPE_DETECTOR_NAMES) {
-				const slot = slots[name];
-
-				if (slot === null) continue;
-
-				this.addObserverDetector(name, slot ?? {});
-			}
-		}
 	}
 
 	public get numberOfCalls() {
@@ -282,13 +220,13 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 
 				break;
 			}
-			case IceDisruptionDetector.NAME: {
-				detector = new IceDisruptionDetector(this, config);
+			case ObserverConcurrentIssueDetector.NAME: {
+				detector = new ObserverConcurrentIssueDetector(this, config);
 
 				break;
 			}
-			case ConcurrentIssueDetector.NAME: {
-				detector = new ConcurrentIssueDetector(this, config);
+			case ClientPopulationIssueDetector.NAME: {
+				detector = new ClientPopulationIssueDetector(this, config);
 
 				break;
 			}
@@ -322,11 +260,14 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public addCallDetector<K extends keyof AvailableCallScopeDetectorsConfigs>(name: K, config: Partial<AvailableCallScopeDetectorsConfigs[K]> = {}): this {
 		if (this.closed) return this;
 
-		// `null` means "no call detectors at all", and naming one is an explicit reversal of that —
-		// so start from an empty set rather than silently doing nothing.
-		if (!this.config.callDetectors) this.config.callDetectors = {};
+		this.callDetectorConfigs.set(name, config);
 
-		this.config.callDetectors[name] = config;
+		return this;
+	}
+
+	/** Stop building `name` on calls created from now on. Calls already open are untouched. */
+	public removeCallDetector(name: keyof AvailableCallScopeDetectorsConfigs): this {
+		this.callDetectorConfigs.delete(name);
 
 		return this;
 	}
@@ -355,6 +296,12 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		switch (name) {
 			case SimulcastReceiverValidator.NAME:
 				validator = new SimulcastReceiverValidator(this, onDone, config);
+				break;
+			case RemoteTrackResolverValidator.NAME:
+				validator = new RemoteTrackResolverValidator(this, onDone, config);
+				break;
+			case CodecConsistencyValidator.NAME:
+				validator = new CodecConsistencyValidator(this, onDone, config);
 				break;
 		}
 
@@ -406,16 +353,10 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		// Build the call's track resolver from the configured factory (if any).
 		observedCall.remoteTrackResolver = this.config.createRemoteTrackResolver?.(observedCall);
 
-		if (this.config.callDetectors !== null) {
-			const slots = this.config.callDetectors ?? {};
-
-			for (const name of CALL_SCOPE_DETECTOR_NAMES) {
-				const detectorConfig = slots[name];
-
-				if (detectorConfig === null) continue;
-
-				observedCall.addDetector(name, detectorConfig ?? {});
-			}
+		// Exactly what the application registered, in registration order. Nothing is created
+		// implicitly: a call with no configured detectors runs none.
+		for (const [ name, detectorConfig ] of this.callDetectorConfigs) {
+			observedCall.addDetector(name, detectorConfig);
 		}
 
 		// A call is updated when any of its clients is; the observer is updated when any of its calls

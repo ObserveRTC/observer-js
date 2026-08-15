@@ -16,8 +16,9 @@ import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistr
 import { Detector } from './detectors/Detector';
 import { UnconsumedTrackDetector } from './detectors/UnconsumedTrackDetector';
 import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatchDetector';
-import { ConcurrentIssueDetector } from './detectors/ConcurrentIssueDetector';
+import { CallConcurrentIssueDetector } from './detectors/CallConcurrentIssueDetector';
 import { IssueFanOutDetector } from './detectors/IssueFanOutDetector';
+import { PublisherFaultCorroborationDetector } from './detectors/PublisherFaultCorroborationDetector';
 
 const logger = createLogger('ObservedCall');
 
@@ -144,12 +145,16 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 				detector = new TrackDeliveryMismatchDetector(this, config);
 				break;
 			}
-			case ConcurrentIssueDetector.NAME: {
-				detector = new ConcurrentIssueDetector(this, config);
+			case CallConcurrentIssueDetector.NAME: {
+				detector = new CallConcurrentIssueDetector(this, config);
 				break;
 			}
 			case IssueFanOutDetector.NAME: {
 				detector = new IssueFanOutDetector(this, config);
+				break;
+			}
+			case PublisherFaultCorroborationDetector.NAME: {
+				detector = new PublisherFaultCorroborationDetector(this, config);
 				break;
 			}
 			default: {

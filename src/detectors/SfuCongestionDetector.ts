@@ -293,15 +293,6 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 		const baselineMedian = median(baselineRatios) ?? 0;
 		const robustZ = robustZScore(candidate.congestedClientRatio, baselineRatios) ?? 0;
 		const absoluteIncrease = candidate.congestedClientRatio - baselineMedian;
-
-		// A zero baseline is the common healthy case, not an anomaly — most fleets report no
-		// congestion most of the time. `candidate / 0` is `Infinity`, which passes any finite
-		// `minRelativeRatioIncrease` unconditionally, so the relative test would contribute nothing
-		// exactly when the baseline is cleanest. That is not wrong (a jump from nothing IS unbounded),
-		// but it must not be the *only* thing standing between one client and a page: the absolute
-		// increase and `minAffectedClients` are what carry the decision here, and they are checked
-		// below regardless. `Infinity` is reported as-is so the payload doesn't claim a finite ratio
-		// that was never computed.
 		const relativeIncrease = 0 < baselineMedian
 			? candidate.congestedClientRatio / baselineMedian
 			: (0 < candidate.congestedClientRatio ? Infinity : 0);

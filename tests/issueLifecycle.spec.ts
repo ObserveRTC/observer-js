@@ -1,6 +1,7 @@
 import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
-import { ConcurrentIssueDetector, ConcurrentIssueTypes, ConcurrentIssueDetectorConfig } from '../src/detectors/ConcurrentIssueDetector';
+import { CallConcurrentIssueDetector, CallConcurrentIssueTypes, CallConcurrentIssueDetectorConfig } from '../src/detectors/CallConcurrentIssueDetector';
+import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueTypes, ObserverConcurrentIssueDetectorConfig } from '../src/detectors/ObserverConcurrentIssueDetector';
 import { IssueFanOutDetector, IssueFanOutTypes, IssueFanOutDetectorConfig } from '../src/detectors/IssueFanOutDetector';
 import type { ResolvedActiveClientIssue } from '../src/issues/ActiveClientIssue';
 import { makeSample } from './helpers/samples';
@@ -8,16 +9,18 @@ import { payloadOf } from './helpers/issues';
 
 // Each detector fills in its own defaults for whatever a partial config omits, so an empty object is
 // a valid "defaults" placeholder here — there is no exported default-config constant to import any
-// more; each detector owns its defaults, in its own constructor.
-const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
+// more; each detector owns its defaults, in its own constructor. `issueTypes` is required though —
+// the old wildcard subscription is gone, so every construction below names the types it raises,
+// either here or at the call site via a spread override.
+const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ObserverConcurrentIssueDetectorConfig> } = {
 	concurrentIssueDetector: {},
 };
 const defaultCallDetectorsConfig: {
-	concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig>,
+	concurrentIssueDetector: Partial<CallConcurrentIssueDetectorConfig>,
 	issueFanOutDetector: Partial<IssueFanOutDetectorConfig>,
 } = {
 	concurrentIssueDetector: {},
-	issueFanOutDetector: {},
+	issueFanOutDetector: { issueTypes: [ 'freezed-video-track' ] },
 };
 
 const PRODUCER = 'P';
@@ -42,10 +45,8 @@ function newObserver() {
 		// Manual update control: the ratio gates these detectors apply can cross threshold on a
 		// partial accept sequence, and an automatic per-sample update would raise on that partial state.
 		autoUpdateOnCallUpdate: false,
-		// Isolate the detector under test: without this the auto-created built-ins would raise
-		// their own findings and the assertions below could not attribute an issue to one detector.
-		observerDetectors: null,
-		callDetectors: null,
+		// No isolation config needed: a fresh Observer starts with zero detectors — nothing is
+		// created implicitly, so only what a test explicitly registers can raise.
 	});
 }
 
@@ -160,7 +161,7 @@ describe('ActiveIssuesRegistry', () => {
 	});
 });
 
-describe('ConcurrentIssueDetector', () => {
+describe('CallConcurrentIssueDetector', () => {
 	it('raises ISSUE_ONSET_BURST when clients degrade together', () => {
 		const observer = newObserver();
 		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
@@ -171,7 +172,7 @@ describe('ConcurrentIssueDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new ConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'ice-disconnected' ] }));
+		call.detectors.add(new CallConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'ice-disconnected' ] }));
 
 		for (const id of [ 'B', 'C', 'D' ]) {
 			observer.accept(issueSample(id, 2000, [ raise('ice-disconnected', `k-${id}`, {}, 2000) ]));
@@ -179,7 +180,7 @@ describe('ConcurrentIssueDetector', () => {
 		call.update();
 
 		expect(issues).toHaveLength(1);
-		expect(issues[0].type).toBe(ConcurrentIssueTypes.issueOnsetBurst);
+		expect(issues[0].type).toBe(CallConcurrentIssueTypes.issueOnsetBurst);
 
 		const payload = payloadOf(issues[0]);
 
@@ -201,7 +202,7 @@ describe('ConcurrentIssueDetector', () => {
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(makeSample({ clientId: id, timestamp: 1000 }));
 
 		const call = observer.getObservedCall('call-1')!;
-		const detector = new ConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ], cooldownMs: 0 });
+		const detector = new CallConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ], cooldownMs: 0 });
 
 		call.detectors.add(detector);
 
@@ -217,7 +218,9 @@ describe('ConcurrentIssueDetector', () => {
 
 		observer.close();
 	});
+});
 
+describe('ObserverConcurrentIssueDetector', () => {
 	it('works at observer scope across calls', () => {
 		const observer = newObserver();
 		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
@@ -226,7 +229,7 @@ describe('ConcurrentIssueDetector', () => {
 
 		// The detector is fed by subscribing to the registry (push, not poll), so it must be in place
 		// before the issues open — an issue already active when a tracker subscribes is never replayed.
-		observer.detectors.add(new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ] }));
+		observer.detectors.add(new ObserverConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ] }));
 
 		for (const [ callId, clientId ] of [ [ 'call-a', 'a1' ], [ 'call-b', 'b1' ], [ 'call-c', 'c1' ] ]) {
 			observer.accept({

@@ -53,7 +53,7 @@ and emits a single, unified stream of typed events the application can react to.
 3. [Data flow](#data-flow)
 4. [Entity hierarchy](#entity-hierarchy)
 5. [Ingestion: `accept()`, context & lifecycle](#ingestion-accept-context--lifecycle)
-6. [Update policies](#update-policies)
+6. [When things update](#when-things-update)
 7. [The event bus](#the-event-bus) ← the core of the API
 8. [API reference](#api-reference)
 9. [Schema types (`ClientSample`)](#schema-types-clientsample)
@@ -104,10 +104,9 @@ import { Observer, ClientSample } from '@observertc/observer-js';
 
 // 1. Create an observer.
 const observer = new Observer({
-  // when the observer aggregates call/client metrics:
-  updatePolicy: 'update-when-all-call-updated',
-  // default policy applied to calls created automatically by accept():
-  defaultCallUpdatePolicy: 'update-on-any-client-updated',
+  // a call updates when any of its clients does, and the observer when any of its calls does —
+  // both default to true, so this line is only here to show the knob exists:
+  autoUpdateOnCallUpdate: true,
   // optional auto-teardown:
   closeCallIfEmptyForMs: 20_000,
   closeClientIfIdleForMs: 60_000,
@@ -291,30 +290,38 @@ These return `undefined` (and warn) when the parent is closed; `createObservedCa
 
 ---
 
-## Update policies
+## When things update
 
-"Update" means *recompute aggregated metrics and emit the `*-updated` event* at that level.
-Both the observer and each call have a configurable trigger. Updates are **event-driven** — there
-is no built-in timer. An app that wants a fixed cadence can call `observer.update()` /
-`call.update()` from its own `setInterval`. With `'none'`, **nothing auto-updates** — the level
-updates only when the application calls the public `update()` itself.
+"Update" means *recompute aggregated metrics, run the detectors, and emit the `*-updated` event* at
+that level. Updates are **event-driven** — there is no built-in timer.
 
-**Observer-level** (`ObserverConfig.updatePolicy`, default `update-when-all-call-updated`):
+The rule is structural rather than configurable:
 
-| Policy | Triggers `observer.update()` when… |
-|--------|-------------------------------------|
-| `update-on-any-call-updated` | any call updates |
-| `update-when-all-call-updated` | every call has updated since the last observer update |
-| `none` | never automatically — only when the app calls `observer.update()` |
+> **A call is updated when any of its clients is updated. The observer is updated when any of its
+> calls is updated.** Composed, that means the observer is updated exactly when any client anywhere
+> is updated.
 
-**Call-level** (`ObservedCallSettings.updatePolicy`, defaulted from
-`ObserverConfig.defaultCallUpdatePolicy`):
+Two booleans, both defaulting to `true`, let you opt out of a link in that chain:
 
-| Policy | Triggers `call.update()` when… |
-|--------|--------------------------------|
-| `update-on-any-client-updated` | any client in the call updates |
-| `update-when-all-client-updated` | every client has updated since the last call update |
-| `none` | never automatically — only when the app calls `call.update()` |
+| Setting | Where | Effect when `false` |
+|---------|-------|---------------------|
+| `autoUpdateOnClientUpdate` | `ObservedCallSettings` | the call updates only when you call `call.update()` |
+| `autoUpdateOnCallUpdate` | `ObserverConfig` | the observer updates only when you call `observer.update()` |
+
+An app that wants a fixed cadence sets both to `false` and drives `observer.update()` from its own
+`setInterval`. Note that **observer-scoped detectors and validators run nowhere else** — if the
+observer never updates, they never run.
+
+```ts
+const observer = new Observer({ autoUpdateOnCallUpdate: false });
+
+setInterval(() => observer.update(), 5_000);
+```
+
+> Earlier versions had an `updatePolicy` / `defaultCallUpdatePolicy` enum (`'update-on-any-…'`,
+> `'update-when-all-…'`, `'none'`) and a pluggable `Updater` object. Both are gone. "When all clients
+> have updated" sounds appealing and deadlocks on the first client that stops sending — one silent
+> participant froze the whole call's aggregation until it timed out.
 
 ---
 
@@ -333,7 +340,7 @@ contains the ancestry from the observer down to the entity that raised it, plus 
 specific subject:
 
 ```ts
-type ObserverEventBase            = { observer: Observer };
+type ObserverEventBase            = { observer: Observer, context?: AcceptContext };
 type ObservedCallScope            = ObserverEventBase            & { observedCall: ObservedCall };
 type ObservedClientScope          = ObservedCallScope            & { observedClient: ObservedClient };
 type ObservedPeerConnectionScope  = ObservedClientScope          & { observedPeerConnection: ObservedPeerConnection };
@@ -359,10 +366,11 @@ additional field(s) on top of that scope.
 
 | Event | Extra payload | Fires when |
 |-------|---------------|-----------|
-| `observer-updated` | — | `observer.update()` ran (per the observer update policy) |
+| `observer-updated` | — | `observer.update()` ran (see [When things update](#when-things-update)) |
 | `observer-closed` | — | `observer.close()` |
 | `sample-rejected` | `{ reason: 'observer-closed' \| 'missing-callId' \| 'missing-clientId', sample: ClientSample }` | a sample was dropped by `accept()` |
-| `observer-issue` | `{ issue: ClientIssue }` | `observer.addIssue(...)` — a cross-call / SFU-wide finding (see [observer-level detectors](#observer-level-detectors-cross-call--sfu-wide)) |
+| `observer-issue` | `{ issue: ObserverIssue }` | `observer.addIssue(...)` — a cross-call / SFU-wide finding (see [observer-level detectors](#observer-level-detectors-cross-call--sfu-wide)) |
+| `validation-ready` | `{ validator: string, report: ValidationReport }` | a [validator](#validators--one-shot-structural-checks) settled — fires once per check, not per tick |
 
 #### Mediasoup level — scope `{ observer, observedMediasoupRouter }`
 
@@ -383,7 +391,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `call-closed` | — | the call closed |
 | `call-empty` | — | last client left the call |
 | `call-not-empty` | — | first client joined a previously-empty call |
-| `call-issue` | `{ issue: ClientIssue }` | `call.addIssue(...)` (server-side detector finding) |
+| `call-issue` | `{ issue: ObserverIssue }` | `call.addIssue(...)` (server-side detector finding) |
 
 #### Client level — scope `{ observer, observedCall, observedClient }`
 
@@ -397,7 +405,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `client-left` | — | `CLIENT_LEFT` seen (or inferred on close) |
 | `client-rejoined` | `{ timestamp: number }` | a later `CLIENT_JOINED` after an earlier join |
 | `client-issue` | `{ issue: ClientIssue }` | a client-reported issue arrived, or `client.addIssue(...)`. A keyed issue also opens an entry in `observedClient.activeIssues` |
-| `client-issue-resolved` | `{ resolvedIssue: ResolvedClientIssue }` | a stateful issue ended — the client sent its `<type>-resolved` companion, or the observer force-closed it. Carries the finished interval (`durationInMs`, `resolvedBy`) — see [client issues](#client-issues-the-lifecycle-and-the-division-of-labour) |
+| `client-issue-resolved` | `{ resolvedIssue: ResolvedActiveClientIssue }` | a stateful issue ended — the client sent its `<type>-resolved` companion, or the observer force-closed it. Carries the finished interval (`durationInMs`, `resolvedBy`) — see [client issues](#client-issues-the-lifecycle-and-the-division-of-labour) |
 | `client-metadata` | `{ metaData: ClientMetaData }` | a client meta item arrived |
 | `client-extension-stats` | `{ extensionStats: ExtensionStat }` | an app-defined extension stat arrived |
 | `client-event` | `{ event: ClientEvent }` | any client event was processed |
@@ -450,8 +458,8 @@ listen to them, but prefer the bus equivalents above for application logic.
 new Observer<AppData>(config?: ObserverConfig<AppData>)
 
 type ObserverConfig<AppData = Record<string, unknown>> = {
-    updatePolicy?: 'update-on-any-call-updated' | 'update-when-all-call-updated' | 'none';
-    defaultCallUpdatePolicy?: ObservedCallSettings['updatePolicy'];
+    // a call updates when any client does; the observer when any call does. Default true.
+    autoUpdateOnCallUpdate?: boolean;
     appData?: AppData;
     closeClientIfIdleForMs?: number;
     closeCallIfEmptyForMs?: number;
@@ -488,7 +496,15 @@ Key members:
 - `createObservedCall<T>(settings): ObservedCall<T> | undefined`
 - `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
 - `update(): void` — force an aggregation/`observer-updated` tick
+- `addObserverDetector(name, config?): this` — build a cross-call detector onto `observer.detectors`
+- `addCallDetector(name, config?): this` / `removeCallDetector(name): this` — register a call-scoped
+  detector for every call created **from now on**
+- `addValidator(name, config?): this` — start a one-shot structural check
 - `close(): void`
+- `readonly detectors: Detectors` — observer-scoped registry. **Starts empty**; nothing is implicit
+- `readonly callDetectorConfigs: Map<name, config>` — what `addCallDetector` recorded
+- `readonly validators: Set<RunningValidator>` — normally empty; each removes itself on finishing
+- `readonly activeIssuesRegistry: ActiveIssuesRegistry` — the fleet's open client issues
 - `readonly observedCalls: Map<string, ObservedCall>`
 - `readonly observedTURN: ObservedTURN`
 - `get appData()`, `get numberOfCalls()`
@@ -501,7 +517,8 @@ Key members:
 
 ```ts
 type ObservedCallSettings<AppData = Record<string, unknown>> = {
-    updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'none';
+    // update this call whenever one of its clients accepts a sample. Default true.
+    autoUpdateOnClientUpdate?: boolean;
     callId: string;
     appData?: AppData;
     closeCallIfEmptyForMs?: number;
@@ -513,8 +530,11 @@ Key members:
 - `readonly callId: string`, `appData: AppData`
 - `readonly observedClients: Map<string, ObservedClient>`, `get numberOfClients()`
 - `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings)`, `getOrCreateObservedClient<T>(settings)` (all `… | undefined`)
-- `addIssue(issue: ClientIssue): void` — raise a **call-level** issue → emits `call-issue`
+- `addIssue(issue: ObserverIssue): void` — raise a **call-level** issue → emits `call-issue`
+- `addDetector(name, config?): this` — build a call-scoped detector onto this call only
 - `readonly detectors: Detectors` — server-side detector registry (empty by default; see [Detectors](#detectors-server-side-extension-point))
+- `readonly activeIssuesRegistry: ActiveIssuesRegistry` — this call's open client issues, propagating into the observer's
+- `readonly unconsumedOutboundTracks: Set<ObservedOutboundTrack>` — maintained by the resolver
 - `scoreCalculator: ScoreCalculator`, `get score()`, `readonly calculatedScore`
 - `remoteTrackResolver?: RemoteTrackResolver` — set from `ObserverConfig.createRemoteTrackResolver` at call creation (see [Remote track resolution](#remote-track-resolution-mediasoup--sfu))
 - aggregates: `numberOfIssues`, `numberOfPeerConnections`, `numberOfInboundRtpStreams`,
@@ -719,11 +739,12 @@ snapshot happens only once.
 
 ## Detectors (server-side extension point)
 
-`observer-js` ships [eight detectors](#built-in-detectors), created automatically from
-`ObserverConfig` and disabled individually by passing `null`. All of them correlate **across** the
-clients of a call or the calls of a fleet, because that is the only thing a server can do better than
-a browser: per-client signals — packet loss, jitter, RTT, freezes — are already detected on the
-client and arrive on samples as `clientIssues` (surfaced via `client-issue`).
+`observer-js` ships [ten detectors](#built-in-detectors), each an opt-in extension you register
+explicitly with `addObserverDetector` / `addCallDetector` / `addDetector` (see
+[Registering detectors](#registering-detectors)) — none are created automatically. All of them
+correlate **across** the clients of a call or the calls of a fleet, because that is the only thing a
+server can do better than a browser: per-client signals — packet loss, jitter, RTT, freezes — are
+already detected on the client and arrive on samples as `clientIssues` (surfaced via `client-issue`).
 
 Findings are raised as **`ObserverIssue`** — `{ type, timestamp, payload? }` — and the payload is the
 **object**, not a JSON string. A server-raised finding is delivered to an in-process handler, so
@@ -819,37 +840,41 @@ observer.on('client-issue-resolved', ({ resolvedIssue }) => {
 });
 
 // the live per-client mirror
-observedClient.activeIssues;   // Map<key, ActiveClientIssue>
+observedClient.activeIssues;   // ObservedClientIssueRegistry, keyed by issue.key
 ```
 
-#### `IssueIndex` — querying the active set
+> **client-monitor-js >= 4.6.0 is required** for every issue-driven detector. There is no fallback
+> path that infers these conditions from raw counters — the client decides better, and maintaining a
+> worse second implementation to be polite to old clients is how both end up wrong. Issues without a
+> `key` have no lifecycle (nothing could ever close them), so they stay one-shot: reported on
+> `client-issue`, never registered.
 
-Every scope owns one, maintained incrementally as issues open and close. Don't construct it — read
-the scope you care about:
+#### `ActiveIssuesRegistry` — issues are **pushed**, not polled
+
+A detector does not go looking for the issues it cares about. It implements `ActiveIssueTracker` and
+registers for the types it consumes; the registry hands them over as they open and close.
 
 ```ts
-observedCall.issueIndex          // this meeting
-observer.issueIndex              // the whole fleet; every call's index propagates into it
+observedCall.activeIssuesRegistry   // this meeting
+observer.activeIssuesRegistry       // the fleet; every call's registry propagates into it
 
-const index = observedCall.issueIndex;
+observer.activeIssuesRegistry.addIssueTracker('congestion', myDetector);
+observer.activeIssuesRegistry.removeIssueTracker(myDetector);
 
-index.cohortOf('congestion');    // { clientIds, affectedRatio, callIds, perCall, onsetSpreadInMs, … }
-index.cohorts();                 // every shared issue type, largest cohort first
-index.byTrackIds(trackIds);      // issues attributed to a published track's receivers
-index.byClientId(clientId);      // one client's open issues
-index.ofType('congestion');      // the raw bucket (a Set) — no allocation, for hot paths
-index.size;                      // open issues in scope
-index.totalClients;              // the denominator behind every ratio
+registry.values();   // the open issues in this scope, oldest first
+registry.size;       // how many
 ```
 
-Queries cost O(matching issues), never O(clients) — `cohorts()` over 1200 clients with nothing wrong
-costs ~0.1 µs, because nothing iterates participants.
+The cost of a detector is then proportional to the issues it actually receives, not to the number of
+participants: a healthy 500-client fleet does no per-tick work at all, because nothing was pushed.
 
-Only issues carrying a `key` are indexed. A keyless issue has no lifecycle, so nothing could ever
-close it; those stay one-shot and are reported via `client-issue` only.
+**There is no wildcard.** A tracker names its types and sees nothing else. "Feed me everything and
+I'll work out what matters" moves the decision from the application — which knows its client build
+and its issue vocabulary — onto a detector that has to guess, and it makes the cost of a
+subscription unbounded and invisible. If a detector should watch five types, list five types.
 
-`onsetSpreadInMs` is measured on the **observer clock**, never the client's. `raisedAt` comes from
-each participant's own machine, and comparing those across clients makes clock skew look like a
+Onset spread is measured on the **observer clock**, never the client's. `raisedAt` comes from each
+participant's own machine, and comparing those across clients makes clock skew look like a
 synchronized infrastructure event.
 
 ### Observer-level detectors (cross-call / SFU-wide)
@@ -874,41 +899,30 @@ observer.detectors.add({
 observer.on('observer-issue', ({ issue }) => alert(issue));
 ```
 
-### Publisher → subscribers: `TrackDistributionAggregator`
+### Publisher → subscribers: the resolver links
 
 The question a single browser can never answer is *"did **everyone** receiving Alice see the same
-degradation?"*. `TrackDistributionAggregator` answers it by walking the publisher→subscriber links
-maintained by a [`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu) and summarizing one
-published track against all of its receivers:
+degradation?"*. The join is the publisher↔subscriber links maintained by a
+[`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu), and detectors walk them directly:
 
 ```ts
-import { TrackDistributionAggregator } from '@observertc/observer-js';
-
-const aggregator = new TrackDistributionAggregator(observedCall);
-
-for (const d of aggregator.aggregate()) {
-  d.trackId;                     // the published track
-  d.publisher.healthy;           // is the source itself fine? (+ .reasons)
-  d.numberOfReceivers;           // 17
-  d.numberOfDegradedReceivers;   // 14
-  d.degradedRatio;               // 0.82
-  d.fractionLost?.p95;           // percentile summaries across receivers
-  d.freezes;                     // { affectedReceivers, total }  — fan-out counters
-  d.plis;
-  d.receivers;                   // per-receiver entries with `degraded` + `reasons`
-}
+outboundTrack.remoteInboundTracks;      // Set<ObservedInboundTrack> — every subscriber of this source
+inboundTrack.remoteOutboundTrack;       // the publisher, or undefined if unlinked
+inboundTrack.getInboundRtp();           // that receiver's RTP stats
+observedCall.unconsumedOutboundTracks;  // published tracks with no subscriber at all
 ```
 
-Each receiver is judged against `ReceiverHealthThresholds` (loss, freezes, dropped frames,
-concealment, jitter-buffer delay, RTT — override any of them). Summaries are **medians and
-percentiles, not means**, because one participant at 1500 ms RTT would otherwise hide nine healthy
-ones. The helpers behind it (`percentile`, `median`, `summarize`, `counterDelta`, `SlidingWindow`)
-are exported for building your own detectors.
+> A `TrackDistributionAggregator` class used to sit in front of these links and summarise every
+> published track against all of its receivers, on every tick. It is gone. It scanned the majority
+> (all published tracks) to find the interesting minority, which is the wrong axis — the detectors
+> now start from the handful of *affected* tracks the issue registry pushed at them and resolve only
+> those. The statistics helpers it used (`percentile`, `median`, `summarize`, `counterDelta`,
+> `robustZScore`, `SlidingWindow`, `TrendTester`) are all still exported for building your own.
 
 ### Call health: `CallHealthAggregator`
 
-The second aggregation axis — the **client** axis. Where `TrackDistributionAggregator` asks "how was
-*this source* delivered?", this asks "how is *each participant* doing, sending vs receiving?":
+The **client** axis. Where the resolver links answer "how was *this source* delivered?", this asks
+"how is *each participant* doing, sending vs receiving?":
 
 ```ts
 import { CallHealthAggregator } from '@observertc/observer-js';
@@ -923,143 +937,139 @@ health.qualityLimitation;         // { cpu, bandwidth, other } client counts
 health.clients;                   // per-client entries with `reasons`, direction flags, TURN/TCP
 ```
 
-### Built-in detectors
+### Registering detectors
 
-Detectors are **created automatically** from `ObserverConfig`, mirroring `client-monitor-js` so the
-same mental model applies on both sides of the wire. Every slot has three states:
-
-| value | meaning |
-|-------|---------|
-| omitted / `undefined` | create the detector with its defaults |
-| an object | create it, with those keys overriding the defaults |
-| `null` | **don't create it** |
+**Nothing is created implicitly.** A `new Observer()` has zero detectors. There is no detector
+configuration in `ObserverConfig` and no default set — an application says what it wants to watch, or
+it watches nothing.
 
 ```ts
 const observer = new Observer({
   createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-
-  // observer-scoped (cross-call)
-  observerDetectors: {
-    turnServerOutageDetector: { minClientsAtPeak: 10 },
-    concurrentIssueDetector: { minAffectedCalls: 3 },   // stricter fleet gate
-  },
-
-  // call-scoped, applied to every call
-  callDetectors: {
-    worstReceiverContagionDetector: { minReceivers: 5 },
-    iceDisruptionDetector: null,           // off: our clients report ice-* issues themselves
-  },
 });
+
+// observer-scoped (cross-call) — built immediately onto `observer.detectors`
+observer.addObserverDetector('observer-concurrent-issue-detector', {
+  issueTypes: [ 'congestion', 'ice-disconnected', 'ice-connection-failed' ],
+  minAffectedCalls: 3,
+});
+observer.addObserverDetector('turn-server-outage-detector', { minClientsAtPeak: 10 });
+
+// call-scoped — recorded in `observer.callDetectorConfigs`, applied to every call created AFTER this
+observer.addCallDetector('call-concurrent-issue-detector', {
+  issueTypes: [ 'congestion', 'ice-disconnected' ],
+});
+observer.removeCallDetector('unconsumed-track-detector');   // undo, for future calls
+
+// one specific call
+observedCall.addDetector('issue-fan-out-detector', { issueTypes: [ 'freezed-video-track' ] });
 ```
 
-Every threshold the library applies out of the box is spelled out in two exported objects in
-[`Observer.ts`](./src/Observer.ts) — `defaultCallDetectorsConfig` and
-`defaultObserverDetectorsConfig` — right beside the code that uses them. "What does this do if I
-configure nothing?" is one screen, not eight files:
+Detectors are named by their kebab-case `NAME`, and the name types the config — an unknown name or a
+key that belongs to a different detector will not compile. Each detector owns its defaults in its own
+constructor, beside the doc explaining what each threshold means; there is no central table to keep
+in sync.
 
-```ts
-import { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from '@observertc/observer-js';
+> **Why no defaults?** A detector nobody asked for is a detector nobody will act on. It costs time on
+> every tick and raises findings into a handler that was not written to expect them. Earlier versions
+> auto-created everything from a three-state config slot; the result was applications receiving
+> finding types they had never heard of.
 
-defaultCallDetectorsConfig.concurrentIssueDetector.cooldownMs;                  // 60_000
-{ ...defaultObserverDetectorsConfig.turnServerOutageDetector, minClientsAtPeak: 20 }
-```
-
-They are typed complete (no `Partial`), so adding a field to any detector's config fails to compile
-until its default is supplied there — a threshold with no visible default is one nobody finds.
-
-Because the tables are the only source of defaults, a detector constructed **directly** needs a
-complete config; spread the table entry:
-
-```ts
-call.detectors.add(new IssueFanOutDetector(call, {
-  ...defaultCallDetectorsConfig.issueFanOutDetector,
-  minReceivers: 5,
-}));
-```
-
-`new Observer()` with no arguments creates **all** of them with defaults. Set `observerDetectors: null` or
-`callDetectors: null` to run with none at that scope, or override per call via
-`ObservedCallSettings.detectors`. Naming one key never disables the others — every unnamed slot
-still gets its defaults, so disabling is always explicit. You can still construct detectors yourself
-and `observedCall.detectors.add(...)` / `observer.detectors.add(...)` them.
+Every issue-driven detector takes an explicit, non-empty `issueTypes` (or
+`publisherIssueTypes`/`receiverIssueTypes`). There is no "watch everything" option — see
+[the registry](#activeissuesregistry--issues-are-pushed-not-polled).
 
 > **🔗 marks detectors that require a
 > [`RemoteTrackResolver`](#remote-track-resolution-mediasoup--sfu).** They reason about a published
 > track and its subscribers, so without the publisher↔subscriber links they see nothing and stay
 > **silent forever** — which looks exactly like "no problems found". Configure
-> `ObserverConfig.createRemoteTrackResolver`.
+> `ObserverConfig.createRemoteTrackResolver`, and start the
+> [`remote-track-resolver` validator](#validators--one-shot-structural-checks) to prove it is wired.
 
-#### The correlation set
+### Built-in detectors
 
-Five issue-driven detectors, each answering something no endpoint can. They consume the verdicts
-`client-monitor-js` >= 4.6.0 already ships (raise + `<type>-resolved`) and add only the
-cross-participant conclusion — none re-derives a per-endpoint verdict from raw counters:
-
-| Detector | 🔗 | Scope | Raises |
-|----------|:--:|-------|--------|
-| `ConcurrentIssueDetector` | | call | `CONCURRENT_CLIENT_ISSUES`, `ISSUE_ONSET_BURST` |
-| `ConcurrentIssueDetector` | | **observer** | `CROSS_CALL_CONCURRENT_ISSUES`, `CROSS_CALL_ISSUE_ONSET_BURST` |
-| `IssueFanOutDetector` | 🔗 | call | `PUBLISHED_TRACK_ISSUE_FAN_OUT`, `SINGLE_RECEIVER_ISSUE` |
-| `TrackDeliveryMismatchDetector` | 🔗 | call | `PUBLISHED_TRACK_NOT_DELIVERED`, `RECEIVER_TRACK_NOT_DELIVERED`, `PUBLISHER_TRACK_DRY` |
-| `UnconsumedTrackDetector` | 🔗 | call | `UNCONSUMED_PUBLISHED_TRACK` |
-| `TurnServerHealthDetector` | | **observer** | `TURN_SERVER_DEGRADED` |
-
-The rule that keeps them distinct:
+They consume the verdicts `client-monitor-js` >= 4.6.0 already ships (raise + `<type>-resolved`) and
+add only the cross-participant conclusion. **None re-derives a per-endpoint verdict from raw
+counters** — that is the rule the whole design hangs on:
 
 > **If a condition is detectable on the client, the client's issue is the source of truth.**
 
-observer-js never re-derives a per-endpoint verdict from raw counters. `client-monitor-js` already
-decides *what is wrong with an endpoint* with hysteresis and multi-signal confirmation behind it, and
-a server-side threshold would just be a worse second opinion. So each adds only what no endpoint can
-know:
+| Detector | 🔗 | Scope | Raises |
+|----------|:--:|-------|--------|
+| `CallConcurrentIssueDetector` | | call | `CONCURRENT_CLIENT_ISSUES`, `ISSUE_ONSET_BURST` |
+| `ObserverConcurrentIssueDetector` | | **observer** | `CROSS_CALL_CONCURRENT_ISSUES`, `CROSS_CALL_ISSUE_ONSET_BURST` |
+| `IssueFanOutDetector` | 🔗 | call | `PUBLISHED_TRACK_ISSUE_FAN_OUT`, `SINGLE_RECEIVER_ISSUE` |
+| `PublisherFaultCorroborationDetector` | 🔗 | call | `CORROBORATED_PUBLISHER_FAULT` |
+| `TrackDeliveryMismatchDetector` | 🔗 | call | `PUBLISHED_TRACK_NOT_DELIVERED`, `RECEIVER_TRACK_NOT_DELIVERED`, `PUBLISHER_TRACK_DRY` |
+| `UnconsumedTrackDetector` | 🔗 | call | `UNCONSUMED_PUBLISHED_TRACK` |
+| `ClientPopulationIssueDetector` | | **observer** | `CLIENT_POPULATION_ISSUE` |
+| `SfuCongestionDetector` | | **observer** | `sfu-congestion` |
+| `TurnServerHealthDetector` | | **observer** | `TURN_SERVER_DEGRADED` |
+| `TurnServerOutageDetector` | | **observer** | `TURN_SERVER_OUTAGE` |
 
-- **`ConcurrentIssueDetector`** — *who else is in this state right now* (any issue type). At **call**
-  scope it asks "is this meeting in trouble?"; at **observer** scope, "is our infrastructure in
-  trouble?" — and those are different questions, not the same one with a bigger denominator. The
-  observer scope therefore requires the cohort to span at least `minAffectedCalls` **independent
-  calls** (default `2`) and raises its own `CROSS_CALL_*` types. Without that gate, one thirty-person
-  meeting where everyone is congested clears every client threshold and pages you for a single bad
-  room the call-scoped detector already reported. Clients in different calls share no room, no
-  publisher and no host — only the servers, which is what makes the finding conclusive.
-  Note the participant-ratio threshold is deliberately **not** applied at observer scope: six broken
-  calls out of forty is a small share of all clients, and a ratio gate would hide exactly the event
-  you want.
+What each adds that no endpoint can know:
+
+- **`CallConcurrentIssueDetector`** — *who else in this meeting is in this state right now?* The
+  difference between "one person's Wi-Fi" and "this room is broken".
+- **`ObserverConcurrentIssueDetector`** — *is our infrastructure in trouble?* A **separate class**,
+  not the call one with a bigger denominator, because it is a different question with different
+  gates. It requires the group to span at least `minAffectedCalls` **independent calls** (default
+  `2`) and raises its own `CROSS_CALL_*` types. Without that gate, one thirty-person meeting where
+  everyone is congested clears every client threshold and pages you for a single bad room the
+  call-scoped detector already reported. Clients in different calls share no room, no publisher and
+  no host — only the servers, which is what makes the finding conclusive. Note there is deliberately
+  **no participant ratio** at this scope: six broken calls out of forty is a small share of all
+  clients, and a ratio gate would hide exactly the event you want.
 - **`IssueFanOutDetector`** — *does this issue follow one published source, or one receiver?*
-- **`TrackDeliveryMismatchDetector`** — *are the two ends of a track disagreeing?* (client verdicts + server RTP)
+- **`PublisherFaultCorroborationDetector`** — *do **both ends** of one track agree the source is at
+  fault?* Fan-out sees one end and infers; this sees the publisher reporting `encoder-bottleneck`
+  about its own send path *while* its subscribers report `freezed-video-track` about receiving it.
+  Two independent parties, one conclusion, nothing left to deduce — hence the highest confidence in
+  the library. Run both: fan-out is broader and catches the case where the publisher is fine and the
+  SFU's forwarding is not.
+- **`ClientPopulationIssueDetector`** — *is this concentrated on one **kind of client**?* The one
+  correlation here that is neither per-call nor per-server. Every other observer-scoped detector
+  reasons "clients in unrelated calls share only the infrastructure, so it must be us" — right for
+  network symptoms, **wrong for endpoint ones**. `cpulimitation` across six unrelated calls is not an
+  SFU event; CPU is owned by the endpoint, so what those endpoints share is a browser version or a
+  client release. Groups by `browser` / `engine` / `platform` / `operationSystem`, one axis per
+  instance. The gate is **relative risk**, not share: "30% of Chrome 141 is unhappy" means nothing if
+  30% of everyone is, and a share-based rule simply indicts whichever browser is most popular.
+- **`SfuCongestionDetector`** — *is congestion spiking across the fleet right now?* Counts distinct
+  clients reporting congestion in fixed wall-clock buckets and compares each bucket against a
+  median+MAD baseline of the ones before it. Buckets rather than update ticks on purpose: the tick is
+  unevenly spaced and shorter than a client's sampling period, so counting on it compares windows of
+  different lengths and calls the difference a signal. Only add it when the observer's calls all come
+  from the **same SFU** — the finding's meaning is "these clients share only that server".
+- **`TrackDeliveryMismatchDetector`** — *are the two ends of a track disagreeing?*
 - **`UnconsumedTrackDetector`** — *is anyone actually subscribed?* (reads the resolver's silence)
-- **`TurnServerHealthDetector`** — *does trouble cluster on one relay?* (grouping, with client issues as the trouble signal)
+- **`TurnServerHealthDetector`** — *does trouble cluster on one relay?*
+- **`TurnServerOutageDetector`** — covers the case the health detector structurally cannot. The
+  health detector groups clients by the server relaying them and asks how many report issues — it
+  needs clients *on* the server to ask. When a TURN server dies, allocation fails: existing sessions
+  drop and new clients never obtain a relay candidate through it, so they are never attributed to it
+  at all. Its population goes to zero and the health detector falls silent for the worst possible
+  reason. **Degradation makes clients unhappy; an outage makes them disappear.** Absence is a
+  dangerous signal, so the **control group** is the heart of the design: a call ending, everyone
+  leaving at 6pm, and a fleet-wide network event all look identical to an outage. It refuses to blame
+  a server unless clients *not* relayed through it are demonstrably still connected
+  (`requireControlGroup`, on by default).
 
-#### Infrastructure detectors
+#### There is no ICE detector
 
-| Detector | Scope | Raises |
-|----------|-------|--------|
-| `TurnServerOutageDetector` | **observer** | `TURN_SERVER_OUTAGE` |
-| `IceDisruptionDetector` | call | `CALL_ICE_DISRUPTION` |
+ICE trouble is reported by `client-monitor-js` >= 4.6.0 as the keyed issues `ice-disconnected`,
+`ice-connection-failed`, `ice-transport-stalled` and `unstable-ice-path`, each with hysteresis and
+multi-signal confirmation behind it. An `IceDisruptionDetector` used to re-derive that server-side
+from raw state transitions; it has been removed, because the server sees less and guesses more. The
+client knows whether `disconnected` persisted or healed in 200 ms; the observer does not.
 
-**`TurnServerOutageDetector` covers the case `TurnServerHealthDetector` structurally cannot.** The
-health detector groups clients by the server relaying them and asks how many report issues — it needs
-clients *on* the server to ask. When a TURN server goes down completely, allocation fails: existing
-sessions drop, and new clients never obtain a relay candidate through it, so they are never attributed
-to it at all. Its population goes to zero and the health detector falls silent for the worst possible
-reason. **Degradation makes clients unhappy; an outage makes them disappear.** So the outage detector
-watches for exactly that — a server's population collapsing against its own recent peak, counting both
-clients gone entirely and clients still attributed but with ICE `disconnected`/`failed`.
+Correlating ICE trouble is now configuration, not a class:
 
-Absence is a dangerous signal, so the **control group** is the heart of the design: a call ending,
-everyone leaving at 6pm, and a fleet-wide network event all look identical to an outage. The detector
-refuses to blame a server unless clients *not* relayed through it are demonstrably still connected
-(`requireControlGroup`, on by default). *"Everyone on `turn-eu-1` vanished"* is ambiguous; *"everyone
-on `turn-eu-1` vanished while 200 clients elsewhere are fine"* is an outage. Note that clients which
-fail over cleanly to a second TURN server still count as lost — correct, but it means a fleet with
-working failover reports outages users never felt. That is intended: the failover worked *and* the
-server is down are both true.
-
-**`IceDisruptionDetector`** is the one detector that does not read client issues. It reads raw ICE
-state *transitions*, which arrive in every sample regardless of what the client runs, and which can
-occur and revert between two `update()` ticks — so it subscribes to the bus and implements `close()`.
-It is the fallback for clients without issue reporting; if all of yours run `client-monitor-js`
->= 4.6.0, `ConcurrentIssueDetector` with the ICE issue types is the better instrument, because the
-client knows whether `disconnected` persisted or healed in 200 ms.
+```ts
+observer.addObserverDetector('observer-concurrent-issue-detector', {
+  issueTypes: [ 'ice-disconnected', 'ice-connection-failed', 'ice-transport-stalled' ],
+});
+```
 
 ### Validators — one-shot structural checks
 
@@ -1069,25 +1079,27 @@ only changes when you deploy. So it is not configured on and left running: you *
 until it can decide, reports once, and the observer drops it.
 
 ```ts
-observer.addValidator('simulcast-receiver-validator', { minChecks: 5 });
+observer.addValidator('simulcast-receivers', { minChecks: 5 });
 
-observer.on('validator-settled', ({ validator, report }) => {
+observer.on('validation-ready', ({ validator, report }) => {
   if (!report.ready) return;
   if (report.verdict === 'layer-decided-lowest-common-denominator') page(validator, report);
 });
 
-onDeploy(() => observer.addValidator('simulcast-receiver-validator'));   // check again
+onDeploy(() => observer.addValidator('simulcast-receivers'));   // check again
 ```
 
 `observer.validators` is the set currently running — normally empty, since each removes itself on
 finishing. There is no revalidation timer: a deploy, not elapsed time, is what makes a structural
 verdict stale, so re-checking means starting another.
 
-| Validator | Question | Also raises |
-|-----------|----------|-------------|
-| `SimulcastReceiverValidator` 🔗 | Does the SFU pick layers per receiver, or drag the publisher down to the worst one? | `WORST_RECEIVER_CONTAGION` on the bad verdict |
+| Validator | `addValidator` name | Question | Also raises |
+|-----------|---------------------|----------|-------------|
+| `SimulcastReceiverValidator` 🔗 | `simulcast-receivers` | Does the SFU pick layers per receiver, or drag the publisher down to the worst one? | `WORST_RECEIVER_CONTAGION` |
+| `RemoteTrackResolverValidator` | `remote-track-resolver` | Is the resolver actually linking anything? | `REMOTE_TRACK_LINKS_UNRESOLVED` |
+| `CodecConsistencyValidator` | `codec-consistency` | Is everyone on the same codec — and is it the one you think you negotiated? | `CODEC_INCONSISTENCY` |
 
-**`SimulcastReceiverValidator`** is the one that ships. Simulcast (or SVC) exists so one slow
+**`SimulcastReceiverValidator`** — simulcast (or SVC) exists so one slow
 participant doesn't set everyone's quality: with several encodings the server hands the struggling
 receiver a lower layer and leaves the rest alone. Without it — or with a server that relays RTCP end
 to end, so the publisher's bandwidth estimate collapses to the slowest receiver — the only way to
@@ -1104,6 +1116,30 @@ establishes is whether per-receiver adaptation happens at all.
 most half the median; plenty of healthy deployments never present that. A validator that never sees it
 simply keeps running and never reports — it does not quietly succeed. `report.checks` counts the times
 the check genuinely ran, so an `inconclusive` with `checks: 0` says plainly that nothing was verified.
+
+**`RemoteTrackResolverValidator`** exists because of a specific, nasty failure mode. Four things here
+are built on publisher↔subscriber links — `IssueFanOutDetector`,
+`PublisherFaultCorroborationDetector`, `TrackDeliveryMismatchDetector`, `UnconsumedTrackDetector`
+(and `SimulcastReceiverValidator`) — and every one of them correctly does *nothing* when the links
+are missing rather than guessing. So a resolver wired to the wrong id field leaves all of them
+permanently silent, and **silence is what a healthy deployment looks like too**: you would conclude
+your calls were clean when in fact nothing was ever examined. Verdicts: `links-resolved` /
+`no-links-resolved` / `inconclusive`. Run it at start-up and after changing the resolver or the SFU's
+id scheme.
+
+**`CodecConsistencyValidator`** answers two things at once. A **split** — participants of one call on
+different codecs — is a real fault with a confusing symptom: an SFU that forwards without transcoding
+cannot serve them all, so some pairs see each other and some do not, with no error anywhere. Only
+something holding every participant at once can see it. The quieter half is the silent fallback: a
+deployment configured for VP9 or AV1 drops to VP8 whenever one endpoint cannot negotiate the
+preference, the call keeps working at a higher bitrate than budgeted, and the team believes it
+shipped AV1 months ago. Give it `expected` and it says so. Verdicts: `codec-consistent` /
+`codec-split` / `unexpected-codec` / `inconclusive`.
+
+```ts
+observer.addValidator('remote-track-resolver');
+observer.addValidator('codec-consistency', { expected: { video: 'video/VP9', audio: 'audio/opus' } });
+```
 
 #### Conclusions
 
@@ -1137,37 +1173,37 @@ release, a browser version, shared VDI hardware — and paging the SFU on-call w
 conclusion table encodes that so nobody has to rediscover it during an incident.
 
 Unknown issue types (your own custom client detectors) still produce a structurally valid conclusion
-from the spread alone; they just get generic wording. `concludeFrom()` is exported if you want the
-same reasoning in your own detector.
+from the spread alone; they just get generic wording.
+
+Two functions are exported, one per scope: `concludeCallIssue()` and `concludeObserverIssue()`. They
+are separate because a detector already knows its scope, and a single generic function forced every
+caller to pass the other scope's fields as placeholders — call-scoped detectors passing
+`affectedCalls: 1, totalCalls: 1` forever, observer-scoped ones passing a participant ratio that was
+deliberately never read. Placeholders like that invite being read as if they meant something.
 
 #### Cost
 
 Detectors run inside `call.update()`, on your event loop, so their cost matters. Two things keep it
 off the participant axis:
 
-- **Issue lookups are indexed.** `observedCall.issueIndex` (propagating into `observer.issueIndex`)
-  is maintained as issues open and close, so a query costs O(matching issues) — a 1200-client fleet
-  with nothing wrong costs ~0.1 µs per query rather than a walk over every client.
+- **Issues are pushed, not polled.** A detector holds only what the registry handed it, so an
+  `update()` that finds `size === 0` — the overwhelmingly common case — costs one comparison,
+  whatever the participant count. Nothing iterates clients looking for trouble.
 - **So are unconsumed tracks.** `observedCall.unconsumedOutboundTracks` is maintained by the resolver
   as tracks gain and lose subscribers, so `UnconsumedTrackDetector` reads a set that is normally
   empty instead of walking every published track (529 µs → 65 µs per tick at 1 200 tracks).
-- **The publisher→subscriber aggregation is computed once per tick.** Three detectors read the same
-  distribution set; they share `observedCall.trackDistributionAggregator`, memoised against
-  `observedCall.updateGeneration`.
+- **Track lookups start from the affected minority.** A detector resolving an issue to its published
+  track searches the *reporting client's* peer connections (typically one or two), not the call.
 
 At 20 calls × 12 participants (2 640 subscriptions) the whole detector pass costs ~1.3 ms per tick.
-`yarn bench` prints a per-detector breakdown and the query-scaling table for your own shape.
-
-If you write your own detector, read `observedCall.trackDistributionAggregator` rather than
-constructing a `TrackDistributionAggregator`, so it shares that cache — and note an aggregation result
-is a **per-tick snapshot**; don't retain it across updates.
+`yarn bench` prints a per-detector breakdown for your own shape.
 
 #### Worked examples
 
 [`examples/detectors.ts`](./examples/detectors.ts) (`yarn example:detectors`) runs one scenario per
 detector — the question it answers, its full config, the synthetic traffic that makes it fire, and
-the finding with its conclusion. It asserts all nine findings are produced, so it doubles as a smoke
-test. [`examples/sfu-observer.ts`](./examples/sfu-observer.ts) (`yarn example`) is the end-to-end
+the finding with its conclusion. It asserts every expected finding is produced, so it doubles as a
+smoke test. [`examples/sfu-observer.ts`](./examples/sfu-observer.ts) (`yarn example`) is the end-to-end
 tour instead: ingest → correlate → react, with the mediasoup wiring alongside.
 
 #### `TrackDeliveryMismatchDetector` — resolving an ambiguous symptom
@@ -1727,10 +1763,13 @@ lint + typecheck + **build** + test on every push/PR.
 
 **Project layout** (`src/`): `Observer.ts`, `ObservedCall.ts`, `ObservedClient.ts`,
 `ObservedPeerConnection.ts`, the `Observed*` sub-stat classes, `ObserverEvents.ts` (the typed
-event map + scope types), `detectors/` (`Detector`, `Detectors`), `scores/`, `updaters/`
-(update-policy strategies), `utils/` (remote-track resolvers), `common/` (`logger`, `utils`,
-`Middleware`), `schema/` (sample/event/meta types), and `sinks/` (the `ClientSampleSink` base +
-`JsonlFileSink` / `InMemorySink`, re-exported from the package root).
+event map + scope types), `detectors/` (`Detector`, `Detectors`, and one file per detector),
+`validators/` (`Validator`, `Validators`, one file per validator), `issues/` (`ActiveClientIssue`,
+`ActiveIssueTracker`, `ActiveIssuesRegistry`, `ObservedClientIssueRegistry`), `scores/`,
+`resolvers/` (remote-track resolvers), `utils/` (`stats`, `SlidingWindow`, `TrendTester`,
+`CallHealthAggregator`), `common/` (`logger`, `utils`, `Middleware`), `schema/`
+(sample/event/meta types), and `sinks/` (the `ClientSampleSink` base + `JsonlFileSink` /
+`InMemorySink`, re-exported from the package root).
 
 **Conventions to follow when developing further:**
 

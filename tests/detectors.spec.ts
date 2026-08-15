@@ -22,10 +22,8 @@ function newObserver() {
 		// Manual update control: the ratio/streak gates these detectors apply can cross threshold on a
 		// partial accept sequence, and an automatic per-sample update would raise on that partial state.
 		autoUpdateOnCallUpdate: false,
-		// Isolate the detector under test: without this the auto-created built-ins would raise
-		// their own findings and the assertions below could not attribute an issue to one detector.
-		observerDetectors: null,
-		callDetectors: null,
+		// No isolation needed any more: a fresh Observer starts with zero detectors — nothing is
+		// created implicitly, so only what a test explicitly registers can raise.
 	});
 }
 

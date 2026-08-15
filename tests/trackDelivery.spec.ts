@@ -14,10 +14,8 @@ function newObserver(withResolver = true) {
 	const observer = new Observer({
 		...(withResolver ? { createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() } : {}),
 		autoUpdateOnCallUpdate: false,
-		// Isolate the detector under test: without this the auto-created built-ins would raise
-		// their own findings and the assertions below could not attribute an issue to one detector.
-		observerDetectors: null,
-		callDetectors: null,
+		// No isolation config needed: a fresh Observer starts with zero detectors — nothing is
+		// created implicitly, so only what a test explicitly registers can raise.
 	});
 
 	// Pre-create the call with client-driven auto-update disabled too, so `accept()` (which would

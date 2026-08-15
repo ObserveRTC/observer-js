@@ -11,6 +11,7 @@
 import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import type { ClientSample } from '../src/schema/ClientSample';
+import type { AvailableCallScopeDetectorsConfigs } from '../src/detectors/Detectors';
 
 const CALLS = Number(process.env.CALLS ?? 20);
 const CLIENTS = Number(process.env.CLIENTS ?? 12);
@@ -88,15 +89,51 @@ function buildPeers(): Peer[] {
 	return peers;
 }
 
-function measure(label: string, callDetectors: Record<string, unknown> | null) {
+type CallDetectorName = keyof AvailableCallScopeDetectorsConfigs;
+
+/**
+ * Register `name` onto `observer` with a config that makes sense for this bench's synthetic
+ * traffic. A `switch` (rather than an indexed lookup) so each call is narrowed to its own detector's
+ * config type — `observer.addCallDetector` is generic over the name, and this keeps every call
+ * type-checked instead of cast through `unknown`.
+ */
+function registerCallDetector(observer: Observer, name: CallDetectorName) {
+	switch (name) {
+		case 'call-concurrent-issue-detector':
+			// The only issue type this bench's clients ever raise.
+			observer.addCallDetector(name, { issueTypes: [ 'congestion' ] });
+			break;
+		case 'issue-fan-out-detector':
+			observer.addCallDetector(name, { issueTypes: [ 'congestion' ] });
+			break;
+		case 'track-delivery-mismatch-detector':
+			observer.addCallDetector(name);
+			break;
+		case 'unconsumed-track-detector':
+			observer.addCallDetector(name);
+			break;
+		case 'publisher-fault-corroboration-detector':
+			// Both halves needed: this detector only does work when a publisher AND its subscribers are
+			// complaining at once, so give it the one issue type this bench raises on both sides.
+			observer.addCallDetector(name, {
+				publisherIssueTypes: [ 'congestion' ],
+				receiverIssueTypes: [ 'congestion' ],
+			});
+			break;
+	}
+}
+
+function measure(label: string, names: readonly CallDetectorName[]) {
 	const observer = new Observer({
 		// Manual update control: auto-updating per accept() (the default) would blur the "accept" and
 		// "update" timings measured separately below into one another.
 		autoUpdateOnCallUpdate: false,
-		observerDetectors: null as never,
-		callDetectors: callDetectors as never,
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
 	});
+
+	// Nothing is registered implicitly — an empty `names` list is a bare ingest-only observer.
+	for (const name of names) registerCallDetector(observer, name);
+
 	const peers = buildPeers();
 	const issueCount = Math.round(CLIENTS * ISSUE_SHARE);
 	const callIds = Array.from({ length: CALLS }, (_, i) => `call-${i}`);
@@ -132,28 +169,22 @@ function measure(label: string, callDetectors: Record<string, unknown> | null) {
 	};
 }
 
-// The four call-scope detectors (see `AvailableCallScopeDetectorsConfigs` / `CALL_SCOPE_DETECTOR_NAMES`
-// in `src/Observer.ts`). `ice-disruption-detector` is observer-scope only now, so it isn't one of
-// these any more; the RTCP check is a validator, not a detector, so it was never one either.
-const ALL = [
-	'concurrent-issue-detector', 'issue-fan-out-detector', 'track-delivery-mismatch-detector',
-	'unconsumed-track-detector',
-] as const;
+// Every call-scope detector (see `AvailableCallScopeDetectorsConfigs` in
+// `src/detectors/Detectors.ts`). The observer-scope ones are not benched here because their cost is
+// per-fleet rather than per-call; the simulcast and codec checks are validators, not detectors, and
+// stop running once they decide.
+const ALL: CallDetectorName[] = [
+	'call-concurrent-issue-detector', 'issue-fan-out-detector', 'track-delivery-mismatch-detector',
+	'unconsumed-track-detector', 'publisher-fault-corroboration-detector',
+];
 
-const only = (name: string) => {
-	const config: Record<string, unknown> = {};
-
-	for (const other of ALL) if (other !== name) config[other] = null;
-
-	return config;
-};
-
-measure('warmup', {}); // let the JIT settle before the first reported number
+measure('warmup', ALL); // let the JIT settle before the first reported number
 
 const rows = [
-	measure('no detectors (ingest only)', Object.fromEntries(ALL.map((n) => [ n, null ]))),
-	...ALL.map((name) => measure(`only ${name}`, only(name))),
-	measure('ALL detectors', {}),
+	// "No detectors" is now simply an observer with nothing registered.
+	measure('no detectors (ingest only)', []),
+	...ALL.map((name) => measure(`only ${name}`, [ name ])),
+	measure('ALL detectors', ALL),
 ];
 
 console.log(`\ncalls=${CALLS} clients/call=${CLIENTS} subscriptions/client=${SUBSCRIPTIONS} ticks=${TICKS} issueShare=${ISSUE_SHARE}`);

@@ -1,7 +1,9 @@
 import { createLogger } from '../common/logger';
 import { Detector } from './Detector';
-import { ConcurrentIssueDetector, ConcurrentIssueDetectorConfig } from './ConcurrentIssueDetector';
-import { IceDisruptionDetector, IceDisruptionDetectorConfig } from './IceDisruptionDetector';
+import { CallConcurrentIssueDetector, CallConcurrentIssueDetectorConfig } from './CallConcurrentIssueDetector';
+import { ClientPopulationIssueDetector, ClientPopulationIssueDetectorConfig } from './ClientPopulationIssueDetector';
+import { PublisherFaultCorroborationDetector, PublisherFaultCorroborationDetectorConfig } from './PublisherFaultCorroborationDetector';
+import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueDetectorConfig } from './ObserverConcurrentIssueDetector';
 import { IssueFanOutDetector, IssueFanOutDetectorConfig } from './IssueFanOutDetector';
 import { SfuCongestionDetector, SfuCongestionDetectorConfig } from './SfuCongestionDetector';
 import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchDetectorConfig } from './TrackDeliveryMismatchDetector';
@@ -20,8 +22,8 @@ const logger = createLogger('Detectors');
  */
 export type AvailableObserverScopeDetectorsConfigs = {
 	[SfuCongestionDetector.NAME]: SfuCongestionDetectorConfig;
-	[IceDisruptionDetector.NAME]: IceDisruptionDetectorConfig;
-	[ConcurrentIssueDetector.NAME]: ConcurrentIssueDetectorConfig;
+	[ObserverConcurrentIssueDetector.NAME]: ObserverConcurrentIssueDetectorConfig;
+	[ClientPopulationIssueDetector.NAME]: ClientPopulationIssueDetectorConfig;
 	[TurnServerHealthDetector.NAME]: TurnServerHealthDetectorConfig;
 	[TurnServerOutageDetector.NAME]: TurnServerOutageDetectorConfig;
 };
@@ -29,15 +31,17 @@ export type AvailableObserverScopeDetectorsConfigs = {
 /**
  * Detectors that reason **within one call**, created for every call the observer opens.
  *
- * `ConcurrentIssueDetector` appears in both maps on purpose: at call scope it asks "is this meeting
- * in trouble?", at observer scope "is our infrastructure in trouble?". Those are different questions
- * with different gates, not one question with a bigger denominator.
+ * Note there is no detector in both maps. "Is this meeting in trouble?" and "is our infrastructure in
+ * trouble?" are different questions with different gates and different findings, so they are separate
+ * classes — `CallConcurrentIssueDetector` and `ObserverConcurrentIssueDetector` — rather than one
+ * class branching on what it was handed.
  */
 export type AvailableCallScopeDetectorsConfigs = {
 	[UnconsumedTrackDetector.NAME]: UnconsumedTrackDetectorConfig;
 	[TrackDeliveryMismatchDetector.NAME]: TrackDeliveryMismatchDetectorConfig;
-	[ConcurrentIssueDetector.NAME]: ConcurrentIssueDetectorConfig;
+	[CallConcurrentIssueDetector.NAME]: CallConcurrentIssueDetectorConfig;
 	[IssueFanOutDetector.NAME]: IssueFanOutDetectorConfig;
+	[PublisherFaultCorroborationDetector.NAME]: PublisherFaultCorroborationDetectorConfig;
 };
 
 export type AvailableDetectorsConfigs =
