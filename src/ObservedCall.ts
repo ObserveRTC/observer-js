@@ -7,7 +7,6 @@ import { CalculatedScore } from './scores/CalculatedScore';
 import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator';
 import { RemoteTrackResolver } from './resolvers/RemoteTrackResolver';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
-import { Updater } from './updaters/Updater';
 import { AvailableCallScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { ObserverIssue } from './common/ObserverIssue';
 import type { AcceptContext } from './Observer';
@@ -17,6 +16,8 @@ import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistr
 import { Detector } from './detectors/Detector';
 import { UnconsumedTrackDetector } from './detectors/UnconsumedTrackDetector';
 import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatchDetector';
+import { ConcurrentIssueDetector } from './detectors/ConcurrentIssueDetector';
+import { IssueFanOutDetector } from './detectors/IssueFanOutDetector';
 
 const logger = createLogger('ObservedCall');
 
@@ -24,6 +25,7 @@ export type ObservedCallSettings<AppData extends Record<string, unknown> = Recor
 	callId: string;
 	appData?: AppData;
 	closeCallIfEmptyForMs?: number,
+
 	/**
 	 * When `true`, the call's `update()` is invoked whenever a client accepts a sample. When `false`, it is not.
 	 *
@@ -48,7 +50,6 @@ export declare interface ObservedCall {
 }
 
 export class ObservedCall<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
-	public updater?: Updater;
 	public scoreCalculator: ScoreCalculator;
 	public readonly detectors: Detectors;
 	public readonly callId: string;
@@ -71,16 +72,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	 * Empty when no resolver is configured: without links, "no subscribers" is unknowable.
 	 */
 	public readonly unconsumedOutboundTracks = new Set<ObservedOutboundTrack>();
-
-	/**
-	 * Cache generation for anything derived from the call's state.
-	 *
-	 * Bumped whenever a client accepts a sample and at the start of every `update()`, so consumers can
-	 * memoise against it and share one computation per tick. It advances on **state change** rather
-	 * than only in `update()` — a detector's `update()` may be driven directly, and it must not then
-	 * read a stale aggregation.
-	 */
-	public updateGeneration = 0;
 
 	public totalAddedClients = 0;
 	public totalRemovedClients = 0;
@@ -145,12 +136,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		let detector: Detector | undefined;
 
 		switch (name) {
-			case 'unconsumed-track-detector': {
+			case UnconsumedTrackDetector.NAME: {
 				detector = new UnconsumedTrackDetector(this, config);
 				break;
 			}
-			case 'track-delivery-mismatch-detector': {
+			case TrackDeliveryMismatchDetector.NAME: {
 				detector = new TrackDeliveryMismatchDetector(this, config);
+				break;
+			}
+			case ConcurrentIssueDetector.NAME: {
+				detector = new ConcurrentIssueDetector(this, config);
+				break;
+			}
+			case IssueFanOutDetector.NAME: {
+				detector = new IssueFanOutDetector(this, config);
 				break;
 			}
 			default: {
@@ -160,9 +159,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			}
 		}
 
-		if (detector) this.detectors.add(detector);
+		this.detectors.add(detector);
 
-		return this; // Add this line to return the instance for chaining
+		return this;
 	}
 
 	/**
@@ -182,12 +181,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.update(); // last update before closing
 		this.closed = true;
 
-		this.updater?.close();
-
 		let minSampleTimestamps: number | undefined;
 		let maxSampleTimestamps: number | undefined;
+		const clients = [ ...this.observedClients.values() ];
 
-		for (const client of this.observedClients.values()) {
+		for (const client of clients) {
 			client.close();
 
 			if (client.joinedAt) minSampleTimestamps = Math.min(minSampleTimestamps ?? client.joinedAt, client.joinedAt);
@@ -245,6 +243,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			result.off('joined', joined);
 			result.off('left', left);
 			this.observedClients.delete(settings.clientId);
+			this.clientsUsedTurn.delete(settings.clientId);
 
 			if (this.observedClients.size === 0) {
 				this.emit('empty');
@@ -307,9 +306,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.numberOfDataChannels += client.numberOfDataChannels;
 		}
 
-		// Invalidate everything memoised for the previous tick before anything reads it.
-		this.updateGeneration += 1;
-
 		this.scoreCalculator.update();
 		this.detectors.update();
 
@@ -323,9 +319,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
 		this.numberOfIssues += client.deltaNumberOfIssues;
 
-		if (client.usingTURN) {
-			this.clientsUsedTurn.add(client.clientId);
-		}
+		if (client.usingTURN) this.clientsUsedTurn.add(client.clientId);
+		else this.clientsUsedTurn.delete(client.clientId);
 
 		if (this.settings.autoUpdateOnClientUpdate) {
 			this.update(context);

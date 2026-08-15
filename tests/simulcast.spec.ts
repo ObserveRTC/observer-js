@@ -1,9 +1,8 @@
 import { Observer } from '../src/Observer';
-import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
+import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import { LOWEST_COMMON_DENOMINATOR_ISSUE } from '../src/validators/SimulcastReceiverValidator';
 import type { ValidationReport } from '../src/validators/Validator';
 import type { ClientSample } from '../src/schema/ClientSample';
-import { payloadOf } from './helpers/issues';
 
 
 const PRODUCER = 'P';
@@ -59,15 +58,20 @@ function receiverSample(clientId: string, tick: number, bitrates: number[]): Cli
 }
 
 function newObserver() {
-	return new Observer({
+	const observer = new Observer({
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		autoUpdateOnCallUpdate: false,
 		// Isolate the detector under test: without this the auto-created built-ins would raise
 		// their own findings and the assertions below could not attribute an issue to one detector.
 		observerDetectors: null,
 		callDetectors: null,
 	});
+
+	// Pre-create the call with client-driven auto-update disabled too, so `accept()` (which would
+	// otherwise create it with the default `autoUpdateOnClientUpdate: true`) reuses this one.
+	observer.createObservedCall({ callId: 'call-1', autoUpdateOnClientUpdate: false });
+
+	return observer;
 }
 
 /** Drive `ticks` rounds of samples and run the detector after each. */
@@ -124,8 +128,8 @@ describe('SimulcastReceiverValidator', () => {
 	function start(observer: Observer, config: Partial<{ minSamples: number, minChecks: number }> = {}) {
 		const reports: ValidationReport[] = [];
 
-		observer.on('validator-settled', ({ report }) => reports.push(report));
-		observer.addValidator('simulcast-receiver-validator', config);
+		observer.on('validation-ready', ({ report }) => reports.push(report));
+		observer.addValidator('simulcast-receivers', config);
 
 		return reports;
 	}
@@ -216,7 +220,7 @@ describe('SimulcastReceiverValidator', () => {
 		run(observer, TICKS, HEALTHY_WITH_OUTLIER);
 		expect(reports).toHaveLength(1);
 
-		observer.addValidator('simulcast-receiver-validator', { minSamples: 4, minChecks: 1 });
+		observer.addValidator('simulcast-receivers', { minSamples: 4, minChecks: 1 });
 		run(observer, TICKS, CONTAGION);
 
 		expect(reports).toHaveLength(2);
@@ -258,7 +262,7 @@ describe('SimulcastReceiverValidator', () => {
 	});
 
 	it('is not started by default — a validator is an explicit, one-shot check', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 
 		expect(observer.validators.size).toBe(0);
 

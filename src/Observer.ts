@@ -8,20 +8,21 @@ import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } 
 import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
-import { AvailableCallScopeDetectorsConfigs, AvailableDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
+import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
-import {
-	createCallDetectors,
-	type CallDetectorsConfig,
-	type ObserverDetectorsConfig,
-	type CallDetectorDefaults,
-	type ObserverDetectorDefaults,
-} from './detectors/DetectorsConfig';
 import type { ObserverIssue } from './common/ObserverIssue';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
-import { SfuCongestionDetector, SfuCongestionDetectorConfig } from './detectors/SfuCongestionDetector';
-import { Detector, IceDisruptionDetector, SimulcastReceiverValidator } from '.';
+import type { Detector } from './detectors/Detector';
+import { SfuCongestionDetector } from './detectors/SfuCongestionDetector';
+import { IceDisruptionDetector } from './detectors/IceDisruptionDetector';
+import { ConcurrentIssueDetector } from './detectors/ConcurrentIssueDetector';
+import { TurnServerHealthDetector } from './detectors/TurnServerHealthDetector';
+import { TurnServerOutageDetector } from './detectors/TurnServerOutageDetector';
+import { UnconsumedTrackDetector } from './detectors/UnconsumedTrackDetector';
+import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatchDetector';
+import { IssueFanOutDetector } from './detectors/IssueFanOutDetector';
+import { SimulcastReceiverValidator } from './validators/SimulcastReceiverValidator';
 
 const logger = createLogger('Observer');
 
@@ -62,7 +63,12 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	closeCallIfEmptyForMs?: number,
 
 	/**
-	 * If true, every call update triggers an observer-wide `update()` pass. If false, the app must manually trigger updates.
+	 * When `true` (the default), every call update triggers an observer-wide `update()` pass.
+	 *
+	 * There is deliberately no timer and no separate policy object: a call is updated when any of its
+	 * clients is, and the observer is updated when any of its calls is — so the observer is updated
+	 * exactly when any client anywhere is. Set to `false` only if you drive `observer.update()`
+	 * yourself, and note that observer-scoped detectors and validators run *nowhere else*.
 	 */
 	autoUpdateOnCallUpdate?: boolean;
 
@@ -78,6 +84,7 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 		fractionLost: number,
 		rttInMs: number,
 	},
+
 	/**
 	 * Optional factory invoked when a call is created without an explicit `appData`
 	 * (e.g. lazily by `accept()`), so apps can enrich appData without pre-creating the
@@ -106,149 +113,75 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	/**
 	 * Observer-scoped detectors — those reasoning **across calls** — created on construction.
 	 *
-	 * Each key is `undefined` (create with the values in `defaultObserverDetectorsConfig`), an object
-	 * (those keys merged over the defaults), or `null` (don't create). Set the whole property to
-	 * `null` to run with no observer-scoped detectors.
+	 * Each key follows {@link DetectorSlot}: omitted → created with its defaults, an object → those
+	 * keys merged over the defaults, `null` → not created. Omitting the whole property creates all of
+	 * them; set it to `null` to run with no observer-scoped detectors at all.
 	 *
 	 * ```ts
 	 * new Observer({
 	 *   observerDetectors: {
-	 *     turnServerOutageDetector: { minClientsAtPeak: 10 },
-	 *     concurrentIssueDetector: null,
+	 *     'turn-server-outage-detector': { minClientsAtPeak: 10 },
+	 *     'concurrent-issue-detector': null,
 	 *   },
 	 * });
 	 * ```
 	 */
 	observerDetectors?: {
-		[K in keyof AvailableObserverScopeDetectorsConfigs]?: Partial<AvailableObserverScopeDetectorsConfigs[K]> | null;
-	}
+		[K in keyof AvailableObserverScopeDetectorsConfigs]?: DetectorSlot<AvailableObserverScopeDetectorsConfigs[K]>;
+	} | null
 
 	/**
 	 * Call-scoped detectors, applied to **every call** this observer creates. Same three-state
-	 * semantics as `observerDetectors`, resolving against `defaultCallDetectorsConfig`. A call can
-	 * override this wholesale via `ObservedCallSettings.detectors`.
+	 * semantics as `observerDetectors`.
 	 */
 	callDetectors?: {
-		[K in keyof AvailableCallScopeDetectorsConfigs]?: Partial<AvailableCallScopeDetectorsConfigs[K]> | null;
-	}
+		[K in keyof AvailableCallScopeDetectorsConfigs]?: DetectorSlot<AvailableCallScopeDetectorsConfigs[K]>;
+	} | null
 
 }
 
-/* ================================================================================================
- * Detector defaults
+/**
+ * Per-detector configuration slot.
  *
- * Every threshold the library applies out of the box is in these two objects and nowhere else. They
- * used to be a `defaultConfig` inside each detector file, which meant answering "what does this do
- * if I configure nothing?" required opening eight files and trusting you had found them all.
+ * Three states, and the distinction between the last two is the point:
  *
- * Seeing them together also makes the *relationships* legible, which per-file constants hid:
+ * - **omitted / `undefined`** — the detector is created with its own defaults.
+ * - **an object** — created with those keys merged over its defaults.
+ * - **`null`** — *not created at all*.
  *
- *  - `cooldownMs` rises with how expensive the finding is to act on. Quality correlations re-arm
- *    after a minute; the windowed one waits two, because re-reporting mid-window says nothing new;
- *    the two that mean "somebody has to go look at a server" wait five.
- *  - Ratios encode how much agreement each question needs. A call-wide claim needs half the
- *    participants; a claim about one published track needs most of its subscribers; a *delivery*
- *    claim needs all of them, because "some receivers are dry" is a different verdict from "the
- *    track is not being delivered".
- *  - Minimum populations are the anti-coincidence floor: three participants before a ratio means
- *    anything, five clients before one TURN server can be compared against another.
+ * This mirrors `client-monitor-js` deliberately: the same mental model should apply on both sides of
+ * the wire. `undefined` cannot mean "off", because that would make every detector opt-in and the
+ * common case (`new Observer()`) would silently detect nothing.
  *
- * Both are exported, so you can read or spread them instead of copying magic numbers:
- * `{ ...defaultCallDetectorsConfig.concurrentIssueDetector, minClients: 5 }`.
+ * Each detector owns its own defaults, in its constructor, next to the doc that explains what the
+ * threshold means. Read them there.
+ */
+export type DetectorSlot<T> = Partial<T> | null;
+
+/**
+ * Every observer-scoped detector, in creation order.
  *
- * The types are complete (no `Partial`), so adding a field to any detector's config fails to compile
- * until its default is supplied here — a threshold with no visible default is one nobody finds.
- * ============================================================================================== */
+ * Listed explicitly rather than derived from a type, because the three-state slot semantics need to
+ * iterate the *complete* set — including the keys the caller never mentioned, which is exactly the
+ * set a `Object.entries(config)` loop cannot see. Adding a detector without adding it here means it
+ * is never created by default, so the compiler is made to care: the array is typed as the full key
+ * set, and a missing entry fails to type-check.
+ */
+export const OBSERVER_SCOPE_DETECTOR_NAMES: readonly (keyof AvailableObserverScopeDetectorsConfigs)[] = [
+	SfuCongestionDetector.NAME,
+	IceDisruptionDetector.NAME,
+	ConcurrentIssueDetector.NAME,
+	TurnServerHealthDetector.NAME,
+	TurnServerOutageDetector.NAME,
+];
 
-/** Defaults for the detectors created on **every call**. */
-export const defaultCallDetectorsConfig: CallDetectorDefaults = {
-
-	/** Many participants of one call in the same reported state at once. */
-	concurrentIssueDetector: {
-		// empty = every type the clients report
-		issueTypes: [],
-		minClients: 3,
-		minAffectedClients: 3,
-		affectedRatioThreshold: 0.5,
-		// observer scope only; ignored here
-		minAffectedCalls: 2,
-		// observer scope only; ignored here
-		affectedCallRatioThreshold: 0,
-		onsetBurstWindowInMs: 2_000,
-		cooldownMs: 60_000,
-	},
-
-	/** How far a receiver-reported issue fans out across one published track's subscribers. */
-	issueFanOutDetector: {
-		issueTypes: [],
-		minReceivers: 3,
-		// "most subscribers of this track"
-		affectedRatioThreshold: 0.6,
-		reportSingleReceiver: true,
-		cooldownMs: 60_000,
-	},
-
-	/** Publisher sending but subscribers dry. */
-	trackDeliveryMismatchDetector: {
-		dryInboundIssueType: 'dry-inbound-track',
-		dryOutboundIssueType: 'dry-outbound-track',
-		minReceivers: 2,
-		// ALL of them: anything less is a per-consumer fault, not a delivery failure
-		allReceiversRatio: 1,
-		cooldownMs: 60_000,
-	},
-
-	/** A track published to nobody. */
-	unconsumedTrackDetector: {
-		// wall clock, not sample time; a gap before the first subscription is normal at join
-		minUnconsumedDurationInMs: 30_000,
-		minBitrate: 50_000,
-		cooldownMs: 300_000,
-	},
-
-	/** Many clients losing ICE inside one window, read from raw state transitions. */
-	iceDisruptionDetector: {
-		minClients: 3,
-		affectedRatioThreshold: 0.5,
-		windowMs: 10_000,
-		cooldownMs: 60_000,
-	},
-};
-
-/** Defaults for the detectors created once, on the **observer**. */
-export const defaultObserverDetectorsConfig: ObserverDetectorDefaults = {
-
-	// Deliberately the same object as the call-scoped entry: the thresholds are identical, and the
-	// scopes differ in which of them apply (`minAffectedCalls` gates here, `affectedRatioThreshold`
-	// gates there). Duplicating the literal would let the two drift apart for no reason.
-	concurrentIssueDetector: defaultCallDetectorsConfig.concurrentIssueDetector,
-
-	/** Trouble clustering on one TURN relay while other relays are fine. */
-	turnServerHealthDetector: {
-		minClientsPerServer: 5,
-		degradedRatioThreshold: 0.5,
-		// any open issue: the question is where trouble clusters, not what it is
-		issueTypes: [],
-		consecutiveTicks: 2,
-		cooldownMs: 60_000,
-	},
-
-	/** One TURN relay's population collapsing while the fleet carries on. */
-	turnServerOutageDetector: {
-		minClientsAtPeak: 5,
-		// an outage is near-total by definition; partial degradation is the health detector's question
-		lossRatioThreshold: 0.8,
-		peakWindowMs: 120_000,
-		// absence without a control group is just quiet
-		requireControlGroup: true,
-		minControlGroupClients: 5,
-		controlGroupHealthyRatio: 0.7,
-		consecutiveTicks: 2,
-		// one event, not one per tick
-		cooldownMs: 300_000,
-	},
-};
-
+/** Every call-scoped detector, created for each call. See {@link OBSERVER_SCOPE_DETECTOR_NAMES}. */
+export const CALL_SCOPE_DETECTOR_NAMES: readonly (keyof AvailableCallScopeDetectorsConfigs)[] = [
+	UnconsumedTrackDetector.NAME,
+	TrackDeliveryMismatchDetector.NAME,
+	ConcurrentIssueDetector.NAME,
+	IssueFanOutDetector.NAME,
+];
 
 export declare interface Observer {
 	on<U extends keyof ObserverEvents>(event: U, listener: (...args: ObserverEvents[U]) => void): this;
@@ -287,6 +220,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	 * than a walk over every call and client. This is what observer-scoped detectors read.
 	 */
 	public readonly activeIssuesRegistry = new ActiveIssuesRegistry();
+
 	/**
 	 * Validators currently running. Each removes itself when it finishes, so this is normally empty —
 	 * a validator is a one-shot check, not a permanent fixture. Start one with {@link addValidator}.
@@ -314,13 +248,17 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			closeCallIfEmptyForMs: 60_000,
 			closeClientIfIdleForMs: 60_000,
 			...config,
-		}
+		};
 
-		if (this.config.observerDetectors) {
-			for (const [ name, config ] of Object.entries(this.config.observerDetectors)) {
-				if (config === null) continue;
+		if (this.config.observerDetectors !== null) {
+			const slots = this.config.observerDetectors ?? {};
 
-				this.addObserverDetector(name as keyof AvailableObserverScopeDetectorsConfigs, config);
+			for (const name of OBSERVER_SCOPE_DETECTOR_NAMES) {
+				const slot = slots[name];
+
+				if (slot === null) continue;
+
+				this.addObserverDetector(name, slot ?? {});
 			}
 		}
 	}
@@ -339,13 +277,28 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		let detector: Detector | undefined;
 
 		switch (name) {
-			case 'sfu-congestion-detector': {
+			case SfuCongestionDetector.NAME: {
 				detector = new SfuCongestionDetector(this, config);
 
 				break;
 			}
-			case 'ice-disruption-detector': {
+			case IceDisruptionDetector.NAME: {
 				detector = new IceDisruptionDetector(this, config);
+
+				break;
+			}
+			case ConcurrentIssueDetector.NAME: {
+				detector = new ConcurrentIssueDetector(this, config);
+
+				break;
+			}
+			case TurnServerHealthDetector.NAME: {
+				detector = new TurnServerHealthDetector(this, config);
+
+				break;
+			}
+			case TurnServerOutageDetector.NAME: {
+				detector = new TurnServerOutageDetector(this, config);
 
 				break;
 			}
@@ -360,16 +313,23 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		return this;
 	}
 
+	/**
+	 * Enable a call-scoped detector for calls created **from now on**.
+	 *
+	 * This edits the config, not the live calls: calls already open keep the detector set they were
+	 * built with. To add one to an existing call, use `observedCall.addDetector(...)` directly.
+	 */
 	public addCallDetector<K extends keyof AvailableCallScopeDetectorsConfigs>(name: K, config: Partial<AvailableCallScopeDetectorsConfigs[K]> = {}): this {
 		if (this.closed) return this;
-		if (this.config.callDetectors === undefined) this.config.callDetectors = {};
+
+		// `null` means "no call detectors at all", and naming one is an explicit reversal of that —
+		// so start from an empty set rather than silently doing nothing.
+		if (!this.config.callDetectors) this.config.callDetectors = {};
 
 		this.config.callDetectors[name] = config;
 
 		return this;
 	}
-
-
 
 	/**
 	 * Start a structural check. It runs on each `observer.update()` until it can decide, reports once
@@ -393,12 +353,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		};
 
 		switch (name) {
-			case 'simulcast-receivers':
-				validator = new SimulcastReceiverValidator(
-					this,
-					onDone,
-					config,
-				);
+			case SimulcastReceiverValidator.NAME:
+				validator = new SimulcastReceiverValidator(this, onDone, config);
 				break;
 		}
 
@@ -450,12 +406,26 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		// Build the call's track resolver from the configured factory (if any).
 		observedCall.remoteTrackResolver = this.config.createRemoteTrackResolver?.(observedCall);
 
-		if (this.config.callDetectors) {
-			for (const [ name, config ] of Object.entries(this.config.callDetectors)) {
-				if (config === null) continue;
+		if (this.config.callDetectors !== null) {
+			const slots = this.config.callDetectors ?? {};
 
-				observedCall.addDetector(name as keyof AvailableCallScopeDetectorsConfigs, config);
+			for (const name of CALL_SCOPE_DETECTOR_NAMES) {
+				const detectorConfig = slots[name];
+
+				if (detectorConfig === null) continue;
+
+				observedCall.addDetector(name, detectorConfig ?? {});
 			}
+		}
+
+		// A call is updated when any of its clients is; the observer is updated when any of its calls
+		// is. Composed, that means the observer is updated exactly when any client anywhere is — no
+		// timer, no separate policy object, nothing to keep in sync.
+		if (this.config.autoUpdateOnCallUpdate) {
+			const onCallUpdate = () => this.update();
+
+			observedCall.once('close', () => observedCall.off('update', onCallUpdate));
+			observedCall.on('update', onCallUpdate);
 		}
 
 		observedCall.once('close', () => {
@@ -539,12 +509,18 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		}
 		this.closed = true;
 
-		this.observedCalls.forEach((call) => call.close());
-		// Release detectors (they may hold bus subscriptions) before announcing the close.
+		// Copy first: `call.close()` removes the call from this map, and mutating a Map while iterating
+		// it with forEach skips entries — half the calls would survive a close.
+		for (const call of [ ...this.observedCalls.values() ]) call.close();
+
+		// Release detectors (they may hold bus subscriptions, timers, or tracker registrations) before
+		// announcing the close.
 		this.detectors.clear();
 		// Free anything waiting on a verdict rather than leaving it hanging.
 		for (const validator of [ ...this.validators ]) validator.cancel();
 		this.validators.clear();
+		// Each call cleared its own issues on close; this covers anything raised after that.
+		this.activeIssuesRegistry.clear();
 
 		this._notify('observer-closed', { ...this.eventScope });
 	}

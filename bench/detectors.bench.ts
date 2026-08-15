@@ -9,7 +9,7 @@
  *   CALLS=20 CLIENTS=12 SUBSCRIPTIONS=11 yarn bench
  */
 import { Observer } from '../src/Observer';
-import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
+import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import type { ClientSample } from '../src/schema/ClientSample';
 
 const CALLS = Number(process.env.CALLS ?? 20);
@@ -90,8 +90,9 @@ function buildPeers(): Peer[] {
 
 function measure(label: string, callDetectors: Record<string, unknown> | null) {
 	const observer = new Observer({
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		// Manual update control: auto-updating per accept() (the default) would blur the "accept" and
+		// "update" timings measured separately below into one another.
+		autoUpdateOnCallUpdate: false,
 		observerDetectors: null as never,
 		callDetectors: callDetectors as never,
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
@@ -99,6 +100,10 @@ function measure(label: string, callDetectors: Record<string, unknown> | null) {
 	const peers = buildPeers();
 	const issueCount = Math.round(CLIENTS * ISSUE_SHARE);
 	const callIds = Array.from({ length: CALLS }, (_, i) => `call-${i}`);
+
+	// Pre-create every call with client-driven auto-update disabled too, so `accept()` (which would
+	// otherwise create it with the default `autoUpdateOnClientUpdate: true`) reuses these.
+	for (const callId of callIds) observer.createObservedCall({ callId, autoUpdateOnClientUpdate: false });
 
 	for (const peer of peers) observer.accept(sample(peer, 1000, false));
 
@@ -127,9 +132,12 @@ function measure(label: string, callDetectors: Record<string, unknown> | null) {
 	};
 }
 
+// The four call-scope detectors (see `AvailableCallScopeDetectorsConfigs` / `CALL_SCOPE_DETECTOR_NAMES`
+// in `src/Observer.ts`). `ice-disruption-detector` is observer-scope only now, so it isn't one of
+// these any more; the RTCP check is a validator, not a detector, so it was never one either.
 const ALL = [
-	'concurrentIssueDetector', 'issueFanOutDetector', 'trackDeliveryMismatchDetector',
-	'worstReceiverContagionDetector', 'unconsumedTrackDetector', 'iceDisruptionDetector',
+	'concurrent-issue-detector', 'issue-fan-out-detector', 'track-delivery-mismatch-detector',
+	'unconsumed-track-detector',
 ] as const;
 
 const only = (name: string) => {
@@ -153,45 +161,4 @@ console.log(`published tracks/call=${CLIENTS}  receiver links/call=${CLIENTS * S
 console.log('scenario'.padEnd(38), 'accept ms/tick', ' update ms/tick');
 for (const row of rows) {
 	console.log(row.label.padEnd(38), String(row.acceptMsPerTick).padStart(13), String(row.updateMsPerTick).padStart(14));
-}
-
-/* ------------------------------------------------------------------------------------------------
- * IssueIndex query scaling.
- *
- * The design goal was that a query cost O(matching issues), not O(clients) — a healthy fleet should
- * pay almost nothing. These numbers verify it: the client count is fixed and only the number of open
- * issues varies.
- * ---------------------------------------------------------------------------------------------- */
-
-function measureQueries(openIssuesPerCall: number) {
-	const observer = new Observer({
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
-		observerDetectors: null as never,
-		callDetectors: null as never,
-	});
-	const peers = buildPeers();
-
-	for (const peer of peers) {
-		observer.accept(sample(peer, 1000, peer.index < openIssuesPerCall));
-	}
-
-	const index = observer.issueIndex;
-	const ROUNDS = 2_000;
-	const started = process.hrtime.bigint();
-
-	for (let i = 0; i < ROUNDS; i++) index.cohorts();
-
-	const perCallUs = Number(process.hrtime.bigint() - started) / 1e3 / ROUNDS;
-
-	observer.close();
-
-	return { openIssues: openIssuesPerCall * CALLS, perCallUs: Number(perCallUs.toFixed(1)) };
-}
-
-console.log(`\nobserver-scoped cohorts() over ${CALLS * CLIENTS} clients:`);
-for (const openPerCall of [ 0, 1, 4, Math.floor(CLIENTS / 2), CLIENTS ]) {
-	const row = measureQueries(openPerCall);
-
-	console.log(`  ${String(row.openIssues).padStart(5)} open issues   ${String(row.perCallUs).padStart(7)} µs/query`);
 }

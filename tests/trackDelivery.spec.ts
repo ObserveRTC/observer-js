@@ -1,10 +1,9 @@
 import { Observer } from '../src/Observer';
-import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
+import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchTypes } from '../src/detectors/TrackDeliveryMismatchDetector';
 import { UnconsumedTrackDetector, UnconsumedTrackTypes } from '../src/detectors/UnconsumedTrackDetector';
 import { makeSample } from './helpers/samples';
 import { payloadOf } from './helpers/issues';
-import { defaultCallDetectorsConfig } from '../src/Observer';
 
 const PRODUCER = 'P';
 
@@ -12,15 +11,20 @@ const raise = (type: string, key: string, payload: Record<string, unknown>, time
 	({ type, key, payload: JSON.stringify(payload), timestamp });
 
 function newObserver(withResolver = true) {
-	return new Observer({
+	const observer = new Observer({
 		...(withResolver ? { createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() } : {}),
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		autoUpdateOnCallUpdate: false,
 		// Isolate the detector under test: without this the auto-created built-ins would raise
 		// their own findings and the assertions below could not attribute an issue to one detector.
 		observerDetectors: null,
 		callDetectors: null,
 	});
+
+	// Pre-create the call with client-driven auto-update disabled too, so `accept()` (which would
+	// otherwise create it with the default `autoUpdateOnClientUpdate: true`) reuses this one.
+	observer.createObservedCall({ callId: 'call-1', autoUpdateOnClientUpdate: false });
+
+	return observer;
 }
 
 /** Publisher A of PRODUCER. `packetsSent` frozen between ticks = the source went dry. */
@@ -65,8 +69,13 @@ describe('TrackDeliveryMismatchDetector', () => {
 		for (const id of ids) observer.accept(receiver(id, 1000));
 
 		const call = observer.getObservedCall('call-1')!;
+		const detector = new TrackDeliveryMismatchDetector(call, {});
 
-		call.detectors.add(new TrackDeliveryMismatchDetector(call, defaultCallDetectorsConfig.trackDeliveryMismatchDetector));
+		// The detector is an `ActiveIssueTracker`, fed pushed issues rather than polling for them —
+		// wire it up for the two issue types it cares about.
+		call.activeIssuesRegistry.addIssueTracker('dry-inbound-track', detector);
+		call.activeIssuesRegistry.addIssueTracker('dry-outbound-track', detector);
+		call.detectors.add(detector);
 
 		return { observer, issues, call };
 	}
@@ -86,8 +95,8 @@ describe('TrackDeliveryMismatchDetector', () => {
 		const payload = payloadOf(issue!);
 
 		expect(payload.publisherSending).toBe(true);
-		expect(payload.dryReceivers).toBe(3);
-		expect(payload.dryRatio).toBe(1);
+		expect(payload.numberOfDrySubscribers).toBe(3);
+		expect(payload.numberOfSubscribers).toBe(3);
 		expect(payload.trackId).toBe('tA');
 		expect(payload.publisherClientId).toBe('A');
 
@@ -109,8 +118,9 @@ describe('TrackDeliveryMismatchDetector', () => {
 
 		const payload = payloadOf(issue!);
 
-		expect(payload.dryClientIds).toEqual([ 'B' ]);
-		expect(payload.healthyClientIds.sort()).toEqual([ 'C', 'D' ]);
+		// The detector reports counts, not per-client ids: one of the three subscribers is dry.
+		expect(payload.numberOfDrySubscribers).toBe(1);
+		expect(payload.numberOfSubscribers).toBe(3);
 
 		observer.close();
 	});
@@ -154,7 +164,7 @@ describe('UnconsumedTrackDetector', () => {
 		const call = observer.getObservedCall('call-1')!;
 
 		// zero-duration threshold so the test doesn't have to wait
-		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		call.update();
@@ -179,7 +189,7 @@ describe('UnconsumedTrackDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		observer.accept(receiver('B', 2000));
@@ -200,7 +210,7 @@ describe('UnconsumedTrackDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		call.update();
@@ -224,8 +234,11 @@ describe('RemoteTrackResolver requirement', () => {
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(receiver(id, 1000));
 
 		const call = observer.getObservedCall('call-1')!;
+		const detector = new TrackDeliveryMismatchDetector(call, {});
 
-		call.detectors.add(new TrackDeliveryMismatchDetector(call, defaultCallDetectorsConfig.trackDeliveryMismatchDetector));
+		call.activeIssuesRegistry.addIssueTracker('dry-inbound-track', detector);
+		call.activeIssuesRegistry.addIssueTracker('dry-outbound-track', detector);
+		call.detectors.add(detector);
 
 		observer.accept(publisher(2000, 300));
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(receiver(id, 2000, [ dry(id, 2000) ]));

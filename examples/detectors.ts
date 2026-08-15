@@ -27,8 +27,6 @@ import {
 	TurnServerHealthDetector,
 	TurnServerOutageDetector,
 	issuePayloadOf,
-	defaultCallDetectorsConfig,
-	defaultObserverDetectorsConfig,
 	type ObserverIssue,
 	type ClientSample,
 } from '../src';
@@ -145,9 +143,11 @@ function clientSample(clientId: string, timestamp: number, opts: ClientOpts = {}
 function newObserver(withResolver = true) {
 	return new Observer({
 		...(withResolver ? { createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() } : {}),
-		// Manual updates so each scenario controls exactly when detectors run.
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		// Turns off the OBSERVER cascade, so observer-scope detectors run only when a scenario calls
+		// `observer.update()` itself. A call still auto-updates on every accept() (that default didn't
+		// change) — harmless here, since every threshold below is gated by counts/ratios that aren't
+		// satisfied until the scenario's last sample lands.
+		autoUpdateOnCallUpdate: false,
 		// Only the detector under test — see the file header.
 		observerDetectors: null,
 		callDetectors: null,
@@ -211,14 +211,16 @@ function concurrentIssuesInOneCall() {
 	observer.accept(clientSample('alice', 1000));
 
 	const call = observer.getObservedCall('call-1')!;
-	const detector = new ConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, // issueTypes: [] (default) means every type the clients report — usually what you want, since
+	const detector = new ConcurrentIssueDetector(call, {
+		// issueTypes: [] (default) means every type the clients report — usually what you want, since
 		// the detector is generic over the client's vocabulary.
 		issueTypes: [],
 		minClients: 3,            // below this a ratio means nothing
 		minAffectedClients: 3,
 		affectedRatioThreshold: 0.5,
 		onsetBurstWindowInMs: 2_000,  // onsets this close escalate to ISSUE_ONSET_BURST
-		cooldownMs: 60_000 });
+		cooldownMs: 60_000,
+	});
 
 	call.detectors.add(detector);
 
@@ -238,7 +240,7 @@ function concurrentIssuesInOneCall() {
 	}
 	call.update();
 
-	console.log(`\n  after the clients resolved: ${detector.lastCohorts.length} open cohort(s)`);
+	console.log(`\n  after the clients resolved: ${detector.lastGroups.length} open cohort(s)`);
 
 	observer.close();
 
@@ -258,14 +260,16 @@ function concurrentIssuesAcrossCalls() {
 	const observer = newObserver();
 	const found = watch(observer);
 
-	const detector = new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, minAffectedClients: 3,
+	const detector = new ConcurrentIssueDetector(observer, {
+		minAffectedClients: 3,
 		// The gate that makes an observer-scope finding mean something a call-scope one doesn't:
 		// the cohort must span independent calls. Clients in different calls share no room, no
 		// publisher and no host — only the servers.
 		minAffectedCalls: 2,
 		// Note `affectedRatioThreshold` is NOT applied at observer scope: a real fleet event is a
 		// small share of all clients, so a participant ratio would suppress exactly what we want.
-		affectedCallRatioThreshold: 0 });
+		affectedCallRatioThreshold: 0,
+	});
 
 	observer.detectors.add(detector);
 
@@ -304,11 +308,13 @@ function issueFanOut() {
 	observer.accept(clientSample('alice', 1000, { publishes: { producerId: 'alice-mic', packetsSent: 100, kind: 'audio' } }));
 
 	const call = observer.getObservedCall('call-1')!;
-	const detector = new IssueFanOutDetector(call, { ...defaultCallDetectorsConfig.issueFanOutDetector, issueTypes: [],              // any type; audio and video fan out identically
+	const detector = new IssueFanOutDetector(call, {
+		issueTypes: [],              // any type; audio and video fan out identically
 		minReceivers: 3,
 		affectedRatioThreshold: 0.6, // "most of this track's subscribers"
 		reportSingleReceiver: true,  // also report the "exactly one receiver" case
-		cooldownMs: 60_000 });
+		cooldownMs: 60_000,
+	});
 
 	call.detectors.add(detector);
 
@@ -355,11 +361,13 @@ function trackDeliveryMismatch() {
 
 	const call = observer.getObservedCall('call-1')!;
 
-	call.detectors.add(new TrackDeliveryMismatchDetector(call, { ...defaultCallDetectorsConfig.trackDeliveryMismatchDetector, dryInboundIssueType: 'dry-inbound-track',
+	call.detectors.add(new TrackDeliveryMismatchDetector(call, {
+		dryInboundIssueType: 'dry-inbound-track',
 		dryOutboundIssueType: 'dry-outbound-track',
 		minReceivers: 2,
 		allReceiversRatio: 1,   // ALL subscribers must be dry for the whole-track verdict
-		cooldownMs: 60_000 }));
+		cooldownMs: 60_000,
+	}));
 
 	// tick 1 — healthy, establishing the counter baselines every delta is measured from.
 	for (const clientId of [ 'bob', 'carol', 'dave' ]) {
@@ -401,7 +409,7 @@ function simulcast() {
    lowest common denominator.
 
    That is a property of the SFU BUILD, so this is a one-shot check rather than a detector: it runs
-   until it can decide, reports once on 'validator-settled', and the observer drops it. Start another
+   until it can decide, reports once on 'validation-ready', and the observer drops it. Start another
    after a deploy.
 
    The good verdict needs positive evidence. The check only runs when a publisher has 3+ receivers
@@ -411,7 +419,7 @@ function simulcast() {
 
 	const observer = newObserver();
 
-	observer.on('validator-settled', ({ validator, report }) => {
+	observer.on('validation-ready', ({ validator, report }) => {
 		if (!report.ready) return;
 
 		console.log(`\n  ✔ [validator] ${validator} → ${String(report.verdict).toUpperCase()}`);
@@ -423,7 +431,7 @@ function simulcast() {
 
 	observer.accept(clientSample('alice', 1000, { publishes: { producerId: 'alice-cam', packetsSent: 0 } }));
 	// one clean check is enough for the demo; the default is 3
-	observer.addValidator('simulcast-receiver-validator', { minSamples: 4, minChecks: 1 });
+	observer.addValidator('simulcast-receivers', { minSamples: 4, minChecks: 1 });
 
 	// bob and carol hold steady; dave collapses. The publisher IGNORES dave — layers are per receiver.
 	const steady = 8_000_000;
@@ -498,13 +506,15 @@ function unconsumedTrack() {
 
 	const call = observer.getObservedCall('call-1')!;
 
-	call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, // NOTE this clock is the observer's WALL clock, not the sample timestamps — an unconsumed
+	call.detectors.add(new UnconsumedTrackDetector(call, {
+		// NOTE this clock is the observer's WALL clock, not the sample timestamps — an unconsumed
 		// track is a duration of real elapsed time, not of replayed data. A synthetic replay cannot
 		// fast-forward it, so the demo uses 0. In production keep the 30s default: a brief gap
 		// between publishing and the first subscription is completely normal at join time.
 		minUnconsumedDurationInMs: 0,
 		minBitrate: 1_000,                 // must be genuinely sending, not just present
-		cooldownMs: 300_000 }));
+		cooldownMs: 300_000,
+	}));
 
 	// Alice keeps sending; bob and carol are in the call but subscribe to nothing of hers. Wasted
 	// uplink, and usually a signalling bug — the consumer was never created.
@@ -539,25 +549,28 @@ function iceDisruption() {
    The one detector that does NOT read client issues. It reads raw ICE state transitions, which
    arrive in every sample regardless of what the client runs and which can occur and revert between
    two update() ticks — so it subscribes to the bus and implements close(). One client losing ICE is
-   routine; most of them doing it within seconds is an infrastructure event.`);
+   routine; most of them doing it within seconds is an infrastructure event.
+
+   It is OBSERVER-scoped (it takes an \`Observer\`, not an \`ObservedCall\`): the correlation is across
+   every client the observer sees, not just one call's. For a single-call demo like this one the
+   numbers come out the same either way.`);
 
 	const observer = newObserver();
 	const found = watch(observer);
 
-	observer.accept(clientSample('alice', 1000, { iceState: 'connected' }));
-
-	const call = observer.getObservedCall('call-1')!;
-	const detector = new IceDisruptionDetector(call, { ...defaultCallDetectorsConfig.iceDisruptionDetector, minClients: 3,
+	const detector = new IceDisruptionDetector(observer, {
+		minClients: 3,
 		affectedRatioThreshold: 0.5,
 		windowMs: 10_000,    // transitions are counted inside this sliding window
-		cooldownMs: 60_000 });
+		cooldownMs: 60_000,
+	});
 
-	call.detectors.add(detector);
+	observer.detectors.add(detector);
 
 	for (const clientId of [ 'alice', 'bob', 'carol', 'dave' ]) {
 		observer.accept(clientSample(clientId, 1000, { iceState: 'connected' }));
 	}
-	call.update();
+	observer.update();
 
 	// Three of four transition to disconnected/failed at once — a dead SFU worker stops answering
 	// ICE binding requests for every transport on it simultaneously (mediasoup is ICE-Lite), which
@@ -567,11 +580,11 @@ function iceDisruption() {
 	}
 	observer.accept(clientSample('dave', 2000, { iceState: 'connected' }));
 
-	call.update();
+	observer.update();
 	detector.update();
 
-	// It holds bus subscriptions, so it implements close(). Removing it or closing the call cleans up.
-	call.detectors.remove(detector);
+	// It holds bus subscriptions, so it implements close(). Removing it or closing the observer cleans up.
+	observer.detectors.remove(detector);
 
 	observer.close();
 
@@ -591,11 +604,13 @@ function turnServerHealth() {
 	const observer = newObserver();
 	const found = watch(observer);
 
-	const detector = new TurnServerHealthDetector(observer, { ...defaultObserverDetectorsConfig.turnServerHealthDetector, minClientsPerServer: 5,
+	const detector = new TurnServerHealthDetector(observer, {
+		minClientsPerServer: 5,
 		degradedRatioThreshold: 0.5,
 		issueTypes: [],        // any open issue: the question is where trouble clusters, not what it is
 		consecutiveTicks: 1,   // production default is 2
-		cooldownMs: 60_000 });
+		cooldownMs: 60_000,
+	});
 
 	observer.detectors.add(detector);
 
@@ -646,7 +661,8 @@ function turnServerOutage() {
 	const observer = newObserver();
 	const found = watch(observer);
 
-	const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, minClientsAtPeak: 5,          // it must have been carrying real traffic
+	const detector = new TurnServerOutageDetector(observer, {
+		minClientsAtPeak: 5,          // it must have been carrying real traffic
 		lossRatioThreshold: 0.8,      // an outage is near-total by definition
 		peakWindowMs: 120_000,
 		// The heart of the design. A call ending, everyone leaving at 6pm and a fleet-wide network
@@ -656,7 +672,8 @@ function turnServerOutage() {
 		minControlGroupClients: 5,
 		controlGroupHealthyRatio: 0.7,
 		consecutiveTicks: 1,
-		cooldownMs: 300_000 });
+		cooldownMs: 300_000,
+	});
 
 	observer.detectors.add(detector);
 
@@ -701,19 +718,18 @@ function productionConfig() {
 
 	const observer = new Observer({
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-		updatePolicy: 'update-when-all-call-updated',
-		defaultCallUpdatePolicy: 'update-when-all-client-updated',
 
 		observerDetectors: {
-			concurrentIssueDetector: { minAffectedCalls: 3 },   // stricter fleet gate
-			turnServerOutageDetector: { minClientsAtPeak: 20 }, // large deployment
-			// turnServerHealthDetector omitted -> created with defaults
+			'concurrent-issue-detector': { minAffectedCalls: 3 },     // stricter fleet gate
+			'turn-server-outage-detector': { minClientsAtPeak: 20 }, // large deployment
+			// our clients report ice-* issues themselves, so skip the raw ICE-transition fallback.
+			// `ice-disruption-detector` is observer-scoped now (it takes an `Observer`, not an
+			// `ObservedCall`) — this is where it gets switched off.
+			'ice-disruption-detector': null,
+			// turn-server-health-detector omitted -> created with defaults
 		},
 
-		callDetectors: {
-			iceDisruptionDetector: null,   // our clients report ice-* issues themselves
-		},
-
+		// callDetectors omitted entirely -> every call-scope detector, with its own defaults
 	});
 
 	console.log(`\n   observer.detectors  : ${observer.detectors.listOfNames.join(', ')}`);
@@ -721,7 +737,7 @@ function productionConfig() {
 	observer.createObservedCall({ callId: 'x' });
 	console.log(`   call.detectors      : ${observer.getObservedCall('x')!.detectors.listOfNames.join(', ')}`);
 	// A validator is started explicitly, not configured — it is a one-shot check.
-	observer.addValidator('simulcast-receiver-validator', { minChecks: 5 });
+	observer.addValidator('simulcast-receivers', { minChecks: 5 });
 	console.log(`   running validators  : ${[ ...observer.validators ].map((v) => v.name).join(', ')}`);
 
 	console.log(`
@@ -735,8 +751,8 @@ function productionConfig() {
 
    And start a validator after each deploy, recording whatever it reports:
 
-     onDeploy(() => observer.addValidator('simulcast-receiver-validator'));
-     observer.on('validator-settled', ({ validator, report }) => record(validator, report));
+     onDeploy(() => observer.addValidator('simulcast-receivers'));
+     observer.on('validation-ready', ({ validator, report }) => record(validator, report));
 
    If it never reports, the check never found the conditions it needs — which is worth knowing too.
 

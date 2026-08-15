@@ -1,11 +1,24 @@
 import { Observer } from '../src/Observer';
-import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
-import { ConcurrentIssueDetector, ConcurrentIssueTypes } from '../src/detectors/ConcurrentIssueDetector';
-import { IssueFanOutDetector, IssueFanOutTypes } from '../src/detectors/IssueFanOutDetector';
-import type { ResolvedClientIssue } from '../src/common/ActiveClientIssue';
+import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
+import { ConcurrentIssueDetector, ConcurrentIssueTypes, ConcurrentIssueDetectorConfig } from '../src/detectors/ConcurrentIssueDetector';
+import { IssueFanOutDetector, IssueFanOutTypes, IssueFanOutDetectorConfig } from '../src/detectors/IssueFanOutDetector';
+import type { ResolvedActiveClientIssue } from '../src/issues/ActiveClientIssue';
 import { makeSample } from './helpers/samples';
 import { payloadOf } from './helpers/issues';
-import { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from '../src/Observer';
+
+// Each detector fills in its own defaults for whatever a partial config omits, so an empty object is
+// a valid "defaults" placeholder here — there is no exported default-config constant to import any
+// more; each detector owns its defaults, in its own constructor.
+const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
+	concurrentIssueDetector: {},
+};
+const defaultCallDetectorsConfig: {
+	concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig>,
+	issueFanOutDetector: Partial<IssueFanOutDetectorConfig>,
+} = {
+	concurrentIssueDetector: {},
+	issueFanOutDetector: {},
+};
 
 const PRODUCER = 'P';
 
@@ -26,8 +39,9 @@ function issueSample(clientId: string, timestamp: number, clientIssues: ReturnTy
 function newObserver() {
 	return new Observer({
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		// Manual update control: the ratio gates these detectors apply can cross threshold on a
+		// partial accept sequence, and an automatic per-sample update would raise on that partial state.
+		autoUpdateOnCallUpdate: false,
 		// Isolate the detector under test: without this the auto-created built-ins would raise
 		// their own findings and the assertions below could not attribute an issue to one detector.
 		observerDetectors: null,
@@ -41,7 +55,7 @@ const clientOf = (observer: Observer, clientId: string) =>
 describe('client issue lifecycle', () => {
 	it('opens an active issue on a keyed raise and closes it on the matching -resolved entry', () => {
 		const observer = newObserver();
-		const resolved: ResolvedClientIssue[] = [];
+		const resolved: ResolvedActiveClientIssue[] = [];
 
 		observer.on('client-issue-resolved', ({ resolvedIssue }) => resolved.push(resolvedIssue));
 
@@ -100,7 +114,7 @@ describe('client issue lifecycle', () => {
 
 	it('force-closes still-open issues when the client closes, so the active set cannot leak', () => {
 		const observer = newObserver();
-		const resolved: ResolvedClientIssue[] = [];
+		const resolved: ResolvedActiveClientIssue[] = [];
 
 		observer.on('client-issue-resolved', ({ resolvedIssue }) => resolved.push(resolvedIssue));
 
@@ -116,88 +130,31 @@ describe('client issue lifecycle', () => {
 	});
 });
 
-describe('IssueIndex', () => {
-	it('builds cohorts and measures onset spread on the observer clock', () => {
-		const observer = newObserver();
+describe('ActiveIssuesRegistry', () => {
+	// The standalone cohort-building this used to test (`issueIndex.cohortOf()` / `.cohorts()`) no
+	// longer exists: the registry is now a plain push/fan-out store, and the grouping/onset-spread
+	// logic it used to do lives in `ConcurrentIssueDetector.lastGroups` instead — exercised by the
+	// `ConcurrentIssueDetector` describe block below and by `tests/crossCallIssues.spec.ts`.
 
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(issueSample(id, 1000, [ raise('congestion', `k-${id}`, {}, 1000) ]));
-		}
-		observer.accept(issueSample('E', 1000, [ raise('cpulimitation', 'k-E', {}, 1000) ]));
+	// The expiry safety net this used to test (`maxIssueAgeInMs`, auto-resolving a stuck issue after a
+	// timeout) no longer exists anywhere in the observer/call/client layer — there is nothing left to
+	// exercise here.
 
-		const registry = observer.getObservedCall('call-1')!.issueIndex;
-		const cohort = registry.cohortOf('congestion');
-
-		expect(cohort.clientIds.sort()).toEqual([ 'B', 'C', 'D' ]);
-		expect(cohort.totalClients).toBe(4);
-		expect(cohort.affectedRatio).toBeCloseTo(0.75);
-		expect(cohort.onsetSpreadInMs).toBeLessThan(1000);   // observer clock, all in one tick
-
-		// largest cohort first
-		expect(registry.cohorts()[0].type).toBe('congestion');
-
-		observer.close();
-	});
-
-	// Expiry is the safety net for a client that dies without its monitor auto-resolving: no
-	// `-resolved` companion ever arrives, and a stuck active issue would make every concurrency
-	// detector fire forever. It is applied once per `call.update()` against the shared index, so it
-	// genuinely removes the issue rather than filtering it at read time.
-	it('expires stale active issues that never got resolved, and announces the interval', () => {
-		jest.useFakeTimers();
-		jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-
-		const observer = new Observer({
-			createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
-			observerDetectors: null,
-			callDetectors: null,
-			maxIssueAgeInMs: 1_000,
-		});
-		const resolved: { type: string, resolvedBy: string }[] = [];
-
-		observer.on('client-issue-resolved', ({ resolvedIssue }) => resolved.push(resolvedIssue));
-		observer.accept(issueSample('B', 1000, [ raise('congestion', 'k1', {}, 1000) ]));
-
-		const call = observer.getObservedCall('call-1')!;
-
-		expect(call.issueIndex.size).toBe(1);
-
-		// Still fresh.
-		jest.setSystemTime(Date.now() + 500);
-		call.update();
-		expect(call.issueIndex.size).toBe(1);
-
-		// Past maxIssueAgeInMs: dropped from the index, the client's map, and the observer's index.
-		jest.setSystemTime(Date.now() + 2_000);
-		call.update();
-
-		expect(call.issueIndex.size).toBe(0);
-		expect(observer.issueIndex.size).toBe(0);
-		expect(call.getObservedClient('B')!.activeIssues.size).toBe(0);
-		expect(resolved).toHaveLength(1);
-		expect(resolved[0].resolvedBy).toBe('timeout');
-
-		observer.close();
-		jest.useRealTimers();
-	});
-
-	it('propagates a call index into the observer index, and detaches on close', () => {
+	it('propagates a call registry into the observer registry, and detaches on close', () => {
 		const observer = newObserver();
 
 		observer.accept(issueSample('B', 1000, [ raise('congestion', 'k1', {}, 1000) ]));
 
 		const call = observer.getObservedCall('call-1')!;
 
-		expect(call.issueIndex.size).toBe(1);
-		expect(observer.issueIndex.size).toBe(1);
+		expect(call.activeIssuesRegistry.size).toBe(1);
+		expect(observer.activeIssuesRegistry.size).toBe(1);
 		// the same object, not a copy — one issue, two views
-		expect([ ...observer.issueIndex.all ][0]).toBe([ ...call.issueIndex.all ][0]);
+		expect([ ...observer.activeIssuesRegistry.values() ][0]).toBe([ ...call.activeIssuesRegistry.values() ][0]);
 
 		call.close();
 
-		expect(observer.issueIndex.size).toBe(0);
+		expect(observer.activeIssuesRegistry.size).toBe(0);
 
 		observer.close();
 	});
@@ -250,13 +207,13 @@ describe('ConcurrentIssueDetector', () => {
 
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(issueSample(id, 2000, [ raise('congestion', `k-${id}`, {}, 2000) ]));
 		call.update();
-		expect(detector.lastCohorts).toHaveLength(1);
+		expect(detector.lastGroups).toHaveLength(1);
 
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(issueSample(id, 3000, [ resolve('congestion', `k-${id}`, {}, 3000) ]));
 		call.update();
 
 		// the active set is empty, so nothing is concurrent any more
-		expect(detector.lastCohorts).toHaveLength(0);
+		expect(detector.lastGroups).toHaveLength(0);
 
 		observer.close();
 	});
@@ -267,6 +224,10 @@ describe('ConcurrentIssueDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
+		// The detector is fed by subscribing to the registry (push, not poll), so it must be in place
+		// before the issues open — an issue already active when a tracker subscribes is never replayed.
+		observer.detectors.add(new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ] }));
+
 		for (const [ callId, clientId ] of [ [ 'call-a', 'a1' ], [ 'call-b', 'b1' ], [ 'call-c', 'c1' ] ]) {
 			observer.accept({
 				...makeSample({ callId, clientId, timestamp: 1000 }),
@@ -274,7 +235,6 @@ describe('ConcurrentIssueDetector', () => {
 			});
 		}
 
-		observer.detectors.add(new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ] }));
 		observer.update();
 
 		expect(issues).toHaveLength(1);
@@ -313,10 +273,13 @@ describe('IssueFanOutDetector', () => {
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
+		// Manual update control: the affected-ratio gate can cross threshold before all three
+		// receivers have reported (2 of 3 already clears the 0.6 default), and letting the call
+		// auto-update per accepted sample would raise on that partial state instead of the full one.
+		const call = observer.createObservedCall({ callId: 'call-1', autoUpdateOnClientUpdate: false })!;
+
 		observer.accept(publisher(1000));
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(receiver(id, 1000));
-
-		const call = observer.getObservedCall('call-1')!;
 
 		call.detectors.add(new IssueFanOutDetector(call, defaultCallDetectorsConfig.issueFanOutDetector));
 

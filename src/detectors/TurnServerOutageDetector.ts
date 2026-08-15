@@ -100,7 +100,9 @@ type PeakEntry = { clients: number, at: number };
  * own health checks there, since a handful of clients cannot distinguish these cases.
  */
 export class TurnServerOutageDetector implements Detector {
-	public readonly name = 'turn-server-outage-detector';
+	public static readonly NAME = 'turn-server-outage-detector';
+
+	public readonly name = TurnServerOutageDetector.NAME;
 
 	private readonly _config: TurnServerOutageDetectorConfig;
 
@@ -111,9 +113,22 @@ export class TurnServerOutageDetector implements Detector {
 
 	public constructor(
 		private readonly _observer: Observer,
-		config: TurnServerOutageDetectorConfig,
+		config: Partial<TurnServerOutageDetectorConfig> = {},
 	) {
-		this._config = config;
+		this._config = {
+			minClientsAtPeak: 5,
+			// an outage is near-total by definition; partial degradation is the health detector's question
+			lossRatioThreshold: 0.8,
+			peakWindowMs: 120_000,
+			// absence without a control group is just quiet
+			requireControlGroup: true,
+			minControlGroupClients: 5,
+			controlGroupHealthyRatio: 0.7,
+			consecutiveTicks: 2,
+			// one event, not one per tick
+			cooldownMs: 300_000,
+			...config,
+		};
 	}
 
 	public update(): void {

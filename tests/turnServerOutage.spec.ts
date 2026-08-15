@@ -3,7 +3,6 @@ import { TurnServerOutageDetector, TurnServerOutageTypes } from '../src/detector
 import { makeSample } from './helpers/samples';
 import type { ClientSample } from '../src/schema/ClientSample';
 import { payloadOf } from './helpers/issues';
-import { defaultObserverDetectorsConfig } from '../src/Observer';
 
 /**
  * The outage case its sibling cannot see: a TURN server's population collapsing. The control group
@@ -51,8 +50,7 @@ const directSample = (clientId: string, timestamp: number): ClientSample => make
 
 function newObserver() {
 	return new Observer({
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		autoUpdateOnCallUpdate: false,
 		observerDetectors: null,
 		callDetectors: null,
 	});
@@ -70,7 +68,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1 });
 
 		observer.detectors.add(detector);
 
@@ -112,7 +110,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1 });
 
 		observer.detectors.add(detector);
 
@@ -140,7 +138,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1 });
 
 		observer.detectors.add(detector);
 
@@ -167,7 +165,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1 });
 
 		observer.detectors.add(detector);
 
@@ -195,7 +193,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1, minClientsAtPeak: 5 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1, minClientsAtPeak: 5 });
 
 		observer.detectors.add(detector);
 
@@ -223,7 +221,7 @@ describe('TurnServerOutageDetector', () => {
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
-		const detector = new TurnServerOutageDetector(observer, { ...defaultObserverDetectorsConfig.turnServerOutageDetector, consecutiveTicks: 1 });
+		const detector = new TurnServerOutageDetector(observer, { consecutiveTicks: 1 });
 
 		observer.detectors.add(detector);
 

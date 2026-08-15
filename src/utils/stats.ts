@@ -61,6 +61,35 @@ export function medianAbsoluteDeviation(values: number[]): number | undefined {
  * whatsoever, however small; `value` at or below it reads as `0`, indistinguishable from the (flat)
  * baseline rather than a division error.
  *
+ * ### Worked example
+ *
+ * A baseline of "share of clients reporting congestion", one entry per 10 s bucket, on a healthy
+ * fleet: `[0.02, 0.01, 0.03, 0.04, 0.02]`. Median `0.02`, MAD `0.01`, so the scale is
+ * `1.4826 * 0.01 ≈ 0.0148`.
+ *
+ * ```ts
+ * robustZScore(0.03, baseline);   // ≈ 0.67  — an ordinary bucket
+ * robustZScore(0.25, baseline);   // ≈ 15.5  — a quarter of the fleet at once; nothing like it before
+ * ```
+ *
+ * Now add one bad bucket to the *baseline* — `[0.02, 0.01, 0.03, 0.04, 0.02, 0.40]`. A mean/stddev
+ * z-score would absorb it: the mean climbs to `0.087` and the stddev to `~0.14`, so a genuine `0.25`
+ * spike scores about `1.2` and looks unremarkable. **One past incident would hide the next one.**
+ * Median and MAD barely move (median `0.025`, MAD `0.01`), so `0.25` still scores `≈15.2`. That
+ * resistance is the entire reason for this function.
+ *
+ * The `Infinity` case is not an edge case in practice — it is a fleet that has been perfectly quiet:
+ *
+ * ```ts
+ * robustZScore(0.10, [ 0, 0, 0, 0, 0 ]);   // Infinity — first congestion ever seen
+ * robustZScore(0, [ 0, 0, 0, 0, 0 ]);      // 0        — still nothing happening
+ * ```
+ *
+ * `Infinity` clears any finite threshold, which is intended: "we have never seen this" *is* the
+ * strongest possible statistical statement. It is also why a caller must gate on practical
+ * significance too — see `SfuCongestionDetector`, which additionally requires a minimum number of
+ * affected clients, so a single client on a quiet fleet cannot page anyone.
+ *
  * `undefined` when `baseline` is empty — there is nothing to compare against.
  */
 export function robustZScore(value: number, baseline: number[]): number | undefined {
@@ -181,6 +210,7 @@ export function correlation(xs: number[], ys: number[]): number {
 
 /** Per-step result of {@link pageHinkley}. */
 export type PageHinkleyResult = {
+
 	/**
 	 * The Page-Hinkley statistic after each observation, same length as the input — one value per
 	 * `values[i]`, so `statistic[i]` is "how far the cumulative deviation has grown above its own
@@ -274,6 +304,7 @@ export function pageHinkley(values: number[], delta = 0, lambda = 50): PageHinkl
 
 /** Result of {@link mannKendall}. */
 export type MannKendallResult = {
+
 	/** Sum of pairwise signs (`sign(values[j] - values[i])` for every `i < j`). */
 	s: number;
 
@@ -372,7 +403,7 @@ function erf(x: number): number {
 	const p = 0.3275911;
 
 	const t = 1 / (1 + (p * ax));
-	const y = 1 - ((((((((a5 * t) + a4) * t) + a3) * t) + a2) * t) + a1) * t * Math.exp(-ax * ax);
+	const y = 1 - (((((((((a5 * t) + a4) * t) + a3) * t) + a2) * t) + a1) * t * Math.exp(-(ax * ax)));
 
 	return sign * y;
 }

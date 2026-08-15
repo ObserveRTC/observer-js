@@ -1,4 +1,3 @@
-import { parseJsonObject } from '../common/utils';
 import type { ClientIssue } from '../schema/ClientSample';
 
 /** The suffix client-monitor-js appends to the type of a resolution entry. */
@@ -82,7 +81,6 @@ export type ResolvedActiveClientIssue = ActiveClientIssue & {
 	resolvedBy: 'client' | 'timeout' | 'client-closed';
 };
 
-
 /** `true` when the entry is a resolution companion rather than a raise. */
 export function isClientIssueResolutionEntry(issue: ClientIssue): boolean {
 	return issue.type.endsWith(RESOLVED_ISSUE_SUFFIX);
@@ -92,4 +90,3 @@ export function isClientIssueResolutionEntry(issue: ClientIssue): boolean {
 export function baseIssueType(type: string): string {
 	return type.endsWith(RESOLVED_ISSUE_SUFFIX) ? type.slice(0, -RESOLVED_ISSUE_SUFFIX.length) : type;
 }
-

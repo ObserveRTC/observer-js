@@ -13,7 +13,8 @@ import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
 import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
-import { ActiveClientIssue, baseIssueType, isClientIssueResolutionEntry } from './issues/ActiveClientIssue';
+import { ActiveClientIssue, RESOLVED_ISSUE_SUFFIX, baseIssueType, isClientIssueResolutionEntry } from './issues/ActiveClientIssue';
+import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 
 const logger = createLogger('ObservedClient');
 
@@ -175,10 +176,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this._flushPendingInjections();
 
-		const activeIssues = [...this.activeIssues.values()];
+		const activeIssues = [ ...this.activeIssues.values() ];
 
 		for (const issue of activeIssues) {
-			this._resolveIssue({ key: issue.key, type: `${issue.type}-resolved` }, 'client-close');
+			this._resolveIssue({ key: issue.key, type: `${issue.type}${RESOLVED_ISSUE_SUFFIX}` }, 'client-closed');
 		}
 
 		this.closed = true;
@@ -215,11 +216,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			clearTimeout(this.closeTimer);
 			this.closeTimer = undefined;
 		}
-
-		// A new sample changes the state everything per-tick is derived from, so invalidate the call's
-		// memoised aggregations. Keyed on state change rather than on `call.update()` alone, because a
-		// detector's `update()` can legitimately be driven directly.
-		this.call.updateGeneration += 1;
 
 		const now = Date.now();
 		const elapsedInMs = now - this.updated;
@@ -550,7 +546,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	}
 
 	/** Close the active issue a `<type>-resolved` entry refers to, and announce the finished interval. */
-	private _resolveIssue(issue: ClientIssue, resolvedBy = 'client') {
+	private _resolveIssue(issue: ClientIssue, resolvedBy: ResolvedActiveClientIssue['resolvedBy'] = 'client') {
 		const now = Date.now();
 		const resolutionPayload = parseJsonObject(issue.payload);
 		const type = baseIssueType(issue.type);

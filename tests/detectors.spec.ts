@@ -1,10 +1,16 @@
 import { Observer } from '../src/Observer';
-import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
+import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import { CallHealthAggregator } from '../src/utils/CallHealthAggregator';
-import { TurnServerHealthDetector, TurnServerHealthTypes } from '../src/detectors/TurnServerHealthDetector';
+import { TurnServerHealthDetector, TurnServerHealthTypes, TurnServerHealthDetectorConfig } from '../src/detectors/TurnServerHealthDetector';
 import { makeSample, type InboundSpec } from './helpers/samples';
 import { payloadOf } from './helpers/issues';
-import { defaultObserverDetectorsConfig } from '../src/Observer';
+
+// `TurnServerHealthDetector` fills in its own defaults for whatever a partial config omits, so an
+// empty object is a valid "defaults" placeholder here — there is no exported default-config constant
+// to import any more; each detector owns its defaults, in its own constructor.
+const defaultObserverDetectorsConfig: { turnServerHealthDetector: Partial<TurnServerHealthDetectorConfig> } = {
+	turnServerHealthDetector: {},
+};
 
 const raise = (type: string, key: string, payload: Record<string, unknown>, timestamp: number) =>
 	({ type, key, payload: JSON.stringify(payload), timestamp });
@@ -13,8 +19,9 @@ const raise = (type: string, key: string, payload: Record<string, unknown>, time
 function newObserver() {
 	return new Observer({
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		// Manual update control: the ratio/streak gates these detectors apply can cross threshold on a
+		// partial accept sequence, and an automatic per-sample update would raise on that partial state.
+		autoUpdateOnCallUpdate: false,
 		// Isolate the detector under test: without this the auto-created built-ins would raise
 		// their own findings and the assertions below could not attribute an issue to one detector.
 		observerDetectors: null,

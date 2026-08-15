@@ -20,7 +20,7 @@ function sample(timestamp: number, overrides: Record<string, unknown>): ClientSa
 
 describe('peer-connection sub-stats', () => {
 	it('models codecs', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		const codecs = (timestamp: number) => sample(timestamp, {
 			codecs: [ {
 				timestamp, id: 'codec-1', payloadType: 111, mimeType: 'audio/opus',
@@ -41,7 +41,7 @@ describe('peer-connection sub-stats', () => {
 	});
 
 	it('models data channels and derives message/byte deltas', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		const dc = (timestamp: number, messagesSent: number, bytesSent: number) => sample(timestamp, {
 			dataChannels: [ {
 				timestamp, id: 'dc-1', label: 'chat', protocol: '', state: 'open',
@@ -63,7 +63,7 @@ describe('peer-connection sub-stats', () => {
 	});
 
 	it('models media playouts', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		const playout = (timestamp: number, synthesized: number) => sample(timestamp, {
 			mediaPlayouts: [ {
 				timestamp, id: 'mp-1', kind: 'audio',
@@ -81,7 +81,7 @@ describe('peer-connection sub-stats', () => {
 	});
 
 	it('models certificates and peer-connection transports', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		const s = (timestamp: number) => sample(timestamp, {
 			certificates: [ {
 				timestamp, id: 'cert-1', fingerprint: 'AA:BB', fingerprintAlgorithm: 'sha-256',
@@ -102,7 +102,7 @@ describe('peer-connection sub-stats', () => {
 	});
 });
 
-describe('update policies', () => {
+describe('auto-update propagation', () => {
 	const twoClients = (timestamp: number, clientId: string): ClientSample => ({
 		callId: 'call-1',
 		clientId,
@@ -110,33 +110,8 @@ describe('update policies', () => {
 		peerConnections: [ { peerConnectionId: `pc-${clientId}` } ],
 	} as ClientSample);
 
-	it("'update-when-all-client-updated' aggregates once every client has reported", () => {
-		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'update-when-all-client-updated',
-		});
-		let updates = 0;
-
-		observer.on('call-updated', () => (updates += 1));
-
-		observer.accept(twoClients(1000, 'a'));
-		observer.accept(twoClients(1000, 'b'));
-		const afterFirstRound = updates;
-
-		observer.accept(twoClients(2000, 'a'));
-		observer.accept(twoClients(2000, 'b'));
-
-		// the round completing is what triggers aggregation
-		expect(updates).toBeGreaterThan(afterFirstRound);
-
-		observer.close();
-	});
-
-	it("'update-on-any-client-updated' aggregates on every sample", () => {
-		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'update-on-any-client-updated',
-		});
+	it('aggregates on every sample (any client update updates the call)', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		let updates = 0;
 
 		observer.on('call-updated', () => (updates += 1));
@@ -149,11 +124,8 @@ describe('update policies', () => {
 		observer.close();
 	});
 
-	it("'update-on-any-call-updated' propagates a call update to the observer", () => {
-		const observer = new Observer({
-			updatePolicy: 'update-on-any-call-updated',
-			defaultCallUpdatePolicy: 'update-on-any-client-updated',
-		});
+	it('a call update propagates to the observer', () => {
+		const observer = new Observer();
 		let observerUpdates = 0;
 
 		observer.on('observer-updated', () => (observerUpdates += 1));

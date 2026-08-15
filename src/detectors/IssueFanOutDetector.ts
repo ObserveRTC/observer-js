@@ -1,6 +1,9 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
 import type { ObservedOutboundTrack } from '../ObservedOutboundTrack';
+import type { ActiveClientIssue } from '../issues/ActiveClientIssue';
+import type { ActiveIssueTracker } from '../issues/ActiveIssueTracker';
+import { ANY_ISSUE_TYPE } from '../issues/ActiveIssuesRegistry';
 import { concludeFrom } from './IssueConclusion';
 
 export const IssueFanOutTypes = {
@@ -27,7 +30,6 @@ export type IssueFanOutDetectorConfig = {
 
 	/** Re-arm time (ms) per (track, issue type). Default `60_000`. */
 	cooldownMs: number;
-
 };
 
 /**
@@ -41,66 +43,127 @@ export type IssueFanOutDetectorConfig = {
  * single most useful thing a server can say:
  *
  * - **most receivers of Alice's track are affected** → the fault is on Alice's path — her uplink, the
- *   SFU's ingress, or its forwarding of that stream. Corroborated by whether the publisher's own
- *   egress looks healthy.
+ *   SFU's ingress, or its forwarding of that stream.
  * - **one receiver of Alice's track is affected** → that receiver's downlink. Nothing to do with
  *   Alice, even though the symptom is reported against her stream.
  *
- * Note this is deliberately generic over the issue vocabulary: `freezed-video-track`,
- * `keyframe-storm`, `audio-concealment`, `video-decoder-overloaded`, `stuck-decoder` and anything a
- * custom client detector invents all fan out the same way, so one mechanism replaces a family of
- * symptom-specific detectors.
+ * Deliberately generic over the issue vocabulary: `freezed-video-track`, `keyframe-storm`,
+ * `audio-concealment`, `video-decoder-overloaded`, `stuck-decoder` and anything a custom client
+ * detector invents all fan out the same way, so one mechanism replaces a family of symptom-specific
+ * detectors.
+ *
+ * ### It walks the affected tracks, never all of them
+ *
+ * The detector is fed open issues by the call's registry and keeps only those carrying a `trackId`.
+ * Each tick it resolves *those* tracks to their publishers — never the published tracks of the call,
+ * of which there are many more and almost all of them fine. A call with nothing wrong costs one
+ * `size === 0` check.
+ *
+ * ### Requires a `RemoteTrackResolver`
+ *
+ * Without publisher↔subscriber links there is no way to know which receivers belong to one source,
+ * so the detector does nothing when the call has no resolver. It does not fall back to guessing:
+ * "one receiver of an unknown set" is not a statement worth raising.
  */
-export class IssueFanOutDetector implements Detector {
-	public readonly name = 'issue-fan-out-detector';
+export class IssueFanOutDetector implements Detector, ActiveIssueTracker {
+	public static readonly NAME = 'issue-fan-out-detector';
+
+	public readonly name = IssueFanOutDetector.NAME;
 
 	private readonly _config: IssueFanOutDetectorConfig;
 	private readonly _lastRaisedAt = new Map<string, number>();
 
+	/** Open issues that name a track. Issues without a `trackId` cannot be attributed and are dropped. */
+	private readonly _trackIssues = new Set<ActiveClientIssue>();
+
 	public constructor(
 		private readonly _call: ObservedCall,
-		config: IssueFanOutDetectorConfig,
+		config: Partial<IssueFanOutDetectorConfig> = {},
 	) {
-		this._config = config;
+		this._config = {
+			issueTypes: [],
+			minReceivers: 3,
+			affectedRatioThreshold: 0.6,
+			reportSingleReceiver: true,
+			cooldownMs: 60_000,
+			...config,
+		};
+
+		const subscribeTo = 0 < this._config.issueTypes.length ? this._config.issueTypes : [ ANY_ISSUE_TYPE ];
+
+		for (const type of subscribeTo) {
+			this._call.activeIssuesRegistry.addIssueTracker(type, this);
+		}
+	}
+
+	public get size(): number {
+		return this._trackIssues.size;
+	}
+
+	public has(issue: ActiveClientIssue): boolean {
+		return this._trackIssues.has(issue);
+	}
+
+	public add(issue: ActiveClientIssue): void {
+		// An issue with no `trackId` says nothing about a published track; holding it would only make
+		// `size` lie about how much there is to do.
+		if (issue.trackId === undefined) return;
+
+		this._trackIssues.add(issue);
+	}
+
+	public delete(issue: ActiveClientIssue): boolean {
+		return this._trackIssues.delete(issue);
+	}
+
+	public clear(): void {
+		this._trackIssues.clear();
 	}
 
 	public update(): void {
+		if (this._trackIssues.size === 0) return;
+		// Without links, "the receivers of this track" is unknowable — never guess.
+		if (!this._call.remoteTrackResolver) return;
+
 		const now = Date.now();
-		const wanted = new Set(this._config.issueTypes);
+		// publisher track -> issue type -> the affected receiver client ids.
+		const byPublisher = new Map<ObservedOutboundTrack, Map<string, Set<string>>>();
 
-		for (const distribution of this._call.trackDistributionAggregator.aggregate()) {
-			// The inbound track ids of every subscriber of this published track.
-			const receiverTrackIds = new Map<string, string>();
+		for (const issue of this._trackIssues) {
+			const publisher = this._publisherOf(issue);
 
-			for (const receiver of distribution.receivers) {
-				receiverTrackIds.set(receiver.observedInboundTrack.id, receiver.clientId);
+			if (!publisher) continue;
+
+			let byType = byPublisher.get(publisher);
+
+			if (!byType) {
+				byType = new Map();
+				byPublisher.set(publisher, byType);
 			}
 
-			const issues = this._call.issueIndex.byTrackIds(receiverTrackIds.keys())
-				.filter((issue) => wanted.size === 0 || wanted.has(issue.type));
+			const clientIds = byType.get(issue.type) ?? new Set<string>();
 
-			if (issues.length === 0) continue;
+			clientIds.add(issue.clientId);
+			byType.set(issue.type, clientIds);
+		}
 
-			// group the open issues by type across this track's receivers
-			const byType = new Map<string, Set<string>>();
+		for (const [ publisher, byType ] of byPublisher) {
+			const numberOfReceivers = publisher.remoteInboundTracks.size;
 
-			for (const issue of issues) {
-				const clientIds = byType.get(issue.type) ?? new Set<string>();
-
-				clientIds.add(issue.clientId);
-				byType.set(issue.type, clientIds);
-			}
+			if (numberOfReceivers === 0) continue;
 
 			for (const [ issueType, clientIds ] of byType) {
-				const affectedRatio = clientIds.size / distribution.numberOfReceivers;
-				const isFanOut = this._config.minReceivers <= distribution.numberOfReceivers
+				// A receiver may hold several issues of one type (one per track); the unit is the client,
+				// and `clientIds` is already a set, so the ratio can never exceed 1.
+				const affectedRatio = clientIds.size / numberOfReceivers;
+				const isFanOut = this._config.minReceivers <= numberOfReceivers
 					&& this._config.affectedRatioThreshold <= affectedRatio;
 				const isSingle = this._config.reportSingleReceiver
-					&& clientIds.size === 1 && 1 < distribution.numberOfReceivers;
+					&& clientIds.size === 1 && 1 < numberOfReceivers;
 
 				if (!isFanOut && !isSingle) continue;
 
-				const key = `${distribution.trackId}:${issueType}`;
+				const key = `${publisher.id}:${issueType}`;
 
 				if (now - (this._lastRaisedAt.get(key) ?? 0) < this._config.cooldownMs) continue;
 
@@ -110,17 +173,17 @@ export class IssueFanOutDetector implements Detector {
 					? IssueFanOutTypes.publishedTrackIssueFanOut
 					: IssueFanOutTypes.singleReceiverIssue;
 
-				// What the fan-out implies. A track-scoped cohort is a strong statement: the affected
+				// What the fan-out implies. A track-scoped group is a strong statement: the affected
 				// clients share a publisher and nothing else, so the receivers are exonerated.
 				const conclusion = concludeFrom({
 					issueType,
 					scope: 'call',
 					affectedClients: clientIds.size,
-					totalClients: distribution.numberOfReceivers,
+					totalClients: numberOfReceivers,
 					affectedCalls: 1,
 					totalCalls: 1,
 					onsetBurst: false,
-					publishedTrackId: isFanOut ? distribution.trackId : undefined,
+					publishedTrackId: isFanOut ? publisher.id : undefined,
 				});
 
 				this._call.addIssue({
@@ -130,22 +193,18 @@ export class IssueFanOutDetector implements Detector {
 						type,
 						issueType,
 						conclusion,
-						trackId: distribution.trackId,
-						kind: distribution.kind,
-						publisherClientId: distribution.publisher.clientId,
-						// The corroborating half: if the source's own egress is clean while its
-						// receivers are not, the SFU/forwarding path is implicated rather than the sender.
-						publisherHealthy: distribution.publisher.healthy,
-						publisherReasons: distribution.publisher.reasons,
-						receivers: distribution.numberOfReceivers,
+						trackId: publisher.id,
+						kind: publisher.kind,
+						publisherClientId: publisher.getPeerConnection().client.clientId,
+						// The corroborating half: if the source's own egress looks fine while its
+						// receivers do not, the SFU/forwarding path is implicated rather than the sender.
+						publisherBitrate: publisher.bitrate,
+						publisherDegraded: publisher.degraded,
+						publisherDegradedReasons: publisher.degradedReasons,
+						receivers: numberOfReceivers,
 						affectedReceivers: clientIds.size,
 						affectedRatio,
 						affectedClientIds: [ ...clientIds ],
-						// metric evidence alongside the client's verdict
-						fractionLost: distribution.fractionLost,
-						bitrate: distribution.bitrate,
-						freezes: distribution.freezes,
-						plis: distribution.plis,
 					},
 				});
 			}
@@ -153,11 +212,29 @@ export class IssueFanOutDetector implements Detector {
 	}
 
 	public close(): void {
+		this._call.activeIssuesRegistry.removeIssueTracker(this);
 		this._lastRaisedAt.clear();
+		this.clear();
 	}
 
-	/** Exposed for tests/dashboards: the distributions this detector reasons over. */
-	public distributionsOf(): ObservedOutboundTrack[] {
-		return this._call.trackDistributionAggregator.aggregate().map((d) => d.publisher.observedOutboundTrack);
+	/**
+	 * Resolve the issue's `trackId` to the outbound track that published it.
+	 *
+	 * Looked up through the reporting client's own peer connections rather than by scanning the call:
+	 * the issue names its client, so the search is bounded by that client's transports (typically one
+	 * or two) instead of by the size of the meeting.
+	 */
+	private _publisherOf(issue: ActiveClientIssue): ObservedOutboundTrack | undefined {
+		const client = this._call.observedClients.get(issue.clientId);
+
+		if (!client || issue.trackId === undefined) return undefined;
+
+		for (const peerConnection of client.observedPeerConnections.values()) {
+			const inboundTrack = peerConnection.observedInboundTracks.get(issue.trackId);
+
+			if (inboundTrack) return inboundTrack.remoteOutboundTrack;
+		}
+
+		return undefined;
 	}
 }

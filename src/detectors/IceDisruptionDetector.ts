@@ -1,7 +1,7 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
 import type { ObserverEvents } from '../ObserverEvents';
-import { SlidingWindow } from "../utils/SlidingWindow";
+import { SlidingWindow } from '../utils/SlidingWindow';
 import { Observer } from '../Observer';
 
 export const IceDisruptionTypes = {

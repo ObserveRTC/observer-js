@@ -18,7 +18,6 @@ export type UnconsumedTrackDetectorConfig = {
 	cooldownMs: number;
 };
 
-
 /**
  * Finds tracks that are **published but consumed by nobody** — uplink and SFU ingress spent on media
  * that is never forwarded anywhere.

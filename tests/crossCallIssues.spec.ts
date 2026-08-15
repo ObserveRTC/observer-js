@@ -1,15 +1,24 @@
 import { Observer } from '../src/Observer';
-import { ConcurrentIssueDetector, ConcurrentIssueTypes } from '../src/detectors/ConcurrentIssueDetector';
+import { ConcurrentIssueDetector, ConcurrentIssueTypes, ConcurrentIssueDetectorConfig } from '../src/detectors/ConcurrentIssueDetector';
 import { concludeFrom } from '../src/detectors/IssueConclusion';
 import type { ClientSample } from '../src/schema/ClientSample';
 import { payloadOf } from './helpers/issues';
-import { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from '../src/Observer';
 
 /**
  * The observer-scope question: is the *infrastructure* in trouble? Answering it needs the cohort to
  * span independent calls — one bad meeting is the call-scoped detector's business, and raising a
  * fleet alert for it would be a false positive with a very plausible-looking payload.
  */
+
+// `ConcurrentIssueDetector` fills in its own defaults for whatever a partial config omits, so an
+// empty object is a valid "defaults" placeholder here. There is no exported default-config constant
+// to import any more — each detector owns its defaults, in its own constructor.
+const defaultObserverDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
+	concurrentIssueDetector: {},
+};
+const defaultCallDetectorsConfig: { concurrentIssueDetector: Partial<ConcurrentIssueDetectorConfig> } = {
+	concurrentIssueDetector: {},
+};
 
 const raise = (type: string, key: string, timestamp: number) =>
 	({ type, key, payload: JSON.stringify({}), timestamp });
@@ -29,8 +38,9 @@ const sample = (
 
 function newObserver() {
 	return new Observer({
-		updatePolicy: 'none',
-		defaultCallUpdatePolicy: 'none',
+		// Manual update control: these tests build up state across several `accept()` calls and only
+		// want the detector to see it once, at the explicit `observer.update()` below.
+		autoUpdateOnCallUpdate: false,
 		observerDetectors: null,
 		callDetectors: null,
 	});

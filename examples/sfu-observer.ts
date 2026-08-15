@@ -28,9 +28,10 @@ const observer = new Observer({
 	// are useless without it — they'd see no publisher↔subscriber pairs and stay silent.
 	createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
 
-	// Aggregate when every client in a call has reported; no internal timers are used.
-	updatePolicy: 'update-when-all-call-updated',
-	defaultCallUpdatePolicy: 'update-when-all-client-updated',
+	// Both default to `true`, shown here for visibility: every client sample updates its call, and
+	// every call update cascades into an observer update — no internal timers, no separate policy
+	// object to keep the two in sync.
+	autoUpdateOnCallUpdate: true,
 
 	// Release entities whose clients stopped reporting.
 	closeClientIfIdleForMs: 60_000,
@@ -49,14 +50,14 @@ const observer = new Observer({
 
 	callDetectors: {
 		// Tuned for this demo: three participants, and we want a verdict within a couple of ticks.
-		concurrentIssueDetector: { minClients: 3, minAffectedClients: 3 },
+		'concurrent-issue-detector': { minClients: 3, minAffectedClients: 3 },
 	},
 
 	observerDetectors: {
 		// A single-SFU demo has no fleet to compare against, so the TURN detectors would need a
 		// control group they cannot have here.
-		turnServerHealthDetector: null,
-		turnServerOutageDetector: null,
+		'turn-server-health-detector': null,
+		'turn-server-outage-detector': null,
 	},
 });
 
@@ -179,10 +180,9 @@ for (const id of subscribers) observer.accept(subscriberSample(id, 1_000, 100));
 observer.accept(publisherSample(2_000, 400));
 for (const id of subscribers) observer.accept(subscriberSample(id, 2_000, 100, true));
 
-// With `update-when-all-client-updated` the call aggregates (and detectors run) once the last
-// client of the round has been accepted. Nudge it explicitly so the example is deterministic:
-observer.getObservedCall(CALL_ID)?.update();
-observer.update();
+// Nothing to nudge: `autoUpdateOnClientUpdate` (per call, default `true`) and `autoUpdateOnCallUpdate`
+// (above) already cascaded call.update() -> observer.update() after each accept() — including the
+// last one, which is why the detectors have already run by the time we read the model below.
 
 /* ------------------------------------------------------------------------------------------------
  * 6. Read the live model directly whenever you like — detectors are one consumer of it, not the

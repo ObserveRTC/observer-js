@@ -73,11 +73,40 @@ export type SfuCongestionDetectorEvaluation = {
 	relativeIncrease: number;
 };
 
-// this should only be added if one observer manages only calls from one SFU
-// if the observer manages all or a set of calls from the SAME SFU, then this indicator is useful to
-// add, becasue it detects if congestion is reported by multiple clients across different calls at
-// the same time, which is a strong indication of a real, shared congestion event rather than a
-// client-side issue.
+/**
+ * Detects a **shared** congestion event: many clients, across different calls, reporting congestion
+ * inside the same slice of time.
+ *
+ * Only add this when the observer's calls all come from the **same SFU** — the finding's whole
+ * meaning is "these clients have nothing in common except that server", and that is only true if the
+ * server really is the common factor.
+ *
+ * ### Why fixed-interval buckets, and not the update tick
+ *
+ * The obvious implementation counts congested clients on each `update()`. It is wrong here, for two
+ * separate reasons:
+ *
+ * - **The tick is not evenly spaced.** `update()` fires when a client is updated, so its rate is a
+ *   function of how many clients are connected and how their sampling happens to interleave. Two
+ *   counts taken from windows of different length are not comparable, and this detector's entire
+ *   job is to compare a count against earlier counts.
+ * - **Clients report on their own schedule.** A client sends a sample roughly every
+ *   `samplesSendingTimeInMs`, unsynchronised with every other client. A window shorter than that
+ *   systematically undercounts — half the congested clients simply hadn't spoken yet — and the
+ *   undercount varies with arrival phase, which is noise indistinguishable from signal.
+ *
+ * So the detector runs on a wall-clock interval and closes a bucket every
+ * `samplesSendingTimeInMs`, giving every client a fair chance to be heard in each one. Buckets are
+ * equal-length and equally lagged, which is what makes bucket-to-bucket comparison mean something.
+ * {@link update} is deliberately empty: nothing here is driven by the update tick.
+ *
+ * ### Occurrences, not intervals
+ *
+ * Unlike `ConcurrentIssueDetector`, this one ignores resolutions — see {@link delete}. It counts how
+ * many *distinct clients reported* congestion in a bucket, not how many are still congested. A
+ * client that hits congestion and immediately drops its bitrate resolves the issue within seconds
+ * and would vanish from an open-interval view, yet it is exactly the evidence wanted here.
+ */
 export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 	public static readonly NAME = 'sfu-congestion-detector';
 
@@ -116,28 +145,35 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 			this._closeBucket(Date.now());
 			this._evaluateLatestBucket();
 		}, this._config.samplesSendingTimeInMs);
+
+		// Do not hold the process open. This is a monitoring side-channel: if the application has
+		// nothing else to do, it should be allowed to exit, and without this a library import alone
+		// keeps Node alive forever. Guarded because `unref` exists on Node timers but not in browsers
+		// or under some test fake-timer implementations.
+		this.timer.unref?.();
 	}
 	public get size() {
 		return this._trackedIssues.size;
 	}
 
-	/**
-	 * Track the issue for the current bucket, and close the bucket once the span between the first
-	 * and the last tracked issue reaches `samplesSendingTimeInMs * 2` — bucket timing is driven by
-	 * the issues themselves (not the wall clock), so a bucket only closes once congestion is actually
-	 * being reported.
-	 */
+	/** Record the issue against the bucket currently open. The timer, not this, closes the bucket. */
 	public add(issue: ActiveClientIssue): void {
 		this._trackedIssues.add(issue);
 	}
 
-	public delete(issue: ActiveClientIssue): boolean {
-		// we are not interested in the resolution of this issue, becasue the congestion can be caused
-		// in the client by reducing the bitrate drastically, and it will stop being congested from the
-		// client's perspective. what matters here is how many *distinct* clients report congestion
-		// within a bucket, and whether that count suddenly jumps — not how long any one client's issue
-		// stayed open.
-
+	/**
+	 * Deliberately a no-op returning `false`.
+	 *
+	 * Resolutions are not interesting here. A congested client typically fixes its own symptom by
+	 * dropping bitrate hard, so the issue closes within seconds — but it still *happened*, and it is
+	 * evidence that the server was under pressure during this bucket. What matters is how many
+	 * distinct clients reported congestion within the bucket and whether that count suddenly jumps,
+	 * not how long any one client's issue stayed open.
+	 *
+	 * Nothing leaks: the tracked set is emptied wholesale every time a bucket closes.
+	 */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	public delete(_issue: ActiveClientIssue): boolean {
 		return false;
 	}
 
@@ -157,6 +193,10 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 			this.timer = undefined;
 		}
 
+		// Unsubscribe, or the registry keeps feeding a detector that has stopped rotating its buckets —
+		// `_trackedIssues` would then grow for the life of the observer.
+		this._observer.activeIssuesRegistry.removeIssueTracker(this);
+
 		this.clear();
 	}
 
@@ -165,9 +205,15 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 		return this._history;
 	}
 
-	// called at observer update, which is basically every client update
+	/**
+	 * Intentionally empty — see the class description.
+	 *
+	 * Everything here is driven by the bucket timer, because the update tick is neither evenly spaced
+	 * nor long enough for every client to have reported. Counting on it would compare windows of
+	 * different lengths and call the difference a signal.
+	 */
 	public update(): void {
-
+		// no-op
 	}
 
 	private _closeBucket(observedAt: number): void {
@@ -247,11 +293,22 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 		const baselineMedian = median(baselineRatios) ?? 0;
 		const robustZ = robustZScore(candidate.congestedClientRatio, baselineRatios) ?? 0;
 		const absoluteIncrease = candidate.congestedClientRatio - baselineMedian;
+
+		// A zero baseline is the common healthy case, not an anomaly — most fleets report no
+		// congestion most of the time. `candidate / 0` is `Infinity`, which passes any finite
+		// `minRelativeRatioIncrease` unconditionally, so the relative test would contribute nothing
+		// exactly when the baseline is cleanest. That is not wrong (a jump from nothing IS unbounded),
+		// but it must not be the *only* thing standing between one client and a page: the absolute
+		// increase and `minAffectedClients` are what carry the decision here, and they are checked
+		// below regardless. `Infinity` is reported as-is so the payload doesn't claim a finite ratio
+		// that was never computed.
 		const relativeIncrease = 0 < baselineMedian
 			? candidate.congestedClientRatio / baselineMedian
 			: (0 < candidate.congestedClientRatio ? Infinity : 0);
 
 		const isCongested = this._config.minHistorySize <= baseline.length + 1
+			// Practical significance first: these are cheap, and they are what stop a statistically
+			// perfect signal over three clients from waking anyone.
 			&& this._config.minAffectedClients <= candidate.congestedClients
 			&& this._config.minAbsoluteRatioIncrease <= absoluteIncrease
 			&& this._config.minRelativeRatioIncrease <= relativeIncrease
@@ -260,4 +317,3 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 		return { isCongested, baselineCongestedClientRatio: baselineMedian, robustZ, absoluteIncrease, relativeIncrease };
 	}
 }
-

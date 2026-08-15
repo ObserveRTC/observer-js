@@ -54,19 +54,13 @@ export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
 export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
-export { Detectors } from './detectors/Detectors';
 export type { Detector } from './detectors/Detector';
-// Cross-client detection: the publisher→subscribers aggregation primitive and the detectors on it.
-export {
-	TrackDistributionAggregator,
-	defaultReceiverHealthThresholds,
-} from './utils/TrackDistributionAggregator';
+export { Detectors } from './detectors/Detectors';
 export type {
-	ObservedTrackDistribution,
-	ReceiverDistributionEntry,
-	PublisherDistributionEntry,
-	ReceiverHealthThresholds,
-} from './utils/TrackDistributionAggregator';
+	AvailableDetectorsConfigs,
+	AvailableCallScopeDetectorsConfigs,
+	AvailableObserverScopeDetectorsConfigs,
+} from './detectors/Detectors';
 export {
 	CallHealthAggregator,
 	defaultClientHealthThresholds,
@@ -76,21 +70,46 @@ export type {
 	ClientHealth,
 	ClientHealthThresholds,
 } from './utils/CallHealthAggregator';
-// Detector auto-creation: `ObserverConfig.detectors` / `.callDetectors` build these on construction.
-// Each slot is `undefined` (defaults), an object (overrides), or `null` (don't create).
-export { createCallDetectors, createObserverDetectors, detectorSlot } from './detectors/DetectorsConfig';
+// Detector auto-creation: `ObserverConfig.observerDetectors` / `.callDetectors` build these on
+// construction. Each slot is `undefined` (defaults), an object (overrides), or `null` (don't create).
+export { OBSERVER_SCOPE_DETECTOR_NAMES, CALL_SCOPE_DETECTOR_NAMES } from './Observer';
+export type { DetectorSlot } from './Observer';
+// Issue-driven correlation: the client reports WHAT is wrong for itself, the observer correlates
+// WHO ELSE is in the same state and WHERE in publisher -> SFU -> subscriber the fault sits.
+// Issues are PUSHED to whoever registered for them rather than scanned for; a detector implements
+// `ActiveIssueTracker` and is fed the types it consumes.
+export { ActiveIssuesRegistry, ANY_ISSUE_TYPE } from './issues/ActiveIssuesRegistry';
+export { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
+export type { ActiveIssueTracker } from './issues/ActiveIssueTracker';
+export {
+	RESOLVED_ISSUE_SUFFIX,
+	baseIssueType,
+	isClientIssueResolutionEntry,
+} from './issues/ActiveClientIssue';
+export type { ActiveClientIssue, ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
+// Server-raised findings. Unlike `ClientIssue` (a wire type, string payload) an `ObserverIssue` is
+// delivered to an in-process handler, so its payload is the object itself — no stringify/parse.
+export { issuePayloadOf, issuePayloadAsString } from './common/ObserverIssue';
+export type { ObserverIssue } from './common/ObserverIssue';
+export {
+	ConcurrentIssueDetector,
+	ConcurrentIssueTypes,
+} from './detectors/ConcurrentIssueDetector';
+export type { ConcurrentIssueDetectorConfig, ConcurrentIssueGroup } from './detectors/ConcurrentIssueDetector';
+export {
+	IssueFanOutDetector,
+	IssueFanOutTypes,
+} from './detectors/IssueFanOutDetector';
+export type { IssueFanOutDetectorConfig } from './detectors/IssueFanOutDetector';
+export {
+	SfuCongestionDetector,
+} from './detectors/SfuCongestionDetector';
 export type {
-	CallDetectorsConfig,
-	ObserverDetectorsConfig,
-	CallDetectorDefaults,
-	ObserverDetectorDefaults,
-	DetectorSlot,
-} from './detectors/DetectorsConfig';
-// Every threshold the library applies out of the box, spelled out in `Observer.ts`. Read or spread
-// these instead of copying magic numbers into your own config.
-export { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from './Observer';
-// Concrete cross-client detectors. Registered automatically from the config above; you can also
-// construct them yourself and `add(...)` them to `call.detectors` / `observer.detectors`.
+	SfuCongestionDetectorConfig,
+	SfuCongestionDetectorBucket,
+	SfuCongestionDetectorReport,
+	SfuCongestionDetectorEvaluation,
+} from './detectors/SfuCongestionDetector';
 export {
 	TurnServerHealthDetector,
 	TurnServerHealthTypes,
@@ -101,33 +120,6 @@ export {
 	TurnServerOutageTypes,
 } from './detectors/TurnServerOutageDetector';
 export type { TurnServerOutageDetectorConfig } from './detectors/TurnServerOutageDetector';
-// Issue-driven correlation: the client reports WHAT is wrong for itself, the observer correlates
-// WHO ELSE is in the same state and WHERE in publisher -> SFU -> subscriber the fault sits.
-// The indexed active-issue set every issue-driven detector reads. One per call, propagating into the
-// observer's — reach it via `observedCall.issueIndex` / `observer.issueIndex` rather than constructing.
-export { IssueIndex } from './utils/IssueIndex';
-export type { IssueCohort } from './utils/IssueIndex';
-export {
-	RESOLVED_ISSUE_SUFFIX,
-	baseIssueType,
-	isResolutionEntry,
-	parseIssuePayload,
-} from './common/ActiveClientIssue';
-export type { ActiveClientIssue, ResolvedClientIssue } from './common/ActiveClientIssue';
-// Server-raised findings. Unlike `ClientIssue` (a wire type, string payload) an `ObserverIssue` is
-// delivered to an in-process handler, so its payload is the object itself — no stringify/parse.
-export { issuePayloadOf, issuePayloadAsString } from './common/ObserverIssue';
-export type { ObserverIssue } from './common/ObserverIssue';
-export {
-	ConcurrentIssueDetector,
-	ConcurrentIssueTypes,
-} from './detectors/ConcurrentIssueDetector';
-export type { ConcurrentIssueDetectorConfig } from './detectors/ConcurrentIssueDetector';
-export {
-	IssueFanOutDetector,
-	IssueFanOutTypes,
-} from './detectors/IssueFanOutDetector';
-export type { IssueFanOutDetectorConfig } from './detectors/IssueFanOutDetector';
 export {
 	TrackDeliveryMismatchDetector,
 	TrackDeliveryMismatchTypes,
@@ -153,7 +145,6 @@ export type { Validator, RunningValidator, ValidationReport } from './validators
 export type { AvailableValidatorConfigs, ValidatorName } from './validators/Validators';
 export {
 	SimulcastReceiverValidator,
-	defaultSimulcastReceiverValidatorConfig,
 	LOWEST_COMMON_DENOMINATOR_ISSUE,
 } from './validators/SimulcastReceiverValidator';
 export type {
@@ -165,8 +156,24 @@ export type {
 export { concludeFrom } from './detectors/IssueConclusion';
 export type { IssueConclusion, IssueFaultDomain, IssueSpread } from './detectors/IssueConclusion';
 // Statistics helpers for building your own detectors.
-export { percentile, median, summarize, counterDelta, SlidingWindow } from './utils/stats';
-export type { StatsSummary, SlidingWindowEntry } from './utils/stats';
+export {
+	percentile,
+	percentileOfSorted,
+	median,
+	medianAbsoluteDeviation,
+	robustZScore,
+	summarize,
+	counterDelta,
+	correlation,
+	pageHinkley,
+	mannKendall,
+	mannKendallVerdict,
+} from './utils/stats';
+export type { StatsSummary, PageHinkleyResult, MannKendallResult } from './utils/stats';
+export { SlidingWindow } from './utils/SlidingWindow';
+export type { SlidingWindowEntry } from './utils/SlidingWindow';
+export { TrendTester } from './utils/TrendTester';
+export type { TrendTesterConfig } from './utils/TrendTester';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
 // Per-client sample sinks. `ClientSampleSink` is the base class to subclass for a custom

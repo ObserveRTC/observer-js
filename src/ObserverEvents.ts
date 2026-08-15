@@ -20,7 +20,7 @@ import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 import type { ObserverIssue } from './common/ObserverIssue';
 import type { ValidationReport } from './validators/Validator';
-import type { ResolvedClientIssue } from './common/ActiveClientIssue';
+import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
 import { ObservedMediasoupRouter } from './ObservedMediasoupRouter';
@@ -104,7 +104,7 @@ export type ObserverEvents = {
 	 * observer force-closed it because the client went away. Carries the finished **interval**
 	 * (`raisedAt` → `resolvedAt`, `durationInMs`).
 	 */
-	'client-issue-resolved': [ObservedClientScope & { resolvedIssue: ResolvedClientIssue }];
+	'client-issue-resolved': [ObservedClientScope & { resolvedIssue: ResolvedActiveClientIssue }];
 	'client-metadata': [ObservedClientScope & { metaData: ClientMetaData }];
 	'client-extension-stats': [ObservedClientScope & { extensionStats: ExtensionStat }];
 	'client-event': [ObservedClientScope & { event: ClientEvent }];

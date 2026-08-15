@@ -1,7 +1,5 @@
 import { Observer } from '../src/Observer';
-import { detectorSlot } from '../src/detectors/DetectorsConfig';
 import type { ClientSample } from '../src/schema/ClientSample';
-import { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from '../src/Observer';
 
 /**
  * The three-state config contract: `undefined` -> defaults, object -> overrides, `null` -> not
@@ -16,57 +14,69 @@ const sample = (clientId: string, timestamp: number): ClientSample => ({
 	peerConnections: [ { peerConnectionId: `pc-${clientId}` } ],
 } as ClientSample);
 
-describe('detectorSlot', () => {
-	it('treats undefined as "create with defaults" and null as "do not create"', () => {
-		expect(detectorSlot(undefined)).toEqual({});
-		expect(detectorSlot(null)).toBeNull();
-		expect(detectorSlot({ minClients: 9 })).toEqual({ minClients: 9 });
-	});
-});
-
 describe('default detector configs', () => {
-	// The point of the tables in `Observer.ts` is that they are the ONLY place a default lives. If a
-	// detector reintroduced its own `defaultConfig`, editing the table would stop having any effect —
-	// so this asserts the table is what an auto-created detector actually runs with.
+	// Each detector now owns its defaults inside its own constructor (`{ ...defaults, ...config }`),
+	// rather than in a central table. This pins the shipped defaults for `concurrent-issue-detector`
+	// so a change to them is deliberate rather than accidental.
 	it('is what an auto-created detector runs with', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none', callDetectors: null });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false, callDetectors: null });
 		const [ detector ] = (observer.detectors as unknown as { _detectors: { name: string, _config: unknown }[] })._detectors
 			.filter((d) => d.name === 'concurrent-issue-detector');
 
 		// `_config` is private; reading it here is deliberate — this test exists to catch the shipped
-		// defaults drifting away from the table, which no public surface would reveal.
-		expect(detector._config).toEqual(defaultObserverDetectorsConfig.concurrentIssueDetector);
+		// defaults drifting away from what's documented, which no public surface would reveal.
+		expect(detector._config).toEqual({
+			issueTypes: [],
+			minClients: 3,
+			minAffectedClients: 3,
+			affectedRatioThreshold: 0.5,
+			minAffectedCalls: 2,
+			affectedCallRatioThreshold: 0,
+			onsetBurstWindowInMs: 2_000,
+			cooldownMs: 60_000,
+		});
 
 		observer.close();
 	});
 
-	// Naming one key must not drop the rest — the factory merges the override over the table.
-	it('merges an override over the table rather than replacing it', () => {
+	// Naming one key must not drop the rest — the constructor merges the override over its defaults.
+	it('merges an override over the constructor defaults rather than replacing them', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
+			autoUpdateOnCallUpdate: false,
 			callDetectors: null,
-			observerDetectors: { concurrentIssueDetector: { minAffectedCalls: 7 } },
+			observerDetectors: { 'concurrent-issue-detector': { minAffectedCalls: 7 } },
 		});
 		const [ detector ] = (observer.detectors as unknown as { _detectors: { name: string, _config: Record<string, unknown> }[] })._detectors
 			.filter((d) => d.name === 'concurrent-issue-detector');
 
 		expect(detector._config.minAffectedCalls).toBe(7);
-		expect(detector._config.cooldownMs).toBe(defaultObserverDetectorsConfig.concurrentIssueDetector.cooldownMs);
+		expect(detector._config.cooldownMs).toBe(60_000);
 
 		observer.close();
 	});
 
-	// The two tables intentionally share one object for the detector that runs at both scopes.
-	it('shares the concurrent-issue defaults between the two scopes', () => {
-		expect(defaultObserverDetectorsConfig.concurrentIssueDetector)
-			.toBe(defaultCallDetectorsConfig.concurrentIssueDetector);
+	// The same detector class is used at both scopes, so with no overrides at either, the defaults it
+	// produces must be identical regardless of which scope constructed it.
+	it('produces the same defaults whether created at observer or call scope', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+
+		observer.accept(sample('a', 1000));
+
+		const call = observer.getObservedCall('call-1')!;
+		const [ observerDetector ] = (observer.detectors as unknown as { _detectors: { name: string, _config: unknown }[] })._detectors
+			.filter((d) => d.name === 'concurrent-issue-detector');
+		const [ callDetector ] = (call.detectors as unknown as { _detectors: { name: string, _config: unknown }[] })._detectors
+			.filter((d) => d.name === 'concurrent-issue-detector');
+
+		expect(callDetector._config).toEqual(observerDetector._config);
+
+		observer.close();
 	});
 });
 
 describe('observer-scoped detector auto-creation', () => {
 	it('creates every observer detector by default', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 
 		expect(observer.detectors.listOfNames).toEqual(expect.arrayContaining([
 			'concurrent-issue-detector',
@@ -79,10 +89,9 @@ describe('observer-scoped detector auto-creation', () => {
 
 	it('skips only the detectors explicitly set to null', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
+			autoUpdateOnCallUpdate: false,
 			observerDetectors: {
-				turnServerOutageDetector: null,
+				'turn-server-outage-detector': null,
 			},
 		});
 
@@ -94,8 +103,7 @@ describe('observer-scoped detector auto-creation', () => {
 
 	it('creates none when the whole group is null', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
+			autoUpdateOnCallUpdate: false,
 			observerDetectors: null,
 		});
 
@@ -106,9 +114,8 @@ describe('observer-scoped detector auto-creation', () => {
 
 	it('passes overrides through to the detector', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
-			observerDetectors: { turnServerHealthDetector: { minClientsPerServer: 999 } },
+			autoUpdateOnCallUpdate: false,
+			observerDetectors: { 'turn-server-health-detector': { minClientsPerServer: 999 } },
 		});
 
 		// With an unreachable threshold the detector must exist but never raise.
@@ -126,7 +133,7 @@ describe('observer-scoped detector auto-creation', () => {
 
 describe('call-scoped detector auto-creation', () => {
 	it('creates the call detectors for every call by default', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 
 		observer.accept(sample('a', 1000));
 
@@ -137,8 +144,11 @@ describe('call-scoped detector auto-creation', () => {
 			'issue-fan-out-detector',
 			'track-delivery-mismatch-detector',
 			'unconsumed-track-detector',
-			'ice-disruption-detector',
 		]));
+
+		// `ice-disruption-detector` correlates across a call's clients, but it is observer-scoped now
+		// (it takes an `Observer`, not an `ObservedCall`) — it never runs as a call detector.
+		expect(call.detectors.listOfNames).not.toContain('ice-disruption-detector');
 
 		// The RTCP check is a validator, not a detector — it settles instead of running forever.
 		expect(call.detectors.listOfNames).not.toContain('worst-receiver-contagion-detector');
@@ -148,11 +158,9 @@ describe('call-scoped detector auto-creation', () => {
 
 	it('honours callDetectors on the observer for every call it creates', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
+			autoUpdateOnCallUpdate: false,
 			callDetectors: {
-				iceDisruptionDetector: null,
-				unconsumedTrackDetector: null,
+				'unconsumed-track-detector': null,
 			},
 		});
 
@@ -161,7 +169,6 @@ describe('call-scoped detector auto-creation', () => {
 		const names = observer.getObservedCall('call-1')!.detectors.listOfNames;
 
 		expect(names).toContain('issue-fan-out-detector');
-		expect(names).not.toContain('ice-disruption-detector');
 		expect(names).not.toContain('unconsumed-track-detector');
 
 		observer.close();
@@ -169,8 +176,7 @@ describe('call-scoped detector auto-creation', () => {
 
 	it('creates none when callDetectors is null', () => {
 		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
+			autoUpdateOnCallUpdate: false,
 			callDetectors: null,
 		});
 
@@ -181,39 +187,8 @@ describe('call-scoped detector auto-creation', () => {
 		observer.close();
 	});
 
-	it('lets a single call override the observer default', () => {
-		const observer = new Observer({
-			updatePolicy: 'none',
-			defaultCallUpdatePolicy: 'none',
-			callDetectors: null,
-		});
-
-		// The per-call value replaces the observer's wholesale; it is not merged into it. Naming one
-		// key does NOT disable the others — every unnamed slot is `undefined`, so it still gets its
-		// defaults. Disabling is always explicit, per key or via `callDetectors: null`.
-		observer.createObservedCall({ callId: 'special', detectors: { iceDisruptionDetector: { minClients: 99 } } });
-		observer.accept(sample('a', 1000)); // creates 'call-1' with the observer default (none)
-
-		const special = observer.getObservedCall('special')!.detectors.listOfNames;
-
-		expect(special).toContain('ice-disruption-detector');
-		expect(special).toContain('issue-fan-out-detector');
-		expect(observer.getObservedCall('call-1')!.detectors.listOfNames).toHaveLength(0);
-
-		observer.close();
-	});
-
-	it('a call built directly, outside the observer, gets no auto-created detectors', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
-		const call = observer.createObservedCall({ callId: 'c', detectors: null })!;
-
-		expect(call.detectors.listOfNames).toHaveLength(0);
-
-		observer.close();
-	});
-
 	it('releases auto-created detectors when the call closes', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 
 		observer.accept(sample('a', 1000));
 
@@ -229,7 +204,7 @@ describe('call-scoped detector auto-creation', () => {
 	});
 
 	it('stays quiet on ordinary, healthy traffic', () => {
-		const observer = new Observer({ updatePolicy: 'none', defaultCallUpdatePolicy: 'none' });
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
 		const issues: unknown[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));

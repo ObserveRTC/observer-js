@@ -1,7 +1,6 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
 import { ActiveIssueTracker } from '../issues/ActiveIssueTracker';
-import { ObservedOutboundTrack } from '..';
 import { ActiveClientIssue } from '../issues/ActiveClientIssue';
 
 export const TrackDeliveryMismatchTypes = {
@@ -78,7 +77,7 @@ type DeliveryItem = {
  * — the client's own dry-track verdicts plus the resolver links are sufficient.
  */
 export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTracker {
-	public static readonly NAME = 'track-delivery-mismatch-detector';
+	public static readonly NAME = 'track-delivery-mismatch-detector' as const;
 	public readonly name = TrackDeliveryMismatchDetector.NAME;
 
 	private readonly _config: TrackDeliveryMismatchDetectorConfig;
@@ -98,6 +97,18 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 			cooldownMs: 60_000,
 			...config,
 		};
+
+		// Subscribe here, like every other tracker-shaped detector. Without this the dry-track sets
+		// stay empty forever and `update()` silently judges every publisher as having zero dry
+		// subscribers — the detector would run, cost time, and never be able to find anything.
+		this.call.activeIssuesRegistry.addIssueTracker(this._config.dryOutboundIssueType, this);
+		this.call.activeIssuesRegistry.addIssueTracker(this._config.dryInboundIssueType, this);
+	}
+
+	public close(): void {
+		this.call.activeIssuesRegistry.removeIssueTracker(this);
+		this._lastRaisedAt.clear();
+		this.clear();
 	}
 
 	public add(issue: ActiveClientIssue): void {
@@ -118,6 +129,7 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 		} else if (issue.type === this._config.dryInboundIssueType) {
 			this.dryInboundTracks.delete(issue.trackId ?? '');
 		}
+		
 		return true;
 	}
 
@@ -136,6 +148,7 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 		} else if (issue.type === this._config.dryInboundIssueType) {
 			return this.dryInboundTracks.has(issue.trackId ?? '');
 		}
+		
 		return false;
 	}
 
@@ -173,6 +186,11 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 				continue;
 			}
 
+			// Nothing is wrong: the publisher is sending and no subscriber reported a dry track. Without
+			// this the `else` branch below is unconditional, so a perfectly healthy call raises
+			// RECEIVER_TRACK_NOT_DELIVERED for every published track, every cooldown period.
+			if (delivery.publisherSending && delivery.numberOfDrySubscribers === 0) continue;
+
 			const dryRatio = delivery.numberOfDrySubscribers / delivery.numberOfSubscribers;
 			let type: string;
 
@@ -207,7 +225,4 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 		}
 	}
 
-	public close(): void {
-		this._lastRaisedAt.clear();
-	}
 }

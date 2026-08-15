@@ -152,7 +152,6 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		// to be a dozen separate `map`/`filter`/`reduce` traversals, each allocating an intermediate
 		// array per metric per track per tick.
 
-		let degradedCount = 0;
 		let freezeAffected = 0;
 		let freezeTotal = 0;
 		let pliAffected = 0;
@@ -174,10 +173,9 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 
 			if (!inboundRtp) continue;
 
-			if (inboundTrack.degraded) degradedCount += 1;
 			if (0 < inboundRtp.deltaFreezeCount) freezeAffected += 1;
 			if (0 < inboundRtp.deltaPliCount) pliAffected += 1;
-			if (0 <= (inboundRtp.concealmentRatio ?? 0)) concealmentAffected += 1;
+			if (0 < (inboundRtp.concealmentRatio ?? 0)) concealmentAffected += 1;
 
 			if (inboundTrack.degraded) numberOfDegradedReceivers += 1;
 			else numberOfHealthyReceivers += 1;

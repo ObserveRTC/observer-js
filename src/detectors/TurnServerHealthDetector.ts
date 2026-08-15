@@ -63,7 +63,9 @@ export type TurnServerHealth = {
  * clients *on* the server to ask how many are unhappy, and an outage takes them away.
  */
 export class TurnServerHealthDetector implements Detector {
-	public readonly name = 'turn-server-health-detector';
+	public static readonly NAME = 'turn-server-health-detector';
+
+	public readonly name = TurnServerHealthDetector.NAME;
 
 	private readonly _config: TurnServerHealthDetectorConfig;
 	private readonly _streaks = new Map<string, number>();
@@ -74,9 +76,17 @@ export class TurnServerHealthDetector implements Detector {
 
 	public constructor(
 		private readonly _observer: Observer,
-		config: TurnServerHealthDetectorConfig,
+		config: Partial<TurnServerHealthDetectorConfig> = {},
 	) {
-		this._config = config;
+		this._config = {
+			minClientsPerServer: 5,
+			degradedRatioThreshold: 0.5,
+			// any open issue: the question is where trouble clusters, not what it is
+			issueTypes: [],
+			consecutiveTicks: 2,
+			cooldownMs: 60_000,
+			...config,
+		};
 	}
 
 	public update(): void {
@@ -84,7 +94,9 @@ export class TurnServerHealthDetector implements Detector {
 		const wanted = new Set(this._config.issueTypes);
 		const issuesByClientId = new Map<string, string[]>();
 
-		for (const issue of this._observer.issueIndex.all) {
+		// Read straight off the registry rather than subscribing as a tracker: this detector asks
+		// "any open issue", so a subscription would just re-derive the registry's own set.
+		for (const issue of this._observer.activeIssuesRegistry.values()) {
 			if (0 < wanted.size && !wanted.has(issue.type)) continue;
 
 			const types = issuesByClientId.get(issue.clientId);
