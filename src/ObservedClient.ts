@@ -7,18 +7,13 @@ import * as MetaData from './schema/ClientMetaTypes';
 import { ClientEventTypes } from './schema/ClientEventTypes';
 import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
-import { parseJsonAs } from './common/utils';
+import { parseJsonAs, parseJsonObject } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
-import {
-	ActiveClientIssue,
-	ResolvedClientIssue,
-	baseIssueType,
-	isResolutionEntry,
-	parseIssuePayload,
-} from './common/ActiveClientIssue';
+import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
+import { ActiveClientIssue, baseIssueType, isClientIssueResolutionEntry } from './issues/ActiveClientIssue';
 
 const logger = createLogger('ObservedClient');
 
@@ -124,7 +119,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	// public totalNumberOfIssues = 0;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
-	public issues: ClientIssue[] = [];
 
 	/**
 	 * The client's currently **open** stateful issues, keyed by `ClientIssue.key` — the server-side
@@ -135,14 +129,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	 * recently". Entries are opened by a raise, closed by the matching `<type>-resolved` entry, and
 	 * force-closed when the client closes.
 	 */
-	public readonly activeIssues = new Map<string, ActiveClientIssue>();
+	public readonly activeIssues: ObservedClientIssueRegistry;
 
 	private _pendingInjections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
 	private _activeSample?: ClientSample;
 
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
-	public constructor(settings: ObservedClientSettings<AppData>, public readonly call: ObservedCall) {
+	public constructor(
+		settings: ObservedClientSettings<AppData>,
+		public readonly call: ObservedCall,
+		activeIssues: ObservedClientIssueRegistry
+	) {
 		super();
 		this.setMaxListeners(Infinity);
 
@@ -161,6 +159,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.sink.once('close', () => this.sink?.off('error', onError));
 			this.sink.on('error', onError);
 		}
+		this.activeIssues = activeIssues;
 	}
 
 	public get numberOfPeerConnections() {
@@ -176,10 +175,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		this._flushPendingInjections();
 
-		// Close any issue the client never resolved (crash, network death, or a monitor that did not
-		// auto-resolve on close). Without this, correlators reading the active set would keep a
-		// departed client's issues open forever and fire indefinitely.
-		this.resolveActiveIssues('client-closed');
+		const activeIssues = [...this.activeIssues.values()];
+
+		for (const issue of activeIssues) {
+			this._resolveIssue({ key: issue.key, type: `${issue.type}-resolved` }, 'client-close');
+		}
 
 		this.closed = true;
 
@@ -215,6 +215,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			clearTimeout(this.closeTimer);
 			this.closeTimer = undefined;
 		}
+
+		// A new sample changes the state everything per-tick is derived from, so invalidate the call's
+		// memoised aggregations. Keyed on state change rather than on `call.update()` alone, because a
+		// detector's `update()` can legitimately be driven directly.
+		this.call.updateGeneration += 1;
 
 		const now = Date.now();
 		const elapsedInMs = now - this.updated;
@@ -507,28 +512,33 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public addIssue(issue: ClientIssue) {
 		if (this.closed) return;
 
-		if (isResolutionEntry(issue)) return this._resolveIssue(issue);
+		if (isClientIssueResolutionEntry(issue)) {
+			return this._resolveIssue(issue);
+		}
 
 		const now = Date.now();
 
 		if (issue.key) {
-			const payload = parseIssuePayload(issue.payload);
+			const payload = parseJsonObject(issue.payload);
 			const existing = this.activeIssues.get(issue.key);
 
 			if (existing) {
 				// A re-raise: same interval, fresher payload. Do not restart `raisedAt`.
 				existing.payload = payload ?? existing.payload;
 			} else {
-				this.activeIssues.set(issue.key, {
+				const active: ActiveClientIssue = {
 					key: issue.key,
 					type: baseIssueType(issue.type),
 					clientId: this.clientId,
+					callId: this.call.callId,
 					raisedAt: issue.timestamp ?? now,
 					observedAt: now,
 					payload,
 					peerConnectionId: typeof payload?.peerConnectionId === 'string' ? payload.peerConnectionId : undefined,
 					trackId: typeof payload?.trackId === 'string' ? payload.trackId : undefined,
-				});
+				};
+
+				this.activeIssues.add(active);
 			}
 		}
 
@@ -539,41 +549,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
 	}
 
-	/**
-	 * Close every still-open issue, e.g. because the client is going away. Emits
-	 * `client-issue-resolved` for each with the given `resolvedBy`, so correlators relying on the
-	 * active set don't keep a departed client's issues open forever.
-	 */
-	public resolveActiveIssues(resolvedBy: ResolvedClientIssue['resolvedBy'] = 'client-closed') {
-		if (this.activeIssues.size === 0) return;
-
-		const now = Date.now();
-
-		for (const active of [ ...this.activeIssues.values() ]) {
-			this.activeIssues.delete(active.key);
-			this._notify('client-issue-resolved', {
-				...this.eventScope,
-				resolvedIssue: {
-					...active,
-					resolvedAt: now,
-					observedResolvedAt: now,
-					durationInMs: Math.max(0, now - active.observedAt),
-					resolvedBy,
-				},
-			});
-		}
-	}
-
 	/** Close the active issue a `<type>-resolved` entry refers to, and announce the finished interval. */
-	private _resolveIssue(issue: ClientIssue) {
+	private _resolveIssue(issue: ClientIssue, resolvedBy = 'client') {
 		const now = Date.now();
-		const resolutionPayload = parseIssuePayload(issue.payload);
+		const resolutionPayload = parseJsonObject(issue.payload);
 		const type = baseIssueType(issue.type);
 		// The resolution carries `raisedAt` as a secondary join for consumers that don't store keys.
 		const raisedAt = typeof resolutionPayload?.raisedAt === 'number' ? resolutionPayload.raisedAt : undefined;
 		const active = issue.key ? this.activeIssues.get(issue.key) : undefined;
 
-		if (active) this.activeIssues.delete(active.key);
+		if (active) {
+			this.activeIssues.remove(active.key);
+		}
 
 		const resolvedAt = issue.timestamp ?? now;
 		const durationInMs = typeof resolutionPayload?.durationInMs === 'number'
@@ -586,6 +573,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				key: active?.key ?? issue.key ?? `${this.clientId}:${type}:${raisedAt ?? resolvedAt}`,
 				type,
 				clientId: this.clientId,
+				callId: this.call.callId,
 				raisedAt: active?.raisedAt ?? raisedAt ?? resolvedAt,
 				observedAt: active?.observedAt ?? now,
 				payload: active?.payload,
@@ -596,7 +584,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				durationInMs,
 				comment: typeof resolutionPayload?.comment === 'string' ? resolutionPayload.comment : undefined,
 				resolutionPayload,
-				resolvedBy: 'client',
+				resolvedBy,
 			},
 		});
 	}

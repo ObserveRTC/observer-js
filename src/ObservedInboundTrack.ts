@@ -20,8 +20,13 @@ export class ObservedInboundTrack implements InboundTrackSample {
 	public removedAt?: number | undefined;
 
 	public muted?: boolean;
+	public attachments?: Record<string, unknown> | undefined;
 
-	attachments?: Record<string, unknown> | undefined;
+	public degradationReasons: string[] = [];
+
+	public get degraded() {
+		return this.degradationReasons.length > 0;
+	}
 
 	constructor(
 		public timestamp: number,
@@ -64,5 +69,34 @@ export class ObservedInboundTrack implements InboundTrackSample {
 		this.timestamp = stats.timestamp;
 		this.calculatedScore.value = stats.score;
 		this.attachments = stats.attachments;
+
+		this.checkDegradation();
+	}
+
+	private checkDegradation() {
+		const thresholds = this._peerConnection.client.call.observer.config.inboundTrackDegradationThresholds;
+
+		this.degradationReasons.length = 0;
+		if (!thresholds) return;
+
+		const reasons: string[] = [];
+
+		if (thresholds.deltaFreezeCount < (this._inboundRtp?.deltaFreezeCount ?? 0)) {
+			reasons.push('freezes');
+		}
+		if (thresholds.framesDroppedRatio < (this._inboundRtp?.framesDroppedRatio ?? 0)) {
+			reasons.push('frames-dropped');
+		}
+		if (thresholds.jitterBufferDelayInMs < (this._inboundRtp?.jitterBufferDelayInMs ?? 0)) {
+			reasons.push('jitter-buffer-delay');
+		}
+		if (thresholds.concealmentRatio < (this._inboundRtp?.concealmentRatio ?? 0)) {
+			reasons.push('concealment');
+		}
+		if (thresholds.rttInMs < (this._inboundRtp?.remoteRttInMs ?? 0)) {
+			reasons.push('rtt');
+		}
+
+		this.degradationReasons = reasons;
 	}
 }

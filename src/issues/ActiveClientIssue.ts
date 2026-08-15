@@ -1,3 +1,4 @@
+import { parseJsonObject } from '../common/utils';
 import type { ClientIssue } from '../schema/ClientSample';
 
 /** The suffix client-monitor-js appends to the type of a resolution entry. */
@@ -21,8 +22,7 @@ export const RESOLVED_ISSUE_SUFFIX = '-resolved';
  * being real evidence of a shared cause.
  *
  * Issues still active when the client monitor closes are auto-resolved by the client, so a clean
- * departure does not leak. An unclean one (crash, network death) can, which is why the registry
- * also expires entries — see `IssueRegistry`.
+ * departure does not leak.
  */
 export type ActiveClientIssue = {
 
@@ -34,6 +34,12 @@ export type ActiveClientIssue = {
 
 	/** The client that reported it. */
 	clientId: string;
+
+	/**
+	 * The call that client belongs to. The dimension that separates "one bad meeting" from "our
+	 * infrastructure": at observer scope, clients in *different* calls share nothing but the server.
+	 */
+	callId: string;
 
 	/** When the client raised it (client clock). */
 	raisedAt: number;
@@ -52,7 +58,7 @@ export type ActiveClientIssue = {
 };
 
 /** A closed interval: an {@link ActiveClientIssue} plus how it ended. */
-export type ResolvedClientIssue = ActiveClientIssue & {
+export type ResolvedActiveClientIssue = ActiveClientIssue & {
 
 	/** When the client resolved it (client clock). */
 	resolvedAt: number;
@@ -76,8 +82,9 @@ export type ResolvedClientIssue = ActiveClientIssue & {
 	resolvedBy: 'client' | 'timeout' | 'client-closed';
 };
 
+
 /** `true` when the entry is a resolution companion rather than a raise. */
-export function isResolutionEntry(issue: ClientIssue): boolean {
+export function isClientIssueResolutionEntry(issue: ClientIssue): boolean {
 	return issue.type.endsWith(RESOLVED_ISSUE_SUFFIX);
 }
 
@@ -86,15 +93,3 @@ export function baseIssueType(type: string): string {
 	return type.endsWith(RESOLVED_ISSUE_SUFFIX) ? type.slice(0, -RESOLVED_ISSUE_SUFFIX.length) : type;
 }
 
-/** Best-effort parse of the JSON-string payload the schema carries. */
-export function parseIssuePayload(payload?: string): Record<string, unknown> | undefined {
-	if (!payload) return undefined;
-
-	try {
-		const parsed = JSON.parse(payload);
-
-		return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
-	} catch {
-		return undefined;
-	}
-}

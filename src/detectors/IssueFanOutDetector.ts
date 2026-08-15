@@ -1,8 +1,7 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
 import type { ObservedOutboundTrack } from '../ObservedOutboundTrack';
-import { IssueRegistry, IssueRegistryConfig } from '../utils/IssueRegistry';
-import { TrackDistributionAggregator } from '../utils/TrackDistributionAggregator';
+import { concludeFrom } from './IssueConclusion';
 
 export const IssueFanOutTypes = {
 	/** Most receivers of one published track have the same issue open → the fault follows the source. */
@@ -29,15 +28,6 @@ export type IssueFanOutDetectorConfig = {
 	/** Re-arm time (ms) per (track, issue type). Default `60_000`. */
 	cooldownMs: number;
 
-	registry?: Partial<IssueRegistryConfig>;
-};
-
-const defaultConfig: IssueFanOutDetectorConfig = {
-	issueTypes: [],
-	minReceivers: 3,
-	affectedRatioThreshold: 0.6,
-	reportSingleReceiver: true,
-	cooldownMs: 60_000,
 };
 
 /**
@@ -65,24 +55,20 @@ export class IssueFanOutDetector implements Detector {
 	public readonly name = 'issue-fan-out-detector';
 
 	private readonly _config: IssueFanOutDetectorConfig;
-	private readonly _registry: IssueRegistry;
-	private readonly _aggregator: TrackDistributionAggregator;
 	private readonly _lastRaisedAt = new Map<string, number>();
 
 	public constructor(
 		private readonly _call: ObservedCall,
-		config: Partial<IssueFanOutDetectorConfig> = {},
+		config: IssueFanOutDetectorConfig,
 	) {
-		this._config = { ...defaultConfig, ...config };
-		this._registry = new IssueRegistry(_call, config.registry);
-		this._aggregator = new TrackDistributionAggregator(_call);
+		this._config = config;
 	}
 
 	public update(): void {
 		const now = Date.now();
 		const wanted = new Set(this._config.issueTypes);
 
-		for (const distribution of this._aggregator.aggregate()) {
+		for (const distribution of this._call.trackDistributionAggregator.aggregate()) {
 			// The inbound track ids of every subscriber of this published track.
 			const receiverTrackIds = new Map<string, string>();
 
@@ -90,7 +76,7 @@ export class IssueFanOutDetector implements Detector {
 				receiverTrackIds.set(receiver.observedInboundTrack.id, receiver.clientId);
 			}
 
-			const issues = this._registry.byTrackIds(receiverTrackIds.keys(), now)
+			const issues = this._call.issueIndex.byTrackIds(receiverTrackIds.keys())
 				.filter((issue) => wanted.size === 0 || wanted.has(issue.type));
 
 			if (issues.length === 0) continue;
@@ -124,12 +110,26 @@ export class IssueFanOutDetector implements Detector {
 					? IssueFanOutTypes.publishedTrackIssueFanOut
 					: IssueFanOutTypes.singleReceiverIssue;
 
+				// What the fan-out implies. A track-scoped cohort is a strong statement: the affected
+				// clients share a publisher and nothing else, so the receivers are exonerated.
+				const conclusion = concludeFrom({
+					issueType,
+					scope: 'call',
+					affectedClients: clientIds.size,
+					totalClients: distribution.numberOfReceivers,
+					affectedCalls: 1,
+					totalCalls: 1,
+					onsetBurst: false,
+					publishedTrackId: isFanOut ? distribution.trackId : undefined,
+				});
+
 				this._call.addIssue({
 					type,
 					timestamp: now,
-					payload: JSON.stringify({
+					payload: {
 						type,
 						issueType,
+						conclusion,
 						trackId: distribution.trackId,
 						kind: distribution.kind,
 						publisherClientId: distribution.publisher.clientId,
@@ -146,7 +146,7 @@ export class IssueFanOutDetector implements Detector {
 						bitrate: distribution.bitrate,
 						freezes: distribution.freezes,
 						plis: distribution.plis,
-					}),
+					},
 				});
 			}
 		}
@@ -158,6 +158,6 @@ export class IssueFanOutDetector implements Detector {
 
 	/** Exposed for tests/dashboards: the distributions this detector reasons over. */
 	public distributionsOf(): ObservedOutboundTrack[] {
-		return this._aggregator.aggregate().map((d) => d.publisher.observedOutboundTrack);
+		return this._call.trackDistributionAggregator.aggregate().map((d) => d.publisher.observedOutboundTrack);
 	}
 }

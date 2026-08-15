@@ -113,16 +113,57 @@ Tests live in `tests/` (one spec per concern) with shared fixtures/helpers in `t
   only timers and are opt-in).
 - **Explicit accumulation.** The per-sample metric accumulation in `accept()` is intentionally
   explicit and not abstracted — match that style rather than introducing clever indirection.
-- **Detectors are server-side.** Add cross-client detectors on `ObservedCall.detectors` (or
-  `observer.detectors` for cross-call/SFU-wide findings, raised via `observer.addIssue` →
-  `observer-issue`); do not re-implement signals the client already reports (those arrive as
-  `clientIssues` → `client-issue`). Build them on `TrackDistributionAggregator` and the helpers in
+- **The hot path is `accept()` + `call.update()`, and it must not scale with participants.** Two
+  invariants hold it there, both easy to break by accident:
+  1. *Issue queries are indexed, not searched.* `IssueIndex` (one per call, propagating into the
+     observer's) is maintained incrementally by `ObservedClient` as issues open and close. Never add a
+     query that walks `observedClients` to find issues — a healthy 1200-client fleet costs 0.1 µs per
+     `cohorts()` call precisely because nothing iterates clients.
+  2. *Index the interesting minority; never scan the majority.* `IssueIndex` for open issues,
+     `call.unconsumedOutboundTracks` for published tracks with no subscriber — both maintained at the
+     moments the answer changes, so a healthy call costs a `size === 0` check instead of a walk. When
+     a detector needs "which X are in state Y", add the index next to whatever already knows about the
+     transition (the resolver, the client) rather than iterating in the detector.
+  3. *Per-tick derivations are memoised against `call.updateGeneration`.* It is bumped on every
+     accepted sample and at the start of every `update()`. Three detectors share one
+     `TrackDistributionAggregator` result per tick this way. If you add a per-tick derivation, memoise
+     it the same way; if you add state that aggregations read, make sure the generation advances when
+     it changes.
+
+  `yarn bench` measures both (per-detector breakdown and query scaling). Run it before and after any
+  change to the aggregators, the registry, or `accept()`.
+- **Detector or validator?** If the answer changes tick to tick (congestion, a dead relay, a track
+  nobody receives) it is a `Detector` in `detectors/`. If it is a property of the deployment that only
+  changes on deploy (does the SFU do per-receiver layer selection, does it terminate RTCP) it is a
+  `Validator` in `validators/`: it is **one-shot** — started with `observer.addValidator(...)`, runs
+  until it can decide, calls `onDone` once and is dropped. Adding one means: the class, an entry in
+  `AvailableValidatorConfigs`, and a `case` in `addValidator`. A validator **must** be able to
+  conclude the *good* case from positive evidence and **must not** treat "never saw the conditions"
+  as success — it simply keeps running, and reports `checks` so an `inconclusive` is honest. Give the
+  verdicts domain words (`layer-decided-per-receiver`, not `pass`).
+- **One implementation per utility.** `utils/stats.ts` owns numeric helpers, `common/utils.ts` owns
+  the general ones. Before adding a helper, check the other file — `getMedian` and three separate
+  JSON parsers all existed alongside more general equivalents.
+- **Detectors are server-side, and configured rather than registered.** The built-ins are created
+  from `ObserverConfig.observerDetectors` (observer scope) / `.callDetectors` (call scope) in
+  `detectors/DetectorsConfig.ts`; each slot is `undefined` (defaults), an object (overrides) or
+  `null` (skip). A new detector needs: the class, a slot on `CallDetectorsConfig` or
+  `ObserverDetectorsConfig`, its defaults in `defaultCallDetectorsConfig` /
+  `defaultObserverDetectorsConfig` (`Observer.ts`), a line in `createCallDetectors` /
+  `createObserverDetectors`, and exports in `index.ts`. **Never declare a `defaultConfig` inside a
+  detector file** — a detector constructor takes a *complete* config and the factory supplies it, so
+  every default is visible in one place and `CallDetectorDefaults` / `ObserverDetectorDefaults` won't
+  compile until yours is there. Because they are on by default, a new detector MUST stay silent on healthy traffic —
+  `tests/detectorsConfig.spec.ts` asserts this. Findings are raised via `call.addIssue` →
+  `call-issue` or `observer.addIssue` → `observer-issue`, as an `ObserverIssue` whose `payload` is the
+  **object** — never `JSON.stringify` in a detector, the bus is in-process. Do not re-implement signals the client
+  already reports (those arrive as `clientIssues` → `client-issue`). Build them on `TrackDistributionAggregator` and the helpers in
   `utils/stats.ts` rather than hand-rolling another traversal of `remoteInboundTracks`.
 - **Summarize with percentiles, not means.** Call telemetry is skewed by single bad participants;
   use `summarize()` / `percentile()` and "affected ratios" in detector logic.
 - **Don't re-derive client verdicts.** `client-monitor-js` already decides *what* is wrong per
   endpoint (with hysteresis and multi-signal confirmation). New detectors should consume those
-  issues via `IssueRegistry` / `ObservedClient.activeIssues` and add the part only a server can:
+  issues via `observedCall.issueIndex` / `ObservedClient.activeIssues` and add the part only a server can:
   who else, what's shared, where in publisher→SFU→subscriber. Re-thresholding raw counters is the
   fallback for clients that don't report issues, not the primary path.
 - **Document resolver-dependent detectors.** Any detector reasoning about a published track and its

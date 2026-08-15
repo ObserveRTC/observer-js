@@ -1,7 +1,8 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
-import { IssueRegistry, IssueRegistryConfig } from '../utils/IssueRegistry';
-import { TrackDistributionAggregator } from '../utils/TrackDistributionAggregator';
+import { ActiveIssueTracker } from '../issues/ActiveIssueTracker';
+import { ObservedOutboundTrack } from '..';
+import { ActiveClientIssue } from '../issues/ActiveClientIssue';
 
 export const TrackDeliveryMismatchTypes = {
 	/**
@@ -40,16 +41,16 @@ export type TrackDeliveryMismatchDetectorConfig = {
 	/** Re-arm time (ms) per (track, verdict). Default `60_000`. */
 	cooldownMs: number;
 
-	registry?: Partial<IssueRegistryConfig>;
 };
 
-const defaultConfig: TrackDeliveryMismatchDetectorConfig = {
-	dryInboundIssueType: 'dry-inbound-track',
-	dryOutboundIssueType: 'dry-outbound-track',
-	minReceivers: 2,
-	allReceiversRatio: 1,
-	cooldownMs: 60_000,
-};
+type DeliveryItem = {
+	publisherClientId: string,
+	publisherSending: boolean,
+	publisherDryIssue: boolean,
+	publisherBitrate: number,
+	numberOfSubscribers: number,
+	numberOfDrySubscribers: number,
+}
 
 /**
  * Answers **"is the media actually getting through?"** by joining the two ends of a published track.
@@ -76,49 +77,106 @@ const defaultConfig: TrackDeliveryMismatchDetectorConfig = {
  * This is the "SFU forwarding mismatch" check, and notably it needs **no** mediasoup instrumentation
  * — the client's own dry-track verdicts plus the resolver links are sufficient.
  */
-export class TrackDeliveryMismatchDetector implements Detector {
-	public readonly name = 'track-delivery-mismatch-detector';
+export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTracker {
+	public static readonly NAME = 'track-delivery-mismatch-detector';
+	public readonly name = TrackDeliveryMismatchDetector.NAME;
 
 	private readonly _config: TrackDeliveryMismatchDetectorConfig;
-	private readonly _registry: IssueRegistry;
-	private readonly _aggregator: TrackDistributionAggregator;
 	private readonly _lastRaisedAt = new Map<string, number>();
+	private readonly dryOutboundTracks = new Set<string>();
+	private readonly dryInboundTracks = new Set<string>();
 
 	public constructor(
-		private readonly _call: ObservedCall,
+		private readonly call: ObservedCall,
 		config: Partial<TrackDeliveryMismatchDetectorConfig> = {},
 	) {
-		this._config = { ...defaultConfig, ...config };
-		this._registry = new IssueRegistry(_call, config.registry);
-		this._aggregator = new TrackDistributionAggregator(_call);
+		this._config = {
+			dryOutboundIssueType: 'dry-outbound-track',
+			dryInboundIssueType: 'dry-inbound-track',
+			minReceivers: 2,
+			allReceiversRatio: 1,
+			cooldownMs: 60_000,
+			...config,
+		};
+	}
+
+	public add(issue: ActiveClientIssue): void {
+		if (issue.type === this._config.dryOutboundIssueType) {
+			if (issue.trackId) {
+				this.dryOutboundTracks.add(issue.trackId);
+			}
+		} else if (issue.type === this._config.dryInboundIssueType) {
+			if (issue.trackId) {
+				this.dryInboundTracks.add(issue.trackId);
+			}
+		}
+	}
+
+	public delete(issue: ActiveClientIssue): boolean {
+		if (issue.type === this._config.dryOutboundIssueType) {
+			this.dryOutboundTracks.delete(issue.trackId ?? '');
+		} else if (issue.type === this._config.dryInboundIssueType) {
+			this.dryInboundTracks.delete(issue.trackId ?? '');
+		}
+		return true;
+	}
+
+	public get size(): number {
+		return this.dryOutboundTracks.size + this.dryInboundTracks.size;
+	}
+
+	public clear(): void {
+		this.dryOutboundTracks.clear();
+		this.dryInboundTracks.clear();
+	}
+
+	public has(issue: ActiveClientIssue): boolean {
+		if (issue.type === this._config.dryOutboundIssueType) {
+			return this.dryOutboundTracks.has(issue.trackId ?? '');
+		} else if (issue.type === this._config.dryInboundIssueType) {
+			return this.dryInboundTracks.has(issue.trackId ?? '');
+		}
+		return false;
 	}
 
 	public update(): void {
 		const now = Date.now();
+		const deliveries = new Map<string, DeliveryItem>();
 
-		for (const distribution of this._aggregator.aggregate()) {
-			if (distribution.numberOfReceivers < this._config.minReceivers) continue;
+		for (const client of this.call.observedClients.values()) {
+			for (const peerConnection of client.observedPeerConnections.values()) {
+				for (const outboundTrack of peerConnection.observedOutboundTracks.values()) {
+					deliveries.set(outboundTrack.id, {
+						publisherClientId: client.clientId,
+						publisherSending: (outboundTrack.bitrate ?? 0) > 0,
+						publisherDryIssue: this.dryOutboundTracks.has(outboundTrack.id),
+						publisherBitrate: outboundTrack.bitrate ?? 0,
+						numberOfDrySubscribers: 0,
+						numberOfSubscribers: 0,
+					});
+				}
+				for (const inboundTrack of peerConnection.observedInboundTracks.values()) {
+					const delivery = deliveries.get(inboundTrack.remoteOutboundTrack?.id ?? '');
 
-			const receiverTrackIds = new Set(distribution.receivers.map((r) => r.observedInboundTrack.id));
-			const dryReceiverIds = new Set(
-				this._registry.byTrackIds(receiverTrackIds, now)
-					.filter((issue) => issue.type === this._config.dryInboundIssueType)
-					.map((issue) => issue.clientId),
-			);
+					if (!delivery) {
+						continue;
+					}
 
-			if (dryReceiverIds.size === 0) continue;
+					delivery.numberOfDrySubscribers += this.dryInboundTracks.has(inboundTrack.id) ? 1 : 0;
+					delivery.numberOfSubscribers += 1;
+				}
+			}
+		}
 
-			// Is the source actually producing? Prefer its own verdict, corroborate with the RTP.
-			const publisherDryIssue = this._registry
-				.byClientId(distribution.publisher.clientId, now)
-				.some((issue) => issue.type === this._config.dryOutboundIssueType
-					&& (issue.trackId === undefined || issue.trackId === distribution.trackId));
-			const publisherSending = !publisherDryIssue && 0 < distribution.publisher.deltaPacketsSent;
+		for (const [ outboundTrackId, delivery ] of deliveries) {
+			if (delivery.numberOfSubscribers < this._config.minReceivers) {
+				continue;
+			}
 
-			const dryRatio = dryReceiverIds.size / distribution.numberOfReceivers;
+			const dryRatio = delivery.numberOfDrySubscribers / delivery.numberOfSubscribers;
 			let type: string;
 
-			if (!publisherSending) {
+			if (!delivery.publisherSending) {
 				type = TrackDeliveryMismatchTypes.publisherTrackDry;
 			} else if (this._config.allReceiversRatio <= dryRatio) {
 				type = TrackDeliveryMismatchTypes.publishedTrackNotDelivered;
@@ -126,32 +184,25 @@ export class TrackDeliveryMismatchDetector implements Detector {
 				type = TrackDeliveryMismatchTypes.receiverTrackNotDelivered;
 			}
 
-			const key = `${distribution.trackId}:${type}`;
+			const key = `${outboundTrackId}:${type}`;
 
 			if (now - (this._lastRaisedAt.get(key) ?? 0) < this._config.cooldownMs) continue;
 
 			this._lastRaisedAt.set(key, now);
 
-			this._call.addIssue({
+			this.call.addIssue({
 				type,
 				timestamp: now,
-				payload: JSON.stringify({
+				payload: {
 					type,
-					trackId: distribution.trackId,
-					kind: distribution.kind,
-					publisherClientId: distribution.publisher.clientId,
-					publisherSending,
-					publisherDryIssue,
-					publisherBitrate: distribution.publisher.bitrate,
-					publisherDeltaPacketsSent: distribution.publisher.deltaPacketsSent,
-					receivers: distribution.numberOfReceivers,
-					dryReceivers: dryReceiverIds.size,
-					dryRatio,
-					dryClientIds: [ ...dryReceiverIds ],
-					healthyClientIds: distribution.receivers
-						.map((r) => r.clientId)
-						.filter((clientId) => !dryReceiverIds.has(clientId)),
-				}),
+					trackId: outboundTrackId,
+					publisherClientId: delivery.publisherClientId,
+					publisherSending: delivery.publisherSending,
+					publisherDryIssue: delivery.publisherDryIssue,
+					publisherBitrate: delivery.publisherBitrate,
+					numberOfSubscribers: delivery.numberOfSubscribers,
+					numberOfDrySubscribers: delivery.numberOfDrySubscribers,
+				},
 			});
 		}
 	}

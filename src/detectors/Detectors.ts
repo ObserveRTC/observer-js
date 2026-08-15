@@ -1,7 +1,26 @@
 import { createLogger } from '../common/logger';
 import { Detector } from './Detector';
+import { IceDisruptionDetector, IceDisruptionDetectorConfig } from './IceDisruptionDetector';
+import { SfuCongestionDetector, SfuCongestionDetectorConfig } from './SfuCongestionDetector';
+import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchDetectorConfig } from './TrackDeliveryMismatchDetector';
+import { UnconsumedTrackDetector, UnconsumedTrackDetectorConfig } from './UnconsumedTrackDetector';
 
 const logger = createLogger('Detectors');
+
+export type AvailableObserverScopeDetectorsConfigs = {
+	[SfuCongestionDetector.NAME]: SfuCongestionDetectorConfig;
+	[IceDisruptionDetector.NAME]: IceDisruptionDetectorConfig;
+}
+
+export type AvailableCallScopeDetectorsConfigs = {
+	[UnconsumedTrackDetector.NAME]: UnconsumedTrackDetectorConfig;
+	[TrackDeliveryMismatchDetector.NAME]: TrackDeliveryMismatchDetectorConfig;
+}
+
+export type AvailableDetectorsConfigs =
+| AvailableObserverScopeDetectorsConfigs
+| AvailableCallScopeDetectorsConfigs
+;
 
 export class Detectors {
 	private _detectors: Detector[];

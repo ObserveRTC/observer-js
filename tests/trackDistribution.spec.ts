@@ -1,7 +1,6 @@
 import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
 import { TrackDistributionAggregator } from '../src/utils/TrackDistributionAggregator';
-import { CommonSourceDegradationDetector, CommonSourceDegradationTypes } from '../src/detectors/CommonSourceDegradationDetector';
 import { makeSample, type InboundSpec } from './helpers/samples';
 
 const PRODUCER = 'P';
@@ -40,6 +39,10 @@ function setup() {
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
 		updatePolicy: 'none',
 		defaultCallUpdatePolicy: 'none',
+		// Isolate the detector under test: without this the auto-created built-ins would raise
+		// their own findings and the assertions below could not attribute an issue to one detector.
+		observerDetectors: null,
+		callDetectors: null,
 	});
 
 	return observer;
@@ -106,139 +109,6 @@ describe('TrackDistributionAggregator', () => {
 
 		expect(new TrackDistributionAggregator(call).aggregate()).toHaveLength(0);
 		expect(outboundTrack(observer)?.remoteInboundTracks.size).toBe(0);
-
-		observer.close();
-	});
-});
-
-describe('CommonSourceDegradationDetector', () => {
-	it('raises PUBLISHER_HEALTHY_SUBSCRIBERS_DEGRADED when the source is fine but most receivers are not', () => {
-		const observer = setup();
-		const issues: { type: string, payload?: string }[] = [];
-
-		observer.on('call-issue', ({ issue }) => issues.push(issue));
-
-		observer.accept(publisherSample(1000, 100_000, 100));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 1000, { bytesReceived: 100_000, packetsReceived: 100, packetsLost: 0, freezeCount: 0 }));
-		}
-
-		const call = observer.getObservedCall('call-1')!;
-
-		call.detectors.add(new CommonSourceDegradationDetector(call, { consecutiveTicks: 1 }));
-
-		// publisher healthy (packets keep flowing, no remote loss), all three receivers lossy
-		observer.accept(publisherSample(2000, 300_000, 300));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 2000, { bytesReceived: 140_000, packetsReceived: 200, packetsLost: 30, freezeCount: 2 }));
-		}
-		call.update();
-
-		expect(issues).toHaveLength(1);
-		expect(issues[0].type).toBe(CommonSourceDegradationTypes.publisherHealthySubscribersDegraded);
-
-		const payload = JSON.parse(issues[0].payload!);
-
-		expect(payload.receivers).toBe(3);
-		expect(payload.degradedReceivers).toBe(3);
-		expect(payload.degradedRatio).toBe(1);
-		expect(payload.affectedClientIds.sort()).toEqual([ 'B', 'C', 'D' ]);
-		expect(payload.publisher.healthy).toBe(true);
-
-		observer.close();
-	});
-
-	it('raises SINGLE_SUBSCRIBER_DEGRADED when only one receiver suffers', () => {
-		const observer = setup();
-		const issues: { type: string }[] = [];
-
-		observer.on('call-issue', ({ issue }) => issues.push(issue));
-
-		observer.accept(publisherSample(1000, 100_000, 100));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 1000, { bytesReceived: 100_000, packetsReceived: 100, packetsLost: 0, freezeCount: 0 }));
-		}
-
-		const call = observer.getObservedCall('call-1')!;
-
-		call.detectors.add(new CommonSourceDegradationDetector(call, { consecutiveTicks: 1 }));
-
-		observer.accept(publisherSample(2000, 300_000, 300));
-		observer.accept(receiverSample('B', 2000, { bytesReceived: 300_000, packetsReceived: 300, packetsLost: 0, freezeCount: 0 }));
-		observer.accept(receiverSample('C', 2000, { bytesReceived: 300_000, packetsReceived: 300, packetsLost: 0, freezeCount: 0 }));
-		observer.accept(receiverSample('D', 2000, { bytesReceived: 140_000, packetsReceived: 200, packetsLost: 30, freezeCount: 2 }));
-		call.update();
-
-		expect(issues.map((i) => i.type)).toEqual([ CommonSourceDegradationTypes.singleSubscriberDegraded ]);
-
-		observer.close();
-	});
-
-	it('stays silent while healthy, and requires consecutive ticks before raising', () => {
-		const observer = setup();
-		const issues: { type: string }[] = [];
-
-		observer.on('call-issue', ({ issue }) => issues.push(issue));
-
-		observer.accept(publisherSample(1000, 100_000, 100));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 1000, { bytesReceived: 100_000, packetsReceived: 100, packetsLost: 0, freezeCount: 0 }));
-		}
-
-		const call = observer.getObservedCall('call-1')!;
-
-		call.detectors.add(new CommonSourceDegradationDetector(call, { consecutiveTicks: 2 }));
-
-		// healthy tick → nothing
-		observer.accept(publisherSample(2000, 300_000, 300));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 2000, { bytesReceived: 300_000, packetsReceived: 300, packetsLost: 0, freezeCount: 0 }));
-		}
-		call.update();
-		expect(issues).toHaveLength(0);
-
-		// first bad tick → still nothing (streak = 1)
-		observer.accept(publisherSample(3000, 500_000, 500));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 3000, { bytesReceived: 340_000, packetsReceived: 400, packetsLost: 30, freezeCount: 2 }));
-		}
-		call.update();
-		expect(issues).toHaveLength(0);
-
-		// second consecutive bad tick → raised once
-		observer.accept(publisherSample(4000, 700_000, 700));
-		for (const id of [ 'B', 'C', 'D' ]) {
-			observer.accept(receiverSample(id, 4000, { bytesReceived: 380_000, packetsReceived: 500, packetsLost: 60, freezeCount: 4 }));
-		}
-		call.update();
-		expect(issues).toHaveLength(1);
-
-		observer.close();
-	});
-});
-
-describe('observer-level detectors', () => {
-	it('runs observer.detectors on update() and surfaces observer-issue', () => {
-		const observer = setup();
-		const issues: { type: string }[] = [];
-
-		observer.on('observer-issue', ({ issue }) => issues.push(issue));
-
-		let ran = 0;
-
-		observer.detectors.add({
-			name: 'test-observer-detector',
-			update: () => {
-				ran += 1;
-				observer.addIssue({ type: 'SFU_WIDE_TEST', timestamp: Date.now() });
-			},
-		});
-
-		observer.update();
-		observer.update();
-
-		expect(ran).toBe(2);
-		expect(issues.map((i) => i.type)).toEqual([ 'SFU_WIDE_TEST', 'SFU_WIDE_TEST' ]);
 
 		observer.close();
 	});

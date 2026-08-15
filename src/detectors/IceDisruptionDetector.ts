@@ -1,7 +1,8 @@
 import type { Detector } from './Detector';
 import type { ObservedCall } from '../ObservedCall';
 import type { ObserverEvents } from '../ObserverEvents';
-import { SlidingWindow } from '../utils/stats';
+import { SlidingWindow } from "../utils/SlidingWindow";
+import { Observer } from '../Observer';
 
 export const IceDisruptionTypes = {
 	/** Many participants lost/failed their ICE connection inside the same window. */
@@ -21,13 +22,6 @@ export type IceDisruptionDetectorConfig = {
 
 	/** Re-arm time (ms) before raising again. Default `60_000`. */
 	cooldownMs: number;
-};
-
-const defaultConfig: IceDisruptionDetectorConfig = {
-	minClients: 3,
-	affectedRatioThreshold: 0.5,
-	windowMs: 10_000,
-	cooldownMs: 60_000,
 };
 
 /** The transitions treated as a disruption. */
@@ -67,7 +61,8 @@ const disruptedStates = new Set([ 'disconnected', 'failed' ]);
  * to drop its listeners (called automatically when the call closes or the detector is removed).
  */
 export class IceDisruptionDetector implements Detector {
-	public readonly name = 'ice-disruption-detector';
+	public static readonly NAME = 'ice-disruption-detector';
+	public readonly name = IceDisruptionDetector.NAME;
 
 	private readonly _config: IceDisruptionDetectorConfig;
 
@@ -78,15 +73,20 @@ export class IceDisruptionDetector implements Detector {
 	private readonly _onConnectionStateChanged: (payload: ObserverEvents['connection-state-changed'][0]) => void;
 
 	public constructor(
-		private readonly _call: ObservedCall,
+		private readonly observer: Observer,
 		config: Partial<IceDisruptionDetectorConfig> = {},
 	) {
-		this._config = { ...defaultConfig, ...config };
+		this._config = {
+			windowMs: 5000,
+			minClients: 3,
+			affectedRatioThreshold: 0.8,
+			cooldownMs: 60000,
+			...config,
+		};
 		this._disruptions = new SlidingWindow<string>(this._config.windowMs);
 
-		const record = ({ observedCall, observedClient, state }: { observedCall: ObservedCall, observedClient: { clientId: string }, state: string }) => {
+		const record = ({ observedClient, state }: { observedCall: ObservedCall, observedClient: { clientId: string }, state: string }) => {
 			// The bus is observer-wide; only take events belonging to our call.
-			if (observedCall !== this._call) return;
 			if (!disruptedStates.has(state)) return;
 
 			this._disruptions.add(observedClient.clientId);
@@ -95,14 +95,14 @@ export class IceDisruptionDetector implements Detector {
 		this._onIceStateChanged = record;
 		this._onConnectionStateChanged = record;
 
-		_call.observer.on('ice-connection-state-changed', this._onIceStateChanged);
-		_call.observer.on('connection-state-changed', this._onConnectionStateChanged);
+		this.observer.on('ice-connection-state-changed', this._onIceStateChanged);
+		this.observer.on('connection-state-changed', this._onConnectionStateChanged);
 	}
 
 	public update(): void {
 		const now = Date.now();
 		const affected = new Set(this._disruptions.values(now));
-		const numberOfClients = this._call.observedClients.size;
+		const numberOfClients = this.observer.numberOfClients;
 
 		if (numberOfClients < this._config.minClients) return;
 		if (affected.size === 0) return;
@@ -114,24 +114,23 @@ export class IceDisruptionDetector implements Detector {
 
 		this._lastRaisedAt = now;
 
-		this._call.addIssue({
+		this.observer.addIssue({
 			type: IceDisruptionTypes.callIceDisruption,
 			timestamp: now,
-			payload: JSON.stringify({
+			payload: {
 				type: IceDisruptionTypes.callIceDisruption,
-				callId: this._call.callId,
 				clients: numberOfClients,
 				affectedClients: affected.size,
 				affectedRatio,
 				affectedClientIds: [ ...affected ],
 				windowMs: this._config.windowMs,
-			}),
+			},
 		});
 	}
 
 	public close(): void {
-		this._call.observer.off('ice-connection-state-changed', this._onIceStateChanged);
-		this._call.observer.off('connection-state-changed', this._onConnectionStateChanged);
+		this.observer.off('ice-connection-state-changed', this._onIceStateChanged);
+		this.observer.off('connection-state-changed', this._onConnectionStateChanged);
 		this._disruptions.clear();
 	}
 }

@@ -1,32 +1,35 @@
 import { EventEmitter } from 'events';
 import { createLogger } from './common/logger';
-import { ObservedClient, ObservedClientSettings } from './ObservedClient';
+import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
 import { Observer } from './Observer';
 import { ScoreCalculator } from './scores/ScoreCalculator';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator';
-import { RemoteTrackResolver } from './utils/RemoteTrackResolver';
-import { OnAllClientCallUpdater } from './updaters/OnAllClientCallUpdater';
+import { RemoteTrackResolver } from './resolvers/RemoteTrackResolver';
+import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { Updater } from './updaters/Updater';
-import { OnAnyClientCallUpdater } from './updaters/OnAnyClientCallUpdater';
-import { Detectors } from './detectors/Detectors';
-import { ClientIssue } from './schema/ClientSample';
+import { AvailableCallScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
+import type { ObserverIssue } from './common/ObserverIssue';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
+import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
+import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
+import { Detector } from './detectors/Detector';
+import { UnconsumedTrackDetector } from './detectors/UnconsumedTrackDetector';
+import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatchDetector';
 
 const logger = createLogger('ObservedCall');
 
-// Updates are event-driven: triggered when any/all clients in the call have updated. `'none'`
-// disables the automatic trigger — the application must call `call.update()` itself.
-// (Apps wanting a fixed cadence can call `call.update()` on their own timer.)
-type ObservedCallUpdateConfig = {
-	updatePolicy?: 'update-on-any-client-updated' | 'update-when-all-client-updated' | 'none',
-};
-
-export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = ObservedCallUpdateConfig & {
+export type ObservedCallSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	callId: string;
 	appData?: AppData;
 	closeCallIfEmptyForMs?: number,
+	/**
+	 * When `true`, the call's `update()` is invoked whenever a client accepts a sample. When `false`, it is not.
+	 *
+	 * DEFAULT: `true` — the call is updated on every client sample, which is the most common use case.
+	 */
+	autoUpdateOnClientUpdate?: boolean;
 };
 
 export type ObservedCallEvents = {
@@ -57,6 +60,28 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	};
 	public remoteTrackResolver?: RemoteTrackResolver;
 
+	/**
+	 * Published tracks that currently have **no** subscriber linked to them.
+	 *
+	 * Maintained by the `RemoteTrackResolver` at the exact moments a track gains or loses its last
+	 * subscriber — the only moments the answer can change. `UnconsumedTrackDetector` reads this
+	 * instead of walking every published track in the call, so in a healthy call (where the set is
+	 * empty) it does no work at all.
+	 *
+	 * Empty when no resolver is configured: without links, "no subscribers" is unknowable.
+	 */
+	public readonly unconsumedOutboundTracks = new Set<ObservedOutboundTrack>();
+
+	/**
+	 * Cache generation for anything derived from the call's state.
+	 *
+	 * Bumped whenever a client accepts a sample and at the start of every `update()`, so consumers can
+	 * memoise against it and share one computation per tick. It advances on **state change** rather
+	 * than only in `update()` — a detector's `update()` may be driven directly, and it must not then
+	 * read a stale aggregation.
+	 */
+	public updateGeneration = 0;
+
 	public totalAddedClients = 0;
 	public totalRemovedClients = 0;
 
@@ -80,7 +105,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public endedAt?: number;
 	public closedAt?: number;
 
-	public readonly settings: Pick<ObservedCallSettings, 'closeCallIfEmptyForMs'>;
+	public readonly settings: Pick<ObservedCallSettings, 'closeCallIfEmptyForMs' | 'autoUpdateOnClientUpdate'>;
 
 	/** Ancestry base shared by all Observer-bus events originating at this call. */
 	public readonly eventScope: ObservedCallScope;
@@ -89,6 +114,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public constructor(
 		settings: ObservedCallSettings<AppData>,
 		public readonly observer: Observer,
+		public readonly activeIssuesRegistry: ActiveIssuesRegistry,
 	) {
 		super();
 		this.setMaxListeners(Infinity);
@@ -97,25 +123,11 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.callId = settings.callId;
 		this.appData = (settings.appData ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
-		// No built-in detectors ship yet. The registry is a server-side extension point:
-		// add custom call-level Detectors via `call.detectors.add(...)` and surface findings
-		// with `call.addIssue(...)` (emitted on the Observer bus as `call-issue`).
 		this.detectors = new Detectors();
-
-		switch (settings.updatePolicy) {
-			case 'update-on-any-client-updated':
-				this.updater = new OnAnyClientCallUpdater(this);
-				break;
-			case 'update-when-all-client-updated':
-				this.updater = new OnAllClientCallUpdater(this);
-				break;
-			case 'none':
-				// No automatic updater: `call.update()` only runs when the app calls it.
-				break;
-		}
 
 		this.settings = {
 			closeCallIfEmptyForMs: settings.closeCallIfEmptyForMs,
+			autoUpdateOnClientUpdate: settings.autoUpdateOnClientUpdate ?? true,
 		};
 	}
 
@@ -127,8 +139,39 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.calculatedScore.value;
 	}
 
-	/** Raise a call-level (server-side) issue; surfaced on the Observer bus as `call-issue`. */
-	public addIssue(issue: ClientIssue) {
+	public addDetector<K extends keyof AvailableCallScopeDetectorsConfigs>(name: K, config: Partial<AvailableCallScopeDetectorsConfigs[K]> = {}): this {
+		if (this.closed) return this;
+
+		let detector: Detector | undefined;
+
+		switch (name) {
+			case 'unconsumed-track-detector': {
+				detector = new UnconsumedTrackDetector(this, config);
+				break;
+			}
+			case 'track-delivery-mismatch-detector': {
+				detector = new TrackDeliveryMismatchDetector(this, config);
+				break;
+			}
+			default: {
+				logger.warn('Unknown detector name %s; skipping', name);
+
+				return this;
+			}
+		}
+
+		if (detector) this.detectors.add(detector);
+
+		return this; // Add this line to return the instance for chaining
+	}
+
+	/**
+	 * Raise a call-level (server-side) finding; surfaced on the Observer bus as `call-issue`.
+	 *
+	 * `payload` takes an **object** — it is delivered to in-process handlers, so there is nothing to
+	 * serialise for. Pass a string only if you already have one.
+	 */
+	public addIssue(issue: ObserverIssue) {
 		if (this.closed) return;
 
 		this._notify('call-issue', { ...this.eventScope, issue });
@@ -155,8 +198,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
 		this.closedAt = Date.now();
-		// Release detectors (they may hold bus subscriptions) before announcing the close.
+
 		this.detectors.clear();
+		this.activeIssuesRegistry.clear();
 		this.emit('close');
 		this._notify('call-closed', { ...this.eventScope });
 	}
@@ -185,10 +229,14 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (settings.appData === undefined) {
 			settings.appData = this.observer.config.createClientAppData?.({ clientId: settings.clientId, observedCall: this }) as ClientAppData;
 		}
-
-		const result = new ObservedClient<ClientAppData>(settings, this);
+		const observedClientIssueRegistry = new ObservedClientIssueRegistry(this.activeIssuesRegistry);
+		const result = new ObservedClient<ClientAppData>(
+			settings,
+			this,
+			observedClientIssueRegistry,
+		);
 		const wasEmpty = this.observedClients.size === 0;
-		const onUpdate = () => this._onClientUpdate(result);
+		const onUpdate = (...args: ObservedClientEvents['update']) => this._onClientUpdate(result, args[2]);
 		const joined = () => this._clientJoined(result);
 		const left = () => this._clientLeft(result);
 
@@ -259,6 +307,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.numberOfDataChannels += client.numberOfDataChannels;
 		}
 
+		// Invalidate everything memoised for the previous tick before anything reads it.
+		this.updateGeneration += 1;
+
 		this.scoreCalculator.update();
 		this.detectors.update();
 
@@ -268,12 +319,16 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.deltaNumberOfIssues = 0;
 	}
 
-	private _onClientUpdate(client: ObservedClient) {
+	private _onClientUpdate(client: ObservedClient, context?: AcceptContext) {
 		this.deltaNumberOfIssues += client.deltaNumberOfIssues;
 		this.numberOfIssues += client.deltaNumberOfIssues;
 
 		if (client.usingTURN) {
 			this.clientsUsedTurn.add(client.clientId);
+		}
+
+		if (this.settings.autoUpdateOnClientUpdate) {
+			this.update(context);
 		}
 	}
 

@@ -17,6 +17,9 @@ Key facts an LLM should rely on when answering questions or generating integrati
 - Update cadence is event-driven (`update-on-any-…` / `update-when-all-…` / `none`); there are **no internal
   timers**. With `none`, call the public `observer.update()` / `observedCall.update()`.
 - Warn-don't-throw: `create*` return `T | undefined`; malformed samples emit `sample-rejected`.
+- Detectors are ON by default, created from `ObserverConfig.observerDetectors` (observer scope) and `.callDetectors` (call scope); each slot is `undefined` (defaults), an object (overrides) or `null` (do not create). All defaults are spelled out in `defaultCallDetectorsConfig` / `defaultObserverDetectorsConfig` (exported from `Observer.ts`); detector constructors take a COMPLETE config, so direct construction spreads the table entry. 8 ship, all issue-driven except `IceDisruptionDetector` (raw ICE transitions). `ConcurrentIssueDetector` runs at both scopes: at call scope it gates on participant ratio and raises `CONCURRENT_CLIENT_ISSUES`/`ISSUE_ONSET_BURST`; at observer scope it gates on **call spread** (`minAffectedCalls`, default 2) and raises `CROSS_CALL_CONCURRENT_ISSUES`/`CROSS_CALL_ISSUE_ONSET_BURST`. Every issue-driven finding carries a `conclusion` (`faultDomain`, `summary`, `recommendation`, `confidence`).
+- **Validators** are ONE-SHOT structural checks, started explicitly with `observer.addValidator(name, config)` — they run until they can decide, emit `validator-settled` once, then the observer drops them (`observer.validators` is the running set, normally empty). No config slot, no revalidation timer: re-check by starting another after a deploy. One ships: `SimulcastReceiverValidator` (`'simulcast-receiver-validator'`) — "does the SFU pick layers per receiver, or drag the publisher down to the worst one?" — replacing the old `WorstReceiverContagionDetector` and still raising `WORST_RECEIVER_CONTAGION`. `report.ready` is false until decided; verdicts are `layer-decided-per-receiver` | `layer-decided-lowest-common-denominator` | `inconclusive`, with `report.checks` counting the times the check genuinely ran. Never finishing is NOT a pass.
+- Server-raised findings are `ObserverIssue` = `{ type, timestamp, payload?: string | Record<string, unknown> }` — the payload is the OBJECT, do not `JSON.parse` it. `issuePayloadOf(issue)` accepts either form. `ClientIssue` (on samples) keeps its string payload.
 - Extension points: cross-client `Detectors` (raise `call-issue`), per-client `ClientSampleSink`s
   (JSONL/in-memory/custom), `acceptMiddlewares` (pre-dispatch), `RemoteTrackResolver` (SFU
   publisher↔subscriber track correlation), and server-side mediasoup router observation.
@@ -52,15 +55,10 @@ Key facts an LLM should rely on when answering questions or generating integrati
 ## Guides
 
 - [Logging integration](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/logging.md): the logger interface and adapters for pino / winston / console.
+- [Design notes](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/design-notes.md): why the library draws the client/server line where it does, why each detector exists, what was deliberately not built, WebRTC domain facts, and the threshold reference.
 
 ## Optional
 
 - [npm package](https://www.npmjs.com/package/@observertc/observer-js): published builds and the rendered README.
 - [GitHub repository](https://github.com/ObserveRTC/observer-js): source, issues, and CI.
 - [CONTRIBUTING](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/CONTRIBUTING.md): how to contribute.
-- [Design note: remote track correlation & detectors](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/track-correlation-and-detectors.md): background design discussion (not part of the public API contract).
-- [Design note: call-level detectors analysis](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/call-level-detectors-analysis.md): candidate cross-client detectors.
-- [Design note: SFU-failure detectors](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/sfu-failure-detectors.md): detecting SFU-side failures from client stats.
-- [Design note: detectors catalog](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/detectors-catalog.md): the master index of detector ideas and build order.
-- [Design note: report generation (deferred)](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/report-generation.md): the deferred `ClientSampleProcessor` approach to report generation.
-- [Roadmap](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/docs/ROADMAP.md): planned, not-yet-implemented work.

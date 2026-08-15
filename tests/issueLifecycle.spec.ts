@@ -1,10 +1,11 @@
 import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
-import { IssueRegistry } from '../src/utils/IssueRegistry';
 import { ConcurrentIssueDetector, ConcurrentIssueTypes } from '../src/detectors/ConcurrentIssueDetector';
 import { IssueFanOutDetector, IssueFanOutTypes } from '../src/detectors/IssueFanOutDetector';
 import type { ResolvedClientIssue } from '../src/common/ActiveClientIssue';
 import { makeSample } from './helpers/samples';
+import { payloadOf } from './helpers/issues';
+import { defaultCallDetectorsConfig, defaultObserverDetectorsConfig } from '../src/Observer';
 
 const PRODUCER = 'P';
 
@@ -27,6 +28,10 @@ function newObserver() {
 		createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
 		updatePolicy: 'none',
 		defaultCallUpdatePolicy: 'none',
+		// Isolate the detector under test: without this the auto-created built-ins would raise
+		// their own findings and the assertions below could not attribute an issue to one detector.
+		observerDetectors: null,
+		callDetectors: null,
 	});
 }
 
@@ -111,7 +116,7 @@ describe('client issue lifecycle', () => {
 	});
 });
 
-describe('IssueRegistry', () => {
+describe('IssueIndex', () => {
 	it('builds cohorts and measures onset spread on the observer clock', () => {
 		const observer = newObserver();
 
@@ -120,7 +125,7 @@ describe('IssueRegistry', () => {
 		}
 		observer.accept(issueSample('E', 1000, [ raise('cpulimitation', 'k-E', {}, 1000) ]));
 
-		const registry = new IssueRegistry(observer.getObservedCall('call-1')!);
+		const registry = observer.getObservedCall('call-1')!.issueIndex;
 		const cohort = registry.cohortOf('congestion');
 
 		expect(cohort.clientIds.sort()).toEqual([ 'B', 'C', 'D' ]);
@@ -134,15 +139,65 @@ describe('IssueRegistry', () => {
 		observer.close();
 	});
 
-	it('expires stale active issues that never got resolved', () => {
+	// Expiry is the safety net for a client that dies without its monitor auto-resolving: no
+	// `-resolved` companion ever arrives, and a stuck active issue would make every concurrency
+	// detector fire forever. It is applied once per `call.update()` against the shared index, so it
+	// genuinely removes the issue rather than filtering it at read time.
+	it('expires stale active issues that never got resolved, and announces the interval', () => {
+		jest.useFakeTimers();
+		jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+		const observer = new Observer({
+			createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory(),
+			updatePolicy: 'none',
+			defaultCallUpdatePolicy: 'none',
+			observerDetectors: null,
+			callDetectors: null,
+			maxIssueAgeInMs: 1_000,
+		});
+		const resolved: { type: string, resolvedBy: string }[] = [];
+
+		observer.on('client-issue-resolved', ({ resolvedIssue }) => resolved.push(resolvedIssue));
+		observer.accept(issueSample('B', 1000, [ raise('congestion', 'k1', {}, 1000) ]));
+
+		const call = observer.getObservedCall('call-1')!;
+
+		expect(call.issueIndex.size).toBe(1);
+
+		// Still fresh.
+		jest.setSystemTime(Date.now() + 500);
+		call.update();
+		expect(call.issueIndex.size).toBe(1);
+
+		// Past maxIssueAgeInMs: dropped from the index, the client's map, and the observer's index.
+		jest.setSystemTime(Date.now() + 2_000);
+		call.update();
+
+		expect(call.issueIndex.size).toBe(0);
+		expect(observer.issueIndex.size).toBe(0);
+		expect(call.getObservedClient('B')!.activeIssues.size).toBe(0);
+		expect(resolved).toHaveLength(1);
+		expect(resolved[0].resolvedBy).toBe('timeout');
+
+		observer.close();
+		jest.useRealTimers();
+	});
+
+	it('propagates a call index into the observer index, and detaches on close', () => {
 		const observer = newObserver();
 
 		observer.accept(issueSample('B', 1000, [ raise('congestion', 'k1', {}, 1000) ]));
 
-		const registry = new IssueRegistry(observer.getObservedCall('call-1')!, { maxIssueAgeInMs: 50 });
+		const call = observer.getObservedCall('call-1')!;
 
-		expect(registry.activeIssues(Date.now()).length).toBe(1);
-		expect(registry.activeIssues(Date.now() + 5_000).length).toBe(0);
+		expect(call.issueIndex.size).toBe(1);
+		expect(observer.issueIndex.size).toBe(1);
+		// the same object, not a copy — one issue, two views
+		expect([ ...observer.issueIndex.all ][0]).toBe([ ...call.issueIndex.all ][0]);
+
+		call.close();
+
+		expect(observer.issueIndex.size).toBe(0);
 
 		observer.close();
 	});
@@ -151,7 +206,7 @@ describe('IssueRegistry', () => {
 describe('ConcurrentIssueDetector', () => {
 	it('raises ISSUE_ONSET_BURST when clients degrade together', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -159,7 +214,7 @@ describe('ConcurrentIssueDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new ConcurrentIssueDetector(call, { issueTypes: [ 'ice-disconnected' ] }));
+		call.detectors.add(new ConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'ice-disconnected' ] }));
 
 		for (const id of [ 'B', 'C', 'D' ]) {
 			observer.accept(issueSample(id, 2000, [ raise('ice-disconnected', `k-${id}`, {}, 2000) ]));
@@ -169,7 +224,7 @@ describe('ConcurrentIssueDetector', () => {
 		expect(issues).toHaveLength(1);
 		expect(issues[0].type).toBe(ConcurrentIssueTypes.issueOnsetBurst);
 
-		const payload = JSON.parse(issues[0].payload!);
+		const payload = payloadOf(issues[0]);
 
 		expect(payload.issueType).toBe('ice-disconnected');
 		expect(payload.affectedClients).toBe(3);
@@ -189,7 +244,7 @@ describe('ConcurrentIssueDetector', () => {
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(makeSample({ clientId: id, timestamp: 1000 }));
 
 		const call = observer.getObservedCall('call-1')!;
-		const detector = new ConcurrentIssueDetector(call, { issueTypes: [ 'congestion' ], cooldownMs: 0 });
+		const detector = new ConcurrentIssueDetector(call, { ...defaultCallDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ], cooldownMs: 0 });
 
 		call.detectors.add(detector);
 
@@ -208,7 +263,7 @@ describe('ConcurrentIssueDetector', () => {
 
 	it('works at observer scope across calls', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
@@ -219,12 +274,12 @@ describe('ConcurrentIssueDetector', () => {
 			});
 		}
 
-		observer.detectors.add(new ConcurrentIssueDetector(observer, { issueTypes: [ 'congestion' ] }));
+		observer.detectors.add(new ConcurrentIssueDetector(observer, { ...defaultObserverDetectorsConfig.concurrentIssueDetector, issueTypes: [ 'congestion' ] }));
 		observer.update();
 
 		expect(issues).toHaveLength(1);
-		expect(JSON.parse(issues[0].payload!).scope).toBe('observer');
-		expect(JSON.parse(issues[0].payload!).affectedClients).toBe(3);
+		expect(payloadOf(issues[0]).scope).toBe('observer');
+		expect(payloadOf(issues[0]).affectedClients).toBe(3);
 
 		observer.close();
 	});
@@ -254,7 +309,7 @@ describe('IssueFanOutDetector', () => {
 
 	it('attributes a receiver-side issue to the published track and reports the fan-out', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -263,7 +318,7 @@ describe('IssueFanOutDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new IssueFanOutDetector(call));
+		call.detectors.add(new IssueFanOutDetector(call, defaultCallDetectorsConfig.issueFanOutDetector));
 
 		// every receiver of A's track reports a freeze, keyed on its own inbound track id
 		observer.accept(publisher(2000));
@@ -276,7 +331,7 @@ describe('IssueFanOutDetector', () => {
 
 		expect(issue).toBeDefined();
 
-		const payload = JSON.parse(issue!.payload!);
+		const payload = payloadOf(issue!);
 
 		expect(payload.issueType).toBe('freezed-video-track');
 		expect(payload.trackId).toBe('tA');                  // the PUBLISHED track, not the inbound one
@@ -290,7 +345,7 @@ describe('IssueFanOutDetector', () => {
 
 	it('reports a lone affected receiver as that receiver problem, not the source', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -299,7 +354,7 @@ describe('IssueFanOutDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new IssueFanOutDetector(call));
+		call.detectors.add(new IssueFanOutDetector(call, defaultCallDetectorsConfig.issueFanOutDetector));
 
 		observer.accept(publisher(2000));
 		observer.accept(receiver('B', 2000, [ raise('freezed-video-track', 'k-B', { trackId: 'inB' }, 2000) ]));
@@ -310,7 +365,7 @@ describe('IssueFanOutDetector', () => {
 		const issue = issues.find((i) => i.type === IssueFanOutTypes.singleReceiverIssue);
 
 		expect(issue).toBeDefined();
-		expect(JSON.parse(issue!.payload!).affectedClientIds).toEqual([ 'B' ]);
+		expect(payloadOf(issue!).affectedClientIds).toEqual([ 'B' ]);
 		expect(issues.some((i) => i.type === IssueFanOutTypes.publishedTrackIssueFanOut)).toBe(false);
 
 		observer.close();

@@ -108,12 +108,21 @@ export class RemoteTrackResolver {
 
 		outboundTrack.remoteInboundTracks.add(inboundTrack);
 		inboundTrack.remoteOutboundTrack = outboundTrack;
+		// It now has a subscriber, so it is no longer a candidate for "published to nobody".
+		this.observedCall.unconsumedOutboundTracks.delete(outboundTrack);
 	}
 
 	private _removeInboundTrack(inboundTrack: ObservedInboundTrack) {
 		// Use the stored link to unlink; no need to re-resolve the publisher id here.
-		inboundTrack.remoteOutboundTrack?.remoteInboundTracks.delete(inboundTrack);
+		const outboundTrack = inboundTrack.remoteOutboundTrack;
+
+		outboundTrack?.remoteInboundTracks.delete(inboundTrack);
 		inboundTrack.remoteOutboundTrack = undefined;
+
+		// That may have been its last subscriber — one of the two moments the answer can change.
+		if (outboundTrack && outboundTrack.remoteInboundTracks.size === 0) {
+			this.observedCall.unconsumedOutboundTracks.add(outboundTrack);
+		}
 
 		const subscriberId = this.resolvers.resolveInboundTrackSubscriberId?.(inboundTrack);
 
@@ -128,6 +137,8 @@ export class RemoteTrackResolver {
 		if (!publisherId) return;
 
 		this._publisherIdToOutboundTrack.set(publisherId, outboundTrack);
+		// Unconsumed until a subscriber links below — a new publisher legitimately starts this way.
+		this.observedCall.unconsumedOutboundTracks.add(outboundTrack);
 
 		// Link any already-present subscribers of this publisher.
 		for (const observedClient of this.observedCall.observedClients.values()) {
@@ -137,6 +148,7 @@ export class RemoteTrackResolver {
 
 					outboundTrack.remoteInboundTracks.add(inboundTrack);
 					inboundTrack.remoteOutboundTrack = outboundTrack;
+					this.observedCall.unconsumedOutboundTracks.delete(outboundTrack);
 				}
 			}
 		}
@@ -154,5 +166,6 @@ export class RemoteTrackResolver {
 			inboundTrack.remoteOutboundTrack = undefined;
 		}
 		outboundTrack.remoteInboundTracks.clear();
+		this.observedCall.unconsumedOutboundTracks.delete(outboundTrack);
 	}
 }

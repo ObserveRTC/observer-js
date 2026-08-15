@@ -18,6 +18,8 @@ import type { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTr
 import type { ObservedInboundTrack } from './ObservedInboundTrack';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
+import type { ObserverIssue } from './common/ObserverIssue';
+import type { ValidationReport } from './validators/Validator';
 import type { ResolvedClientIssue } from './common/ActiveClientIssue';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
@@ -66,7 +68,13 @@ export type ObserverEvents = {
 	'sample-rejected': [ObserverEventBase & { reason: SampleRejectedReason, sample: ClientSample }];
 
 	/** An observer-scoped (cross-call / SFU-wide) finding raised by `observer.addIssue(...)`. */
-	'observer-issue': [ObserverEventBase & { issue: ClientIssue }];
+	'observer-issue': [ObserverEventBase & { issue: ObserverIssue }];
+
+	/**
+	 * A validator decided. Fires once per settle, not per tick — the point of a validator is that it
+	 * stops talking once it knows.
+	 */
+	'validation-ready': [ObserverEventBase & { validator: string, report: ValidationReport }];
 
 	// mediasoup level
 	'mediasoup-router-added': [ObservedMediasoupRouterScope];
@@ -79,7 +87,7 @@ export type ObserverEvents = {
 	'call-closed': [ObservedCallScope];
 	'call-empty': [ObservedCallScope];
 	'call-not-empty': [ObservedCallScope];
-	'call-issue': [ObservedCallScope & { issue: ClientIssue }];
+	'call-issue': [ObservedCallScope & { issue: ObserverIssue }];
 
 	// client level
 	'client-added': [ObservedClientScope];

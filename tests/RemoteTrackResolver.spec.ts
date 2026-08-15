@@ -2,7 +2,7 @@ import { Observer } from '../src/Observer';
 import {
 	createDefaultMediasoupRemoteTrackResolverFactory,
 	createP2pRemoteTrackResolverFactory,
-} from '../src/utils/RemoteTrackResolverFactories';
+} from '../src/resolvers/RemoteTrackResolverFactories';
 import { makeSample } from './helpers/samples';
 
 function inboundTrackOf(observer: Observer, clientId: string, pcId: string, trackId: string) {

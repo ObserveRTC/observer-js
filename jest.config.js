@@ -13,12 +13,14 @@ module.exports = {
     '!src/index.ts',
   ],
   coverageDirectory: 'coverage',
+  // Floors sit just under the current numbers so a regression fails the build rather than
+  // silently eroding. Raise them when coverage improves; never lower them to make a build pass.
   coverageThreshold: {
     global: {
-      statements: 65,
-      branches: 40,
-      functions: 50,
-      lines: 65,
+      statements: 80,
+      branches: 56,
+      functions: 73,
+      lines: 83,
     },
   },
 }

@@ -2,8 +2,9 @@ import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/utils/RemoteTrackResolverFactories';
 import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchTypes } from '../src/detectors/TrackDeliveryMismatchDetector';
 import { UnconsumedTrackDetector, UnconsumedTrackTypes } from '../src/detectors/UnconsumedTrackDetector';
-import { CommonSourceDegradationDetector } from '../src/detectors/CommonSourceDegradationDetector';
 import { makeSample } from './helpers/samples';
+import { payloadOf } from './helpers/issues';
+import { defaultCallDetectorsConfig } from '../src/Observer';
 
 const PRODUCER = 'P';
 
@@ -15,6 +16,10 @@ function newObserver(withResolver = true) {
 		...(withResolver ? { createRemoteTrackResolver: createDefaultMediasoupRemoteTrackResolverFactory() } : {}),
 		updatePolicy: 'none',
 		defaultCallUpdatePolicy: 'none',
+		// Isolate the detector under test: without this the auto-created built-ins would raise
+		// their own findings and the assertions below could not attribute an issue to one detector.
+		observerDetectors: null,
+		callDetectors: null,
 	});
 }
 
@@ -46,14 +51,13 @@ const receiver = (clientId: string, timestamp: number, clientIssues?: ReturnType
 const dry = (clientId: string, timestamp: number) =>
 	raise('dry-inbound-track', `dry-${clientId}`, { trackId: `in${clientId}`, duration: 5000 }, timestamp);
 
-const payloadOf = (issue: { payload?: string }) => JSON.parse(issue.payload!);
 
 describe('TrackDeliveryMismatchDetector', () => {
 	const ids = [ 'B', 'C', 'D' ];
 
 	function setup() {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -62,7 +66,7 @@ describe('TrackDeliveryMismatchDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new TrackDeliveryMismatchDetector(call));
+		call.detectors.add(new TrackDeliveryMismatchDetector(call, defaultCallDetectorsConfig.trackDeliveryMismatchDetector));
 
 		return { observer, issues, call };
 	}
@@ -141,7 +145,7 @@ describe('TrackDeliveryMismatchDetector', () => {
 describe('UnconsumedTrackDetector', () => {
 	it('reports a published track nobody subscribes to, once it has persisted', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string }[] = [];
+		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -150,7 +154,7 @@ describe('UnconsumedTrackDetector', () => {
 		const call = observer.getObservedCall('call-1')!;
 
 		// zero-duration threshold so the test doesn't have to wait
-		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		call.update();
@@ -175,7 +179,7 @@ describe('UnconsumedTrackDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		observer.accept(receiver('B', 2000));
@@ -196,7 +200,7 @@ describe('UnconsumedTrackDetector', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new UnconsumedTrackDetector(call, { minUnconsumedDurationInMs: 0, minBitrate: 0 }));
+		call.detectors.add(new UnconsumedTrackDetector(call, { ...defaultCallDetectorsConfig.unconsumedTrackDetector, minUnconsumedDurationInMs: 0, minBitrate: 0 }));
 
 		observer.accept(publisher(2000, 300));
 		call.update();
@@ -221,14 +225,66 @@ describe('RemoteTrackResolver requirement', () => {
 
 		const call = observer.getObservedCall('call-1')!;
 
-		call.detectors.add(new CommonSourceDegradationDetector(call, { consecutiveTicks: 1 }));
-		call.detectors.add(new TrackDeliveryMismatchDetector(call));
+		call.detectors.add(new TrackDeliveryMismatchDetector(call, defaultCallDetectorsConfig.trackDeliveryMismatchDetector));
 
 		observer.accept(publisher(2000, 300));
 		for (const id of [ 'B', 'C', 'D' ]) observer.accept(receiver(id, 2000, [ dry(id, 2000) ]));
 		call.update();
 
 		expect(issues).toHaveLength(0);
+
+		observer.close();
+	});
+});
+
+/**
+ * `UnconsumedTrackDetector` no longer walks the call's published tracks — it reads
+ * `call.unconsumedOutboundTracks`, which the resolver maintains at the two moments the answer can
+ * change. That makes the index load-bearing: if it drifts, the detector goes blind or cries wolf.
+ */
+describe('unconsumedOutboundTracks index', () => {
+	it('holds a published track until a subscriber links, then releases it', () => {
+		const observer = newObserver();
+
+		observer.accept(publisher(1000, 100));
+
+		const call = observer.getObservedCall('call-1')!;
+
+		// Published, nobody subscribed yet — the normal state at join time.
+		expect(call.unconsumedOutboundTracks.size).toBe(1);
+
+		observer.accept(receiver('B', 1000));
+		expect(call.unconsumedOutboundTracks.size).toBe(0);
+
+		observer.close();
+	});
+
+	it('puts the track back when its last subscriber leaves', () => {
+		const observer = newObserver();
+
+		observer.accept(publisher(1000, 100));
+		observer.accept(receiver('B', 1000));
+		observer.accept(receiver('C', 1000));
+
+		const call = observer.getObservedCall('call-1')!;
+
+		expect(call.unconsumedOutboundTracks.size).toBe(0);
+
+		call.getObservedClient('B')?.close();
+		expect(call.unconsumedOutboundTracks.size).toBe(0);   // C still subscribed
+
+		call.getObservedClient('C')?.close();
+		expect(call.unconsumedOutboundTracks.size).toBe(1);   // now genuinely unconsumed
+
+		observer.close();
+	});
+
+	it('is empty without a resolver — "no subscribers" is unknowable then', () => {
+		const observer = newObserver(false);
+
+		observer.accept(publisher(1000, 100));
+
+		expect(observer.getObservedCall('call-1')!.unconsumedOutboundTracks.size).toBe(0);
 
 		observer.close();
 	});

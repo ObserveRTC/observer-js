@@ -28,7 +28,7 @@ export class ObservedTURN extends EventEmitter {
 	public outboundBitrate = 0;
 	public inboundBitrate = 0;
 	public numberOfClients = 0;
-    
+
 	public readonly servers = new Map<string, ObservedTurnServer>();
 
 	public constructor(
@@ -38,7 +38,7 @@ export class ObservedTURN extends EventEmitter {
 
 	public update() {
 		const clientIds = new Set<string>();
-        
+
 		this.packetsReceivedPerSecond = 0;
 		this.packetsSentPerSecond = 0;
 		this.outboundBitrate = 0;

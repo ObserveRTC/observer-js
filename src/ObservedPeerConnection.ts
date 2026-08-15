@@ -20,7 +20,11 @@ import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { ObservedTurnServer } from './ObservedTurnServer';
-import { getMedian } from './common/utils';
+import { percentileOfSorted } from './utils/stats';
+
+/** Sorting in place is deliberate: these arrays are local per-tick scratch, so a copy is pure waste. */
+const ascending = (a: number, b: number) => a - b;
+
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedPeerConnectionScope } from './ObserverEvents';
 
@@ -560,10 +564,10 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.receivingVideoBitrate = (this.deltaReceivedVideoBytes * 8) / elapsedTimeInSec;
 
 		this.iceRttInMs = 0 < iceRttMeasurementsInSec.length
-			? getMedian(iceRttMeasurementsInSec, false) * 1000
+			? percentileOfSorted(iceRttMeasurementsInSec.sort(ascending), 0.5) * 1000
 			: undefined;
 		this.rtcpRttInMs = 0 < rtcpRttMeasurementsInSec.length
-			? getMedian(rtcpRttMeasurementsInSec, false) * 1000
+			? percentileOfSorted(rtcpRttMeasurementsInSec.sort(ascending), 0.5) * 1000
 			: undefined;
 
 		// Prefer the end-to-end (RTCP) trip, fall back to ICE — never a blend of the two.
@@ -572,7 +576,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			? Math.max(0, this.rtcpRttInMs - this.iceRttInMs)
 			: undefined;
 		if (jitterMeasurements.length > 0) {
-			this.currentJitter = getMedian(jitterMeasurements, false);
+			this.currentJitter = percentileOfSorted(jitterMeasurements.sort(ascending), 0.5);
 		} else {
 			this.currentJitter = undefined;
 		}
