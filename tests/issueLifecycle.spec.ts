@@ -5,7 +5,7 @@ import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueTypes, Observer
 import { IssueFanOutDetector, IssueFanOutTypes, IssueFanOutDetectorConfig } from '../src/detectors/IssueFanOutDetector';
 import type { ResolvedActiveClientIssue } from '../src/issues/ActiveClientIssue';
 import { makeSample } from './helpers/samples';
-import { payloadOf } from './helpers/issues';
+import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 // Each detector fills in its own defaults for whatever a partial config omits, so an empty object is
 // a valid "defaults" placeholder here — there is no exported default-config constant to import any
@@ -164,7 +164,7 @@ describe('ActiveIssuesRegistry', () => {
 describe('CallConcurrentIssueDetector', () => {
 	it('raises ISSUE_ONSET_BURST when clients degrade together', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -188,7 +188,8 @@ describe('CallConcurrentIssueDetector', () => {
 		expect(payload.affectedClients).toBe(3);
 		expect(payload.affectedRatio).toBe(1);
 		expect(payload.onsetBurst).toBe(true);
-		expect(payload.scope).toBe('call');
+		// `scope` lives on the issue now, not in the evidence.
+		expect(issues[0].scope).toBe('call');
 
 		observer.close();
 	});
@@ -223,7 +224,7 @@ describe('CallConcurrentIssueDetector', () => {
 describe('ObserverConcurrentIssueDetector', () => {
 	it('works at observer scope across calls', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
@@ -241,7 +242,7 @@ describe('ObserverConcurrentIssueDetector', () => {
 		observer.update();
 
 		expect(issues).toHaveLength(1);
-		expect(payloadOf(issues[0]).scope).toBe('observer');
+		expect(issues[0].scope).toBe('observer');
 		expect(payloadOf(issues[0]).affectedClients).toBe(3);
 
 		observer.close();
@@ -272,7 +273,7 @@ describe('IssueFanOutDetector', () => {
 
 	it('attributes a receiver-side issue to the published track and reports the fan-out', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -311,7 +312,7 @@ describe('IssueFanOutDetector', () => {
 
 	it('reports a lone affected receiver as that receiver problem, not the source', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 

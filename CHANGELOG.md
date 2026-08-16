@@ -81,31 +81,30 @@ client's own reported issues rather than server-side RTT/loss thresholds. `clien
 `degradedClients` / `issueTypes` replace the old `peerConnections` / `rttInMs` / `fractionLost`
 summaries.
 
-### ⚠️ `ObserverIssue`: server-raised findings carry the payload object
+### ⚠️ `CallIssue` and `ObserverIssue` are separate types, and the payload is evidence only
 
-`observedCall.addIssue()` / `observer.addIssue()` took a `ClientIssue`, whose `payload` must be a
-**string** because `ClientIssue` is a *wire* type — it arrives inside a `ClientSample`. Server-raised
-findings never go on the wire; they go straight to an in-process handler. Reusing the wire type meant
-every detector `JSON.stringify`'d a perfectly good object on the way out and every handler
-`JSON.parse`'d it back on the way in, paying serialisation on a path where nothing is serialised and
-losing type information in both directions.
+Server-raised findings are now two types sharing an `IssueBase` (`type`, `timestamp`, `conclusion?`,
+`payload?`), discriminated by the scope that raised them:
 
-Both methods now take the new **`ObserverIssue`**:
+| | raised by | delivered as | `scope` |
+|---|---|---|---|
+| `CallIssue` | `observedCall.addIssue(...)` | `call-issue` | `'call'` |
+| `ObserverIssue` | `observer.addIssue(...)` | `observer-issue` | `'observer'` |
 
-```ts
-type ObserverIssue = {
-  type: string;
-  timestamp: number;
-  payload?: string | Record<string, unknown>;   // prefer the object
-};
-```
+`Issue` is the union. `scope` is stamped by `addIssue` — callers pass `Omit<…, 'scope'>` — because it
+is a fact about where the finding was raised, which the entity knows and a detector should not have
+to restate. Putting it on the issue rather than leaving it implied by the event keeps a finding
+self-describing once it leaves the bus.
 
-`call-issue` and `observer-issue` carry it. **Handlers that did `JSON.parse(issue.payload)` must
-stop** — read `issue.payload` directly, or use the exported `issuePayloadOf(issue)` which accepts
-either form and returns `Record<string, unknown> | undefined` without throwing. `string` is still
-accepted so an application can forward an already-serialised payload; `issuePayloadAsString(issue)`
-goes the other way for log lines, HTTP bodies and queues — keep that at the edge rather than in a
-detector.
+**Payloads were simplified to evidence alone.** They no longer carry `type` (it is `issue.type`),
+`scope`, or the `callId` already present on the event; and `conclusion` was **lifted out of the
+payload** to a first-class field, so alerting reads `issue.conclusion.faultDomain` rather than
+`payload.conclusion.faultDomain`. A payload that restates its own envelope invites the two to
+disagree, and nothing was keeping them in step.
+
+**`payload` is now always `Record<string, unknown>`.** The `string` variant and `issuePayloadOf()`
+are removed — read `issue.payload` directly. `issuePayloadAsString(issue)` remains for boundaries
+that genuinely need text. `src/common/ObserverIssue.ts` moved to `src/common/Issue.ts`.
 
 `ClientIssue` is unchanged and still what `ObservedClient.addIssue()` / `injectIssue()` take, since
 those genuinely are wire entries.
@@ -277,9 +276,9 @@ the dead weight:
 - **`getMedian` → `percentileOfSorted`.** `percentile` already generalises it, and
   `percentileOfSorted` preserves `getMedian(arr, false)`'s no-copy behaviour for the per-tick scratch
   arrays in `ObservedPeerConnection`.
-- **Three JSON parsers became one.** `parseJsonAs` is now the single entry point, with a new
-  `parseJsonObject` adding the "and it must be an object" guarantee; `parseIssuePayload` and
-  `issuePayloadOf` are thin wrappers over it rather than three separate `try`/`catch` blocks.
+- **Three JSON parsers became one.** `parseJsonAs` is now the single entry point; `parseJsonObject`
+  adds the "and it must be an object" guarantee on top, rather than three separate `try`/`catch`
+  blocks.
 - **Deleted, unused:** `getAverage`, `iteratorConverter`, `asyncIteratorConverter`, `isValidUuid`,
   `safePromise`, `PartialBy`, `Writable`. None were exported from the package entry.
 
@@ -309,7 +308,8 @@ Each exposes `lastGroups` for tests and dashboards; the observer one carries the
 scope it is always `1` and carries no information. `ActiveClientIssue` / `ResolvedActiveClientIssue`
 gained `callId`.
 
-**New: conclusions.** Every issue-driven finding now carries a `conclusion` in its payload:
+**New: conclusions.** Every issue-driven finding now carries a `conclusion` field, beside the payload
+rather than inside it:
 
 ```jsonc
 "conclusion": {

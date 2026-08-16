@@ -217,11 +217,9 @@ export class ObserverConcurrentIssueDetector implements Detector, ActiveIssueTra
 			this._observer.addIssue({
 				type: issueType,
 				timestamp: now,
+				conclusion,
 				payload: {
-					type: issueType,
 					issueType: type,
-					scope: 'observer',
-					conclusion,
 					clients: group.totalClients,
 					affectedClients: group.clientIds.length,
 					affectedRatio: group.affectedRatio,

@@ -123,7 +123,7 @@ describe('RemoteTrackResolverValidator', () => {
 		expect(payload.linkedInboundTracks).toBe(0);
 		expect(payload.linkedRatio).toBe(0);
 		expect(payload.eligibleCalls).toBe(3);
-		expect(payload.conclusion.recommendation).toMatch(/producerId|id the resolver joins on/i);
+		expect(issues[0].conclusion?.recommendation).toMatch(/producerId|id the resolver joins on/i);
 
 		observer.close();
 	});
@@ -261,7 +261,7 @@ describe('CodecConsistencyValidator', () => {
 
 		expect(issues).toHaveLength(1);
 		expect(issues[0].type).toBe(CODEC_MISMATCH_ISSUE);
-		expect(payloadOf(issues[0]).conclusion.summary).toMatch(/different codecs/i);
+		expect(issues[0].conclusion?.summary).toMatch(/different codecs/i);
 
 		observer.close();
 	});
@@ -283,7 +283,7 @@ describe('CodecConsistencyValidator', () => {
 
 		expect(reports[0].report).toMatchObject({ ready: true, verdict: 'unexpected-codec' });
 		expect(issues).toHaveLength(1);
-		expect(payloadOf(issues[0]).conclusion.summary).toMatch(/other than the expected/i);
+		expect(issues[0].conclusion?.summary).toMatch(/other than the expected/i);
 
 		observer.close();
 	});

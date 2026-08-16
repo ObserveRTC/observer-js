@@ -133,7 +133,7 @@ export class TurnServerHealthDetector implements Detector {
 			this._observer.addIssue({
 				type: TurnServerHealthTypes.turnServerDegraded,
 				timestamp: now,
-				payload: { type: TurnServerHealthTypes.turnServerDegraded, ...health, otherServers },
+				payload: { ...health, otherServers },
 			});
 		}
 

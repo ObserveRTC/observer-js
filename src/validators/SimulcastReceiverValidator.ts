@@ -299,17 +299,13 @@ export class SimulcastReceiverValidator implements Validator<SimulcastReceiverRe
 			this._observer.addIssue({
 				type: LOWEST_COMMON_DENOMINATOR_ISSUE,
 				timestamp: decidedAt,
-				payload: {
-					type: LOWEST_COMMON_DENOMINATOR_ISSUE,
-					checks: this._checks,
-					...outcome.evidence,
-					conclusion: {
-						faultDomain: 'infrastructure',
-						summary: 'one bad receiver is dragging a publisher\'s bitrate down for everyone — the SFU is not selecting layers per consumer',
-						recommendation: 'check that simulcast/SVC is enabled and layers are chosen per consumer, and that the SFU terminates receiver reports instead of forwarding them; this is a build/config property, not a transient',
-						confidence: 0.8,
-					},
+				conclusion: {
+					faultDomain: 'infrastructure',
+					summary: 'one bad receiver is dragging a publisher\'s bitrate down for everyone — the SFU is not selecting layers per consumer',
+					recommendation: 'check that simulcast/SVC is enabled and layers are chosen per consumer, and that the SFU terminates receiver reports instead of forwarding them; this is a build/config property, not a transient',
+					confidence: 0.8,
 				},
+				payload: { checks: this._checks, ...outcome.evidence },
 			});
 		}
 

@@ -3,7 +3,7 @@ import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolve
 import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchTypes } from '../src/detectors/TrackDeliveryMismatchDetector';
 import { UnconsumedTrackDetector, UnconsumedTrackTypes } from '../src/detectors/UnconsumedTrackDetector';
 import { makeSample } from './helpers/samples';
-import { payloadOf } from './helpers/issues';
+import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 const PRODUCER = 'P';
 
@@ -59,7 +59,7 @@ describe('TrackDeliveryMismatchDetector', () => {
 
 	function setup() {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -153,7 +153,7 @@ describe('TrackDeliveryMismatchDetector', () => {
 describe('UnconsumedTrackDetector', () => {
 	it('reports a published track nobody subscribes to, once it has persisted', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 

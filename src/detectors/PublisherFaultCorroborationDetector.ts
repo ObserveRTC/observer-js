@@ -236,18 +236,14 @@ export class PublisherFaultCorroborationDetector implements Detector, ActiveIssu
 			this._call.addIssue({
 				type: PublisherFaultTypes.corroboratedPublisherFault,
 				timestamp: now,
-				payload: {
-					type: PublisherFaultTypes.corroboratedPublisherFault,
-					callId: this._call.callId,
-					...fault,
-					conclusion: {
-						faultDomain: 'published-track',
-						summary: `${fault.publisherClientId} reports ${fault.publisherIssueTypes.join(', ')} on track ${fault.trackId} while ${fault.affectedReceivers} of ${fault.receivers} subscribers report ${fault.receiverIssueTypes.join(', ')} — both ends agree`,
-						recommendation: 'the source is implicated, not inferred: check that publisher\'s capture, encoder and uplink before looking at the SFU or the receivers',
-						// Higher than any single-ended finding: two independent parties, one conclusion.
-						confidence: 0.9,
-					},
+				conclusion: {
+					faultDomain: 'published-track',
+					summary: `${fault.publisherClientId} reports ${fault.publisherIssueTypes.join(', ')} on track ${fault.trackId} while ${fault.affectedReceivers} of ${fault.receivers} subscribers report ${fault.receiverIssueTypes.join(', ')} — both ends agree`,
+					recommendation: 'the source is implicated, not inferred: check that publisher\'s capture, encoder and uplink before looking at the SFU or the receivers',
+					// Higher than any single-ended finding: two independent parties, one conclusion.
+					confidence: 0.9,
 				},
+				payload: { ...fault },
 			});
 		}
 	}

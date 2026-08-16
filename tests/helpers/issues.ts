@@ -1,20 +1,20 @@
-import { issuePayloadOf } from '../../src/common/ObserverIssue';
-import type { ObserverIssue } from '../../src/common/ObserverIssue';
+import type { Issue } from '../../src/common/Issue';
 
 /**
  * The payload of a raised finding, loosely typed for assertions.
  *
- * `ObserverIssue.payload` is `Record<string, unknown>`, so every value reads as `unknown` and
- * `payload.conclusion.faultDomain` won't type-check. Tests assert against known shapes, so this
- * narrows once here instead of casting at every call site.
+ * `payload` is `Record<string, unknown>`, so every value reads as `unknown` and
+ * `payload.affectedClients > 3` won't type-check. Tests assert against known shapes, so this narrows
+ * once here instead of casting at every call site.
+ *
+ * Note `conclusion` is **not** in here — it is a first-class field on the issue (`issue.conclusion`),
+ * not part of the evidence.
  */
-export function payloadOf(issue: ObserverIssue | { payload?: string | Record<string, unknown> }): Record<string, any> {
-	const payload = issuePayloadOf(issue);
+export function payloadOf(issue: Pick<Issue, 'payload'>): Record<string, any> {
+	if (issue.payload === undefined) throw new Error('expected the issue to carry a payload');
 
-	if (payload === undefined) throw new Error('expected the issue to carry a payload');
-
-	return payload;
+	return issue.payload as Record<string, any>;
 }
 
 /** Collector type for the issues a test gathers off the bus. */
-export type CollectedIssue = { type: string, payload?: string | Record<string, unknown> };
+export type CollectedIssue = Issue;

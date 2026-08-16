@@ -62,7 +62,7 @@ describe('issues', () => {
 		let received: { observedCall?: unknown, issue?: { type: string } } = {};
 
 		observer.on('call-issue', (p) => { received = p; });
-		call?.addIssue({ type: 'srv:test', payload: '{}', timestamp: 1 });
+		call?.addIssue({ type: 'srv:test', payload: {}, timestamp: 1 });
 
 		expect(received.observedCall).toBe(call);
 		expect(received.issue?.type).toBe('srv:test');

@@ -28,8 +28,7 @@ import {
 	PublisherFaultCorroborationDetector,
 	TurnServerHealthDetector,
 	TurnServerOutageDetector,
-	issuePayloadOf,
-	type ObserverIssue,
+	type Issue,
 	type ClientSample,
 } from '../src';
 
@@ -41,10 +40,11 @@ import {
  * `mediaSource` or a url on the wrong ICE candidate silently changes what the detectors conclude.
  * ============================================================================================== */
 
-type Issue = { type: string, key: string, payload?: string, timestamp: number };
+/** A `clientIssues[]` entry as it arrives on the wire — not to be confused with the server-raised `Issue`. */
+type ClientIssueSpec = { type: string, key: string, payload?: string, timestamp: number };
 
 /** A client issue raise. `key` is what ties it to its `<type>-resolved` companion later. */
-const raise = (type: string, clientId: string, timestamp: number, payload: Record<string, unknown> = {}): Issue => ({
+const raise = (type: string, clientId: string, timestamp: number, payload: Record<string, unknown> = {}): ClientIssueSpec => ({
 	type,
 	key: `${clientId}:${type}`,
 	payload: JSON.stringify(payload),
@@ -52,7 +52,7 @@ const raise = (type: string, clientId: string, timestamp: number, payload: Recor
 });
 
 /** The matching resolution. Sending these is what lets the observer treat issues as intervals. */
-const resolve = (type: string, clientId: string, timestamp: number, raisedAt: number): Issue => ({
+const resolve = (type: string, clientId: string, timestamp: number, raisedAt: number): ClientIssueSpec => ({
 	type: `${type}-resolved`,
 	key: `${clientId}:${type}`,
 	payload: JSON.stringify({ raisedAt, comment: 'recovered' }),
@@ -61,7 +61,7 @@ const resolve = (type: string, clientId: string, timestamp: number, raisedAt: nu
 
 type ClientOpts = {
 	callId?: string,
-	issues?: Issue[],
+	issues?: ClientIssueSpec[],
 	/** Publishes a track under this producer id. */
 	publishes?: { producerId: string, packetsSent: number, kind?: 'audio' | 'video' },
 	/** Subscribes to a producer. */
@@ -168,22 +168,21 @@ function heading(title: string, question: string) {
 	console.log('─'.repeat(96));
 }
 
-/** Print a finding compactly: the type, the evidence that matters, and the conclusion. */
-function report(scope: string, issue: ObserverIssue) {
-	// No parsing: an observer-raised finding carries the payload object itself.
-	const { conclusion, type: _t, ...evidence } = issuePayloadOf(issue) ?? {};
-
-	console.log(`\n  ✔ [${scope}] ${issue.type}`);
-	for (const [ key, value ] of Object.entries(evidence)) {
+/** Print a finding compactly: the type, the evidence, and the conclusion. */
+function report(issue: Issue) {
+	// No parsing and no digging: the payload is the object, and it holds evidence only —
+	// `type`, `scope` and `conclusion` are fields of the issue itself.
+	console.log(`\n  ✔ [${issue.scope}] ${issue.type}`);
+	for (const [ key, value ] of Object.entries(issue.payload ?? {})) {
 		if (value === undefined || (Array.isArray(value) && value.length === 0)) continue;
 		console.log(`      ${key.padEnd(24)} ${JSON.stringify(value)}`);
 	}
-	if (conclusion) {
-		const verdict = conclusion as { faultDomain: string, summary: string, recommendation?: string, confidence: number };
+	if (issue.conclusion) {
+		const { faultDomain, summary, recommendation, confidence } = issue.conclusion;
 
-		console.log(`      ${'→ faultDomain'.padEnd(24)} ${verdict.faultDomain}  (confidence ${verdict.confidence})`);
-		console.log(`      ${'→ summary'.padEnd(24)} ${verdict.summary}`);
-		if (verdict.recommendation) console.log(`      ${'→ do'.padEnd(24)} ${verdict.recommendation}`);
+		console.log(`      ${'→ faultDomain'.padEnd(24)} ${faultDomain}  (confidence ${confidence})`);
+		console.log(`      ${'→ summary'.padEnd(24)} ${summary}`);
+		if (recommendation) console.log(`      ${'→ do'.padEnd(24)} ${recommendation}`);
 	}
 }
 
@@ -191,8 +190,8 @@ function report(scope: string, issue: ObserverIssue) {
 function watch(observer: Observer) {
 	const found: string[] = [];
 
-	observer.on('call-issue', ({ issue }) => (report('call', issue), found.push(issue.type)));
-	observer.on('observer-issue', ({ issue }) => (report('observer', issue), found.push(issue.type)));
+	observer.on('call-issue', ({ issue }) => (report(issue), found.push(issue.type)));
+	observer.on('observer-issue', ({ issue }) => (report(issue), found.push(issue.type)));
 
 	return {
 		get types() { return found; },
@@ -729,9 +728,8 @@ function productionConfig() {
    Route by fault domain rather than by issue type — the domain is what tells you who to wake:
 
      observer.on('observer-issue', ({ issue }) => {
-       const { conclusion } = issuePayloadOf(issue) ?? {};
-       if (conclusion?.faultDomain === 'infrastructure') page(conclusion.summary);
-       if (conclusion?.faultDomain === 'client-population') fileClientBug(conclusion.summary);
+       if (issue.conclusion?.faultDomain === 'infrastructure') page(issue.conclusion.summary);
+       if (issue.conclusion?.faultDomain === 'client-population') fileClientBug(issue.conclusion.summary);
      });
 
    And start a validator after each deploy, recording whatever it reports:

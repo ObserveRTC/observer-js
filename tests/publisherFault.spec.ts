@@ -132,9 +132,9 @@ describe('PublisherFaultCorroborationDetector', () => {
 		expect(payload.receivers).toBe(3);
 		expect(payload.affectedReceivers).toBe(2);
 		expect(payload.affectedClientIds.sort()).toEqual([ 'bob', 'carol' ]);
-		expect(payload.conclusion.faultDomain).toBe('published-track');
+		expect(found[0].conclusion?.faultDomain).toBe('published-track');
 		// Two independent parties, one conclusion — the highest confidence the library issues.
-		expect(payload.conclusion.confidence).toBe(0.9);
+		expect(found[0].conclusion?.confidence).toBe(0.9);
 
 		observer.close();
 	});

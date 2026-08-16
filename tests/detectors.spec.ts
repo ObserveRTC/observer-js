@@ -3,7 +3,7 @@ import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolve
 import { CallHealthAggregator } from '../src/utils/CallHealthAggregator';
 import { TurnServerHealthDetector, TurnServerHealthTypes, TurnServerHealthDetectorConfig } from '../src/detectors/TurnServerHealthDetector';
 import { makeSample, type InboundSpec } from './helpers/samples';
-import { payloadOf } from './helpers/issues';
+import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 // `TurnServerHealthDetector` fills in its own defaults for whatever a partial config omits, so an
 // empty object is a valid "defaults" placeholder here — there is no exported default-config constant
@@ -101,7 +101,7 @@ describe('TurnServerHealthDetector (observer level, issue-driven)', () => {
 
 	it('raises TURN_SERVER_DEGRADED for the relay whose clients report issues', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 

@@ -391,7 +391,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `call-closed` | — | the call closed |
 | `call-empty` | — | last client left the call |
 | `call-not-empty` | — | first client joined a previously-empty call |
-| `call-issue` | `{ issue: ObserverIssue }` | `call.addIssue(...)` (server-side detector finding) |
+| `call-issue` | `{ issue: CallIssue }` | `call.addIssue(...)` (server-side detector finding) |
 
 #### Client level — scope `{ observer, observedCall, observedClient }`
 
@@ -495,6 +495,7 @@ Key members:
 - `getObservedCall<T>(callId): ObservedCall<T> | undefined`
 - `createObservedCall<T>(settings): ObservedCall<T> | undefined`
 - `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
+- `addIssue(issue: Omit<ObserverIssue, 'scope'>): void` — raise an **observer-level** finding → emits `observer-issue`. `scope` is stamped for you
 - `update(): void` — force an aggregation/`observer-updated` tick
 - `addObserverDetector(name, config?): this` — build a cross-call detector onto `observer.detectors`
 - `addCallDetector(name, config?): this` — register a call-scoped detector for every call created
@@ -536,7 +537,7 @@ Key members:
 - `readonly callId: string`, `appData: AppData`
 - `readonly observedClients: Map<string, ObservedClient>`, `get numberOfClients()`
 - `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings)`, `getOrCreateObservedClient<T>(settings)` (all `… | undefined`)
-- `addIssue(issue: ObserverIssue): void` — raise a **call-level** issue → emits `call-issue`
+- `addIssue(issue: Omit<CallIssue, 'scope'>): void` — raise a **call-level** finding → emits `call-issue`. `scope` is stamped for you
 - `addDetector(name, config?): this` — build a call-scoped detector onto this call only
 - `removeDetector(name): number` — remove it from this call, `close()`ing it. For one specific
   instance use `call.detectors.remove(detector)`
@@ -658,7 +659,7 @@ type PeerConnectionSample = {
 };
 
 type ClientEvent     = { type: string; payload?: string; timestamp?: number; /* +ids */ };
-type ClientIssue     = { type: string; payload?: string; timestamp?: number };   // also used for call-issue
+type ClientIssue     = { type: string; payload?: string; timestamp?: number };
 type ClientMetaData  = { type: string; payload?: string; timestamp?: number; /* +ids */ };
 type ExtensionStat   = { type: string; payload?: string };
 ```
@@ -754,14 +755,14 @@ correlate **across** the clients of a call or the calls of a fleet, because that
 server can do better than a browser: per-client signals — packet loss, jitter, RTT, freezes — are
 already detected on the client and arrive on samples as `clientIssues` (surfaced via `client-issue`).
 
-Findings are raised as **`ObserverIssue`** — `{ type, timestamp, payload? }` — and the payload is the
-**object**, not a JSON string. A server-raised finding is delivered to an in-process handler, so
-there is nothing to serialise for:
+Findings are raised as **`CallIssue`** or **`ObserverIssue`** — both share `IssueBase`: `{ type,
+timestamp, conclusion?, payload? }` — and the payload is the **object**, not a JSON string. A
+server-raised finding is delivered to an in-process handler, so there is nothing to serialise for:
 
 ```ts
 observer.on('call-issue', ({ observedCall, issue }) => {
   issue.payload;                  // the object; no JSON.parse
-  issuePayloadOf(issue);          // if you want to accept a string payload too
+  issue.conclusion?.faultDomain;  // a first-class field, not payload.conclusion
   issuePayloadAsString(issue);    // only at an edge that needs text (log, HTTP, queue)
 });
 ```
@@ -779,7 +780,7 @@ class MyCrossClientDetector implements Detector {
   update() {                                   // called on every call.update()
     // …inspect this.call.observedClients across participants…
     if (/* condition only visible server-side */ false) {
-      this.call.addIssue({ type: this.name, payload: JSON.stringify({ /* … */ }), timestamp: Date.now() });
+      this.call.addIssue({ type: this.name, payload: { /* … */ }, timestamp: Date.now() });
       // → emitted on the bus as 'call-issue'
     }
   }
@@ -1217,22 +1218,62 @@ observer.addValidator('remote-track-resolver');
 observer.addValidator('codec-consistency', { expected: { video: 'video/VP9', audio: 'audio/opus' } });
 ```
 
+#### `CallIssue` vs `ObserverIssue`
+
+Server-raised findings come in two kinds, distinguished by the scope that raised them:
+
+| | raised by | delivered as | `scope` |
+|---|---|---|---|
+| `CallIssue` | `observedCall.addIssue(...)` | `call-issue` | `'call'` |
+| `ObserverIssue` | `observer.addIssue(...)` | `observer-issue` | `'observer'` |
+
+Both share `IssueBase` — `type`, `timestamp`, `conclusion?`, `payload?` — and `Issue` is the union,
+discriminated on `scope`.
+
+```ts
+observer.on('call-issue', ({ observedCall, issue }) => {
+  issue.scope;              // 'call'
+  observedCall.callId;      // the call — NOT repeated in the payload
+  issue.conclusion?.faultDomain;
+  issue.payload;            // evidence only
+});
+
+observer.on('observer-issue', ({ issue }) => {
+  issue.scope;              // 'observer'
+});
+```
+
+`scope` is stamped by `addIssue` rather than asked of the detector: it is a fact about *where the
+finding was raised*, which the entity knows and a detector should not have to restate. Having it on
+the issue — not merely implied by which event fired — keeps a finding self-describing once it leaves
+the bus, into a shared handler, a log line or a queue.
+
+**The payload is evidence and nothing else.** It no longer repeats `type`, `scope`, or the `callId`
+already carried by the event, and `conclusion` was lifted out of it to a first-class field. A payload
+that restates its own envelope invites the two to disagree — and they did, because nothing kept them
+in step. `payload` is always an object (the `string` form is gone, along with `issuePayloadOf`); use
+`issuePayloadAsString(issue)` at a boundary that genuinely needs text.
+
 #### Conclusions
 
-Every issue-driven finding carries a `conclusion` in its payload — the interpretation step, so the
-person reading the alert doesn't have to perform it:
+Every issue-driven finding carries a `conclusion` — the interpretation step, so the person reading
+the alert doesn't have to perform it. It sits **beside** the evidence, not inside it:
 
 ```jsonc
 {
   "type": "CROSS_CALL_ISSUE_ONSET_BURST",
-  "issueType": "congestion",
-  "calls": 40, "affectedCalls": 6,
-  "perCall": [ { "callId": "…", "affectedClients": 4, "totalClients": 9 } ],
+  "scope": "observer",
+  "timestamp": 1739812345678,
   "conclusion": {
     "faultDomain": "infrastructure",
     "summary": "network congestion is open across independent calls at the same time — 6 of 40 calls (11/300 clients)",
     "recommendation": "check SFU egress bandwidth and host network saturation before looking at any single participant",
     "confidence": 0.85
+  },
+  "payload": {
+    "issueType": "congestion",
+    "calls": 40, "affectedCalls": 6,
+    "perCall": [ { "callId": "…", "affectedClients": 4, "totalClients": 9 } ]
   }
 }
 ```

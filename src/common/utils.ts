@@ -26,8 +26,8 @@ export function pushFinite(target: number[], value: number | undefined): void {
  * — every caller here is reading data that arrived over the wire, where a parse failure is data to
  * ignore rather than an exception to propagate.
  *
- * The single JSON entry point: `parseIssuePayload` and `issuePayloadOf` are thin wrappers that add
- * the "and it must be an object" guarantee on top.
+ * The single JSON entry point; {@link parseJsonObject} adds the "and it must be an object"
+ * guarantee on top, which is what every wire-payload reader actually wants.
  */
 export function parseJsonAs<T>(json?: string): T | undefined {
 	if (!json) return undefined;

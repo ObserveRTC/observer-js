@@ -114,7 +114,6 @@ export class UnconsumedTrackDetector implements Detector {
 				type: UnconsumedTrackTypes.unconsumedPublishedTrack,
 				timestamp: now,
 				payload: {
-					type: UnconsumedTrackTypes.unconsumedPublishedTrack,
 					trackId: outboundTrack.id,
 					kind: outboundTrack.kind,
 					publisherClientId: peerConnection?.client.clientId,

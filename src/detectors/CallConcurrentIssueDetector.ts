@@ -192,12 +192,9 @@ export class CallConcurrentIssueDetector implements Detector, ActiveIssueTracker
 			this._call.addIssue({
 				type: issueType,
 				timestamp: now,
+				conclusion,
 				payload: {
-					type: issueType,
 					issueType: type,
-					scope: 'call',
-					conclusion,
-					callId: this._call.callId,
 					clients: group.totalClients,
 					affectedClients: group.clientIds.length,
 					affectedRatio: group.affectedRatio,

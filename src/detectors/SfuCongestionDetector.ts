@@ -267,13 +267,12 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 			relativeIncrease: evaluation.relativeIncrease,
 		};
 
-		this._observer.emit('observer-issue', {
-			issue: {
-				type: this._config.emittedObserverIssueType,
-				timestamp: Date.now(),
-				payload,
-			},
-			observer: this._observer,
+		// Through `addIssue`, not a raw `emit`: that is what stamps `scope` and keeps this finding
+		// indistinguishable in shape from every other observer-scoped one.
+		this._observer.addIssue({
+			type: this._config.emittedObserverIssueType,
+			timestamp: Date.now(),
+			payload: { ...payload },
 		});
 	}
 

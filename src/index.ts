@@ -87,10 +87,11 @@ export {
 	isClientIssueResolutionEntry,
 } from './issues/ActiveClientIssue';
 export type { ActiveClientIssue, ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
-// Server-raised findings. Unlike `ClientIssue` (a wire type, string payload) an `ObserverIssue` is
-// delivered to an in-process handler, so its payload is the object itself — no stringify/parse.
-export { issuePayloadOf, issuePayloadAsString } from './common/ObserverIssue';
-export type { ObserverIssue } from './common/ObserverIssue';
+// Server-raised findings. Unlike `ClientIssue` (a wire type, string payload) these are delivered to
+// an in-process handler, so the payload is the object itself — no stringify/parse. `CallIssue` and
+// `ObserverIssue` differ by the scope that raised them, which each carries as `scope`.
+export { issuePayloadAsString } from './common/Issue';
+export type { Issue, IssueBase, CallIssue, ObserverIssue } from './common/Issue';
 // "Is this meeting in trouble?" and "is our infrastructure in trouble?" are separate detectors with
 // separate gates and separate findings — not one detector branching on what it was handed.
 export {

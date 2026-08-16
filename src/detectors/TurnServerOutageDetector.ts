@@ -189,7 +189,6 @@ export class TurnServerOutageDetector implements Detector {
 				type: TurnServerOutageTypes.turnServerOutage,
 				timestamp: now,
 				payload: {
-					type: TurnServerOutageTypes.turnServerOutage,
 					serverUrl,
 					peakClients: peak,
 					currentClients: live,

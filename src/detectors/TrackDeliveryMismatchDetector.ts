@@ -212,7 +212,6 @@ export class TrackDeliveryMismatchDetector implements Detector, ActiveIssueTrack
 				type,
 				timestamp: now,
 				payload: {
-					type,
 					trackId: outboundTrackId,
 					publisherClientId: delivery.publisherClientId,
 					publisherSending: delivery.publisherSending,

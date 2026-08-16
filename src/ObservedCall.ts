@@ -8,7 +8,7 @@ import { DefaultCallScoreCalculator } from './scores/DefaultCallScoreCalculator'
 import { RemoteTrackResolver } from './resolvers/RemoteTrackResolver';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { AvailableCallScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
-import type { ObserverIssue } from './common/ObserverIssue';
+import type { CallIssue } from './common/Issue';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
@@ -200,13 +200,16 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	/**
 	 * Raise a call-level (server-side) finding; surfaced on the Observer bus as `call-issue`.
 	 *
-	 * `payload` takes an **object** — it is delivered to in-process handlers, so there is nothing to
-	 * serialise for. Pass a string only if you already have one.
+	 * `payload` is an **object** and holds evidence only — it is delivered to an in-process handler,
+	 * so there is nothing to serialise for. `scope` is stamped here, and the `callId` is already on
+	 * the event, so neither belongs in the payload. Put the interpretation in `conclusion`.
 	 */
-	public addIssue(issue: ObserverIssue) {
+	public addIssue(issue: Omit<CallIssue, 'scope'>) {
 		if (this.closed) return;
 
-		this._notify('call-issue', { ...this.eventScope, issue });
+		// `scope` is stamped here; see `Observer.addIssue`. The call itself is the event's scope, so
+		// the payload has no reason to carry a `callId` either.
+		this._notify('call-issue', { ...this.eventScope, issue: { ...issue, scope: 'call' } });
 	}
 
 	public close() {

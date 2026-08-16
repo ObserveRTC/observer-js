@@ -2,7 +2,7 @@ import { Observer } from '../src/Observer';
 import { TurnServerOutageDetector, TurnServerOutageTypes } from '../src/detectors/TurnServerOutageDetector';
 import { makeSample } from './helpers/samples';
 import type { ClientSample } from '../src/schema/ClientSample';
-import { payloadOf } from './helpers/issues';
+import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 /**
  * The outage case its sibling cannot see: a TURN server's population collapsing. The control group
@@ -62,7 +62,7 @@ const onServer = (n: number, prefix: string) => Array.from({ length: n }, (_, i)
 describe('TurnServerOutageDetector', () => {
 	it('raises when a server loses its population while the rest of the fleet is fine', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 

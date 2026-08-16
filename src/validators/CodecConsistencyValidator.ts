@@ -271,21 +271,20 @@ export class CodecConsistencyValidator implements Validator<CodecConsistencyRepo
 			this._observer.addIssue({
 				type: CODEC_MISMATCH_ISSUE,
 				timestamp: decidedAt,
+				conclusion: {
+					faultDomain: 'infrastructure',
+					summary: outcome.verdict === 'codec-split'
+						? 'participants of one call are using different codecs — an SFU that forwards without transcoding cannot serve all of them'
+						: 'the deployment is consistently negotiating a codec other than the expected one',
+					recommendation: outcome.verdict === 'codec-split'
+						? 'check codec preferences and any SDP munging; a split usually means one endpoint could not negotiate the preferred codec and the others were not renegotiated with it'
+						: 'check codec preferences and endpoint support — a silent fallback keeps working, at a higher bitrate than you budgeted for',
+					confidence: 0.85,
+				},
 				payload: {
-					type: CODEC_MISMATCH_ISSUE,
 					verdict: outcome.verdict,
 					checks: this._checks,
 					evidence: outcome.evidence,
-					conclusion: {
-						faultDomain: 'infrastructure',
-						summary: outcome.verdict === 'codec-split'
-							? 'participants of one call are using different codecs — an SFU that forwards without transcoding cannot serve all of them'
-							: 'the deployment is consistently negotiating a codec other than the expected one',
-						recommendation: outcome.verdict === 'codec-split'
-							? 'check codec preferences and any SDP munging; a split usually means one endpoint could not negotiate the preferred codec and the others were not renegotiated with it'
-							: 'check codec preferences and endpoint support — a silent fallback keeps working, at a higher bitrate than you budgeted for',
-						confidence: 0.85,
-					},
 				},
 			});
 		}

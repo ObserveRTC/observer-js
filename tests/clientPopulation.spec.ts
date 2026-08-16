@@ -98,8 +98,8 @@ describe('ClientPopulationIssueDetector', () => {
 		expect(payload.controlAffectedClients).toBe(1);
 		// 5/6 vs 1/8 -> ~6.7x
 		expect(payload.relativeRisk).toBeGreaterThan(3);
-		expect(payload.conclusion.faultDomain).toBe('client-population');
-		expect(payload.conclusion.recommendation).toMatch(/not an SFU symptom/i);
+		expect(found[0].conclusion?.faultDomain).toBe('client-population');
+		expect(found[0].conclusion?.recommendation).toMatch(/not an SFU symptom/i);
 
 		observer.close();
 	});
@@ -165,7 +165,7 @@ describe('ClientPopulationIssueDetector', () => {
 
 		expect(found).toHaveLength(1);
 		expect(payloadOf(found[0]).relativeRisk).toBe(Infinity);
-		expect(payloadOf(found[0]).conclusion.summary).toMatch(/exclusively/);
+		expect(found[0].conclusion?.summary).toMatch(/exclusively/);
 
 		observer.close();
 	});

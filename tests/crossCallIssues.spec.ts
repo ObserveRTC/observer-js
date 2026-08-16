@@ -3,7 +3,7 @@ import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueTypes, Observer
 import { CallConcurrentIssueDetector, CallConcurrentIssueTypes, CallConcurrentIssueDetectorConfig } from '../src/detectors/CallConcurrentIssueDetector';
 import { concludeCallIssue, concludeObserverIssue } from '../src/detectors/IssueConclusion';
 import type { ClientSample } from '../src/schema/ClientSample';
-import { payloadOf } from './helpers/issues';
+import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 /**
  * The observer-scope question: is the *infrastructure* in trouble? Answering it needs the cohort to
@@ -55,7 +55,7 @@ function newObserver() {
 describe('ObserverConcurrentIssueDetector', () => {
 	it('raises CROSS_CALL_ISSUE_ONSET_BURST when congestion opens in several independent calls', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
@@ -79,13 +79,14 @@ describe('ObserverConcurrentIssueDetector', () => {
 		const payload = payloadOf(issue!);
 
 		expect(payload.issueType).toBe('congestion');
-		expect(payload.scope).toBe('observer');
 		expect(payload.affectedCalls).toBe(3);
 		expect(payload.calls).toBe(3);
 		expect(payload.affectedClients).toBe(3);
 		expect(payload.perCall).toHaveLength(3);
-		expect(payload.conclusion.faultDomain).toBe('infrastructure');
-		expect(payload.conclusion.recommendation).toMatch(/egress|network/i);
+		// `scope` and `conclusion` are fields of the issue, not of the evidence.
+		expect(issue!.scope).toBe('observer');
+		expect(issue!.conclusion?.faultDomain).toBe('infrastructure');
+		expect(issue!.conclusion?.recommendation).toMatch(/egress|network/i);
 
 		observer.close();
 	});
@@ -116,7 +117,7 @@ describe('ObserverConcurrentIssueDetector', () => {
 
 	it('is not suppressed by the participant ratio — a fleet event is a small share of all clients', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('observer-issue', ({ issue }) => issues.push(issue));
 
@@ -167,7 +168,7 @@ describe('ObserverConcurrentIssueDetector', () => {
 describe('CallConcurrentIssueDetector', () => {
 	it('keeps its own types and its participant-ratio gate', () => {
 		const observer = newObserver();
-		const issues: { type: string, payload?: string | Record<string, unknown> }[] = [];
+		const issues: CollectedIssue[] = [];
 
 		observer.on('call-issue', ({ issue }) => issues.push(issue));
 
@@ -188,10 +189,8 @@ describe('CallConcurrentIssueDetector', () => {
 
 		expect(issue).toBeDefined();
 
-		const payload = payloadOf(issue!);
-
-		expect(payload.scope).toBe('call');
-		expect(payload.conclusion.faultDomain).toBe('call');
+		expect(issue!.scope).toBe('call');
+		expect(issue!.conclusion?.faultDomain).toBe('call');
 
 		observer.close();
 	});

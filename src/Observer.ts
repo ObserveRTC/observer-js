@@ -11,7 +11,7 @@ import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './Obse
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
-import type { ObserverIssue } from './common/ObserverIssue';
+import type { ObserverIssue } from './common/Issue';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
 import type { Detector } from './detectors/Detector';
 import { SfuCongestionDetector } from './detectors/SfuCongestionDetector';
@@ -632,10 +632,12 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	 *
 	 * `payload` takes an **object**; see `ObserverIssue`.
 	 */
-	public addIssue(issue: ObserverIssue) {
+	public addIssue(issue: Omit<ObserverIssue, 'scope'>) {
 		if (this.closed) return;
 
-		this._notify('observer-issue', { ...this.eventScope, issue });
+		// `scope` is stamped here rather than asked of every caller: it is a fact about *where the
+		// finding was raised*, which this object knows and a detector should not have to restate.
+		this._notify('observer-issue', { ...this.eventScope, issue: { ...issue, scope: 'observer' } });
 	}
 
 	/** Emit an Observer-bus event. */

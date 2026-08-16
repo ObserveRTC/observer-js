@@ -18,7 +18,7 @@ import type { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTr
 import type { ObservedInboundTrack } from './ObservedInboundTrack';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
-import type { ObserverIssue } from './common/ObserverIssue';
+import type { CallIssue, ObserverIssue } from './common/Issue';
 import type { ValidationReport } from './validators/Validator';
 import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
@@ -87,7 +87,7 @@ export type ObserverEvents = {
 	'call-closed': [ObservedCallScope];
 	'call-empty': [ObservedCallScope];
 	'call-not-empty': [ObservedCallScope];
-	'call-issue': [ObservedCallScope & { issue: ObserverIssue }];
+	'call-issue': [ObservedCallScope & { issue: CallIssue }];
 
 	// client level
 	'client-added': [ObservedClientScope];

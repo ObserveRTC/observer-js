@@ -291,16 +291,13 @@ export class ClientPopulationIssueDetector implements Detector, ActiveIssueTrack
 				this._observer.addIssue({
 					type: ClientPopulationIssueTypes.clientPopulationIssue,
 					timestamp: now,
-					payload: {
-						type: ClientPopulationIssueTypes.clientPopulationIssue,
-						...rollup,
-						conclusion: {
-							faultDomain: 'client-population',
-							summary: `'${issueType}' is ${this._riskText(rollup.relativeRisk)} more likely on ${population} than on the rest of the fleet (${rollup.affectedClients}/${rollup.clients} vs ${rollup.controlAffectedClients}/${rollup.controlClients})`,
-							recommendation: 'this is not an SFU symptom — look at what those clients share: a recent release, a browser version, or shared/virtualised hardware',
-							confidence: this._confidenceOf(rollup),
-						},
+					conclusion: {
+						faultDomain: 'client-population',
+						summary: `'${issueType}' is ${this._riskText(rollup.relativeRisk)} more likely on ${population} than on the rest of the fleet (${rollup.affectedClients}/${rollup.clients} vs ${rollup.controlAffectedClients}/${rollup.controlClients})`,
+						recommendation: 'this is not an SFU symptom — look at what those clients share: a recent release, a browser version, or shared/virtualised hardware',
+						confidence: this._confidenceOf(rollup),
 					},
+					payload: { ...rollup },
 				});
 			}
 		}

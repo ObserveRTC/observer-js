@@ -191,10 +191,9 @@ export class IssueFanOutDetector implements Detector, ActiveIssueTracker {
 				this._call.addIssue({
 					type,
 					timestamp: now,
+					conclusion,
 					payload: {
-						type,
 						issueType,
-						conclusion,
 						trackId: publisher.id,
 						kind: publisher.kind,
 						publisherClientId: publisher.getPeerConnection().client.clientId,

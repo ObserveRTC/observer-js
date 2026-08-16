@@ -214,17 +214,13 @@ export class RemoteTrackResolverValidator implements Validator<RemoteTrackResolv
 			this._observer.addIssue({
 				type: UNRESOLVED_TRACK_LINKS_ISSUE,
 				timestamp: decidedAt,
-				payload: {
-					type: UNRESOLVED_TRACK_LINKS_ISSUE,
-					checks: this._checks,
-					...outcome.evidence,
-					conclusion: {
-						faultDomain: 'infrastructure',
-						summary: 'a RemoteTrackResolver is configured but has never linked a subscriber to a publisher',
-						recommendation: 'check the id the resolver joins on (mediasoup producerId, or your own convention) — until it links, IssueFanOutDetector, TrackDeliveryMismatchDetector, UnconsumedTrackDetector and SimulcastReceiverValidator all silently do nothing',
-						confidence: 0.9,
-					},
+				conclusion: {
+					faultDomain: 'infrastructure',
+					summary: 'a RemoteTrackResolver is configured but has never linked a subscriber to a publisher',
+					recommendation: 'check the id the resolver joins on (mediasoup producerId, or your own convention) — until it links, IssueFanOutDetector, TrackDeliveryMismatchDetector, UnconsumedTrackDetector and SimulcastReceiverValidator all silently do nothing',
+					confidence: 0.9,
 				},
+				payload: { checks: this._checks, ...outcome.evidence },
 			});
 		}
 
