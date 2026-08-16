@@ -267,3 +267,92 @@ describe('SimulcastReceiverValidator', () => {
 		observer.close();
 	});
 });
+
+/**
+ * Cancelling a running validation.
+ *
+ * Cancelling is not silent discarding: the validator finishes `inconclusive` with the reason,
+ * emits `validation-ready` like any other completion, and removes itself. Anything waiting on a
+ * verdict is freed, and "we stopped asking" stays distinguishable from "we asked and learned
+ * nothing" — which is the whole reason `inconclusive` carries a reason at all.
+ */
+describe('cancelling a validation', () => {
+	it('cancels by name, reporting inconclusive with the reason given', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+		const reports: { validator: string, report: Record<string, unknown> }[] = [];
+
+		observer.on('validation-ready', ({ validator, report }) => reports.push({ validator, report: report as never }));
+
+		observer.addValidator('simulcast-receivers');
+
+		expect(observer.cancelValidator('simulcast-receivers', 'sfu redeployed')).toBe(1);
+
+		expect(reports).toHaveLength(1);
+		expect(reports[0].validator).toBe('simulcast-receivers');
+		expect(reports[0].report).toMatchObject({
+			ready: true,
+			verdict: 'inconclusive',
+			reason: 'sfu redeployed',
+			checks: 0,
+		});
+		// It removed itself, exactly as a validator that decided on its own would have.
+		expect(observer.validators.size).toBe(0);
+
+		observer.close();
+	});
+
+	// `observer.validators` is where the running instances live, since `addValidator` is chainable.
+	it('cancels one specific instance by handle', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+
+		observer
+			.addValidator('simulcast-receivers')
+			.addValidator('codec-consistency');
+
+		const simulcast = [ ...observer.validators ].find((validator) => validator.name === 'simulcast-receivers')!;
+
+		expect(observer.cancelValidator(simulcast, 'not needed')).toBe(1);
+		expect([ ...observer.validators ].map((validator) => validator.name)).toEqual([ 'codec-consistency' ]);
+
+		observer.close();
+	});
+
+	it('reports 0 for a validator that is not running', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+
+		expect(observer.cancelValidator('codec-consistency')).toBe(0);
+
+		observer.close();
+	});
+
+	// A second cancel must not emit a second `validation-ready` for something already dropped.
+	it('is idempotent', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+		let emitted = 0;
+
+		observer.on('validation-ready', () => ++emitted);
+
+		observer.addValidator('simulcast-receivers');
+
+		const validator = [ ...observer.validators ][0];
+
+		expect(observer.cancelValidator(validator, 'first')).toBe(1);
+		expect(observer.cancelValidator(validator, 'second')).toBe(0);
+		expect(emitted).toBe(1);
+
+		observer.close();
+	});
+
+	it('closing the observer cancels what is still running, with a reason', () => {
+		const observer = new Observer({ autoUpdateOnCallUpdate: false });
+		const reports: Record<string, unknown>[] = [];
+
+		observer.on('validation-ready', ({ report }) => reports.push(report as never));
+
+		observer.addValidator('remote-track-resolver');
+		observer.close();
+
+		expect(reports).toHaveLength(1);
+		expect(reports[0]).toMatchObject({ verdict: 'inconclusive', reason: 'observer closed' });
+	});
+});

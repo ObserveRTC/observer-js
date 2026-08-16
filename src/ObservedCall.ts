@@ -131,6 +131,12 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.calculatedScore.value;
 	}
 
+	/**
+	 * Build a call-scoped detector onto this call. Chainable.
+	 *
+	 * To get a handle on what was built — to inspect it, or to remove that exact instance later — read
+	 * it back off the registry: `call.detectors.getAll(name)`, or `call.detectors.instances`.
+	 */
 	public addDetector<K extends keyof AvailableCallScopeDetectorsConfigs>(name: K, config: Partial<AvailableCallScopeDetectorsConfigs[K]> = {}): this {
 		if (this.closed) return this;
 
@@ -167,6 +173,28 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.detectors.add(detector);
 
 		return this;
+	}
+
+	/**
+	 * Remove a detector from **this call** by name, returning how many were removed.
+	 *
+	 * **Every** instance under the name goes — a name can legitimately be registered more than once.
+	 * When you want one of them specifically, go through the registry, which deals in instances:
+	 *
+	 * ```ts
+	 * const [ first ] = call.detectors.getAll('issue-fan-out-detector');
+	 *
+	 * call.detectors.remove(first);
+	 * ```
+	 *
+	 * Either route `close()`s the detector, so it unsubscribes from `activeIssuesRegistry` — without
+	 * that the registry keeps feeding a detector nobody is running any more, and its tracked set grows
+	 * for the life of the call.
+	 *
+	 * To stop building it on *future* calls too, use `observer.removeCallDetector(name)`.
+	 */
+	public removeDetector(name: keyof AvailableCallScopeDetectorsConfigs): number {
+		return this.detectors.removeByName(name);
 	}
 
 	/**

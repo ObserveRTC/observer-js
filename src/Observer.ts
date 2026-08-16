@@ -209,6 +209,12 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		return this.config.appData;
 	}
 
+	/**
+	 * Build a cross-call detector onto `observer.detectors`. Chainable.
+	 *
+	 * To get a handle on what was built — to inspect it, or to remove that exact instance later — read
+	 * it back off the registry: `observer.detectors.getAll(name)`, or `observer.detectors.instances`.
+	 */
 	public addObserverDetector<K extends keyof AvailableObserverScopeDetectorsConfigs>(name: K, config: Partial<AvailableObserverScopeDetectorsConfigs[K]> = {}): this {
 		if (this.closed) return this;
 
@@ -265,11 +271,49 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		return this;
 	}
 
-	/** Stop building `name` on calls created from now on. Calls already open are untouched. */
-	public removeCallDetector(name: keyof AvailableCallScopeDetectorsConfigs): this {
+	/**
+	 * Remove an observer-scoped detector by name, returning how many were removed.
+	 *
+	 * **Every** instance registered under the name goes, since a name can legitimately be registered
+	 * more than once (`ClientPopulationIssueDetector` is meant to be added once per `groupBy` axis).
+	 * When you want one of them specifically, go through the registry, which deals in instances:
+	 *
+	 * ```ts
+	 * const [ byBrowser, byOs ] = observer.detectors.getAll('client-population-issue-detector');
+	 *
+	 * observer.detectors.remove(byOs);   // keeps the browser axis running
+	 * ```
+	 *
+	 * Either route `close()`s the detector, so it unsubscribes from the issue registry and drops any
+	 * timers or bus listeners it held.
+	 */
+	public removeObserverDetector(name: keyof AvailableObserverScopeDetectorsConfigs): number {
+		return this.detectors.removeByName(name);
+	}
+
+	/**
+	 * Stop building `name` on calls created from now on.
+	 *
+	 * By default this also removes it from the calls **already open**, so that "remove this detector"
+	 * means the same thing whether you say it before or after a call started — the alternative leaves
+	 * a fleet where the detector is live on some calls and not others, decided by join time. Pass
+	 * `{ includeOpenCalls: false }` to change only what future calls are built with.
+	 *
+	 * Returns the number of live detector instances removed (`0` when only the config changed).
+	 */
+	public removeCallDetector(
+		name: keyof AvailableCallScopeDetectorsConfigs,
+		{ includeOpenCalls = true }: { includeOpenCalls?: boolean } = {},
+	): number {
 		this.callDetectorConfigs.delete(name);
 
-		return this;
+		if (!includeOpenCalls) return 0;
+
+		let removed = 0;
+
+		for (const call of this.observedCalls.values()) removed += call.removeDetector(name);
+
+		return removed;
 	}
 
 	/**
@@ -314,6 +358,42 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.validators.add(validator);
 
 		return this;
+	}
+
+	/**
+	 * Stop a running validation, by name or by instance. Returns how many were cancelled.
+	 *
+	 * Cancelling is **not** silent discarding. The validator finishes with `inconclusive` and the given
+	 * `reason`, emits `validation-ready` like any other completion, and removes itself. That matters
+	 * because anything waiting on the verdict — a deploy gate, a dashboard, a promise — would otherwise
+	 * wait forever, and because "we stopped asking" is a materially different outcome from "we asked
+	 * and learned nothing", which is exactly what `inconclusive` with a reason records.
+	 *
+	 * ```ts
+	 * observer.cancelValidator('simulcast-receivers', 'sfu redeployed');
+	 *
+	 * // or one specific instance — `observer.validators` holds what is running
+	 * for (const validator of observer.validators) observer.cancelValidator(validator, 'shutting down');
+	 * ```
+	 *
+	 * Pass a real reason. The default tells the reader nothing they could not already infer.
+	 */
+	public cancelValidator(target: keyof AvailableValidatorConfigs | RunningValidator, reason = 'cancelled'): number {
+		// Copy first: `cancel()` finishes the validator, whose `onDone` deletes it from this very set.
+		const running = [ ...this.validators ];
+		const matching = typeof target === 'string'
+			? running.filter((validator) => validator.name === target)
+			: running.filter((validator) => validator === target);
+
+		for (const validator of matching) {
+			try {
+				validator.cancel(reason);
+			} catch (err) {
+				logger.warn('Error cancelling validator %s: %o', validator.name, err);
+			}
+		}
+
+		return matching.length;
 	}
 
 	public getObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(callId: string): ObservedCall<T> | undefined {
@@ -458,7 +538,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		// announcing the close.
 		this.detectors.clear();
 		// Free anything waiting on a verdict rather than leaving it hanging.
-		for (const validator of [ ...this.validators ]) validator.cancel();
+		for (const validator of [ ...this.validators ]) validator.cancel('observer closed');
 		this.validators.clear();
 		// Each call cleared its own issues on close; this covers anything raised after that.
 		this.activeIssuesRegistry.clear();

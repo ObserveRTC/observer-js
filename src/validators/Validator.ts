@@ -53,8 +53,13 @@ export interface Validator<S extends Record<string, unknown> = Record<string, un
 	/** Gather evidence; decide if there is now enough. Called on every `observer.update()`. */
 	update(): void;
 
-	/** Give up without a verdict. Finishes with `inconclusive`, so a caller waiting on it is freed. */
-	cancel: () => void;
+	/**
+	 * Give up without a verdict. Finishes with `inconclusive`, so a caller waiting on it is freed.
+	 *
+	 * `reason` is carried into the report. Worth passing something specific — "cancelled" tells the
+	 * reader nothing, whereas "sfu redeployed" explains why a check that was running has no verdict.
+	 */
+	cancel: (reason?: string) => void;
 }
 
 /**

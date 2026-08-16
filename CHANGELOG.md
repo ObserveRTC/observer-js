@@ -127,6 +127,24 @@ observer.removeCallDetector('unconsumed-track-detector');
 observedCall.addDetector('issue-fan-out-detector', { issueTypes: [ 'freezed-video-track' ] });
 ```
 
+Every `add*` is chainable. Removal by name lives on the entity and returns how many went —
+`observer.removeObserverDetector(name)`, `observer.removeCallDetector(name, { includeOpenCalls? })`,
+`observedCall.removeDetector(name)` — and removes *every* instance under that name, since a name can
+legitimately be registered more than once.
+
+Removal by **instance** goes through the registry, which gained the members to make that practical:
+`Detectors.instances` (a copy, in registration order), `getAll(name)`, `has(name)`,
+`removeByName(name)`, a `remove(detector)` that now returns a boolean instead of silently succeeding,
+and `[Symbol.iterator]` so `for (const detector of call.detectors)` works. `instances` is a copy
+because removing while iterating the live array would skip entries. Every removal calls
+the detector's `close()`, so it unsubscribes from the issue registry and drops timers and bus
+listeners — a detector removed without closing keeps being fed issues for the life of the call.
+
+`removeCallDetector` drops the detector from calls **already open** by default, not just from future
+ones: otherwise whether a detector runs depends on when a call happened to join. Removing by name
+removes *every* instance under that name, since a name can legitimately be registered more than once
+(`ClientPopulationIssueDetector`, once per `groupBy` axis).
+
 `addObserverDetector` builds immediately onto `observer.detectors`. `addCallDetector` records into
 the new public `observer.callDetectorConfigs` map and applies to every call created **afterwards**;
 calls already open keep the set they were built with. Detectors are named by their kebab-case
@@ -240,6 +258,13 @@ see it. The quieter half is the silent fallback: a deployment configured for VP9
 whenever one endpoint cannot negotiate the preference, and the team believes it shipped AV1 months
 ago. Pass `expected` and it says so. Verdicts: `codec-consistent` / `codec-split` /
 `unexpected-codec` / `inconclusive`; raises `CODEC_INCONSISTENCY`.
+
+**`observer.cancelValidator(name | validator, reason?)`** stops a check that has not decided
+(`observer.validators` holds the running instances). Cancelling is not silent discarding: the
+validator finishes `inconclusive` with the reason, emits `validation-ready` like any other
+completion, and removes itself — so anything waiting on the verdict is freed, and "we stopped asking"
+stays distinguishable from "we asked and learned nothing". `Validator.cancel` now takes an optional
+`reason`, and `observer.close()` passes `'observer closed'`.
 
 New exports: `Validator`, `RunningValidator`, `ValidationReport`, `AvailableValidatorConfigs`,
 `ValidatorName`, and the three validator classes with their config, report and evidence types.

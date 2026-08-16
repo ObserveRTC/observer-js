@@ -497,9 +497,15 @@ Key members:
 - `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
 - `update(): void` — force an aggregation/`observer-updated` tick
 - `addObserverDetector(name, config?): this` — build a cross-call detector onto `observer.detectors`
-- `addCallDetector(name, config?): this` / `removeCallDetector(name): this` — register a call-scoped
-  detector for every call created **from now on**
+- `addCallDetector(name, config?): this` — register a call-scoped detector for every call created
+  from now on
+- `removeCallDetector(name, { includeOpenCalls? }): number` — stop building it, and (by default) drop
+  it from calls already open. Returns how many live instances were removed
+- `removeObserverDetector(name): number` — remove an observer-scoped detector. For one specific
+  instance use `observer.detectors.remove(detector)`
 - `addValidator(name, config?): this` — start a one-shot structural check
+- `cancelValidator(name | validator, reason?): number` — stop a running check; it finishes
+  `inconclusive` with the reason and emits `validation-ready`
 - `close(): void`
 - `readonly detectors: Detectors` — observer-scoped registry. **Starts empty**; nothing is implicit
 - `readonly callDetectorConfigs: Map<name, config>` — what `addCallDetector` recorded
@@ -532,6 +538,8 @@ Key members:
 - `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings)`, `getOrCreateObservedClient<T>(settings)` (all `… | undefined`)
 - `addIssue(issue: ObserverIssue): void` — raise a **call-level** issue → emits `call-issue`
 - `addDetector(name, config?): this` — build a call-scoped detector onto this call only
+- `removeDetector(name): number` — remove it from this call, `close()`ing it. For one specific
+  instance use `call.detectors.remove(detector)`
 - `readonly detectors: Detectors` — server-side detector registry (empty by default; see [Detectors](#detectors-server-side-extension-point))
 - `readonly activeIssuesRegistry: ActiveIssuesRegistry` — this call's open client issues, propagating into the observer's
 - `readonly unconsumedOutboundTracks: Set<ObservedOutboundTrack>` — maintained by the resolver
@@ -959,11 +967,62 @@ observer.addObserverDetector('turn-server-outage-detector', { minClientsAtPeak: 
 observer.addCallDetector('call-concurrent-issue-detector', {
   issueTypes: [ 'congestion', 'ice-disconnected' ],
 });
-observer.removeCallDetector('unconsumed-track-detector');   // undo, for future calls
-
 // one specific call
 observedCall.addDetector('issue-fan-out-detector', { issueTypes: [ 'freezed-video-track' ] });
 ```
+
+Every `add*` is **chainable** — it returns the owning entity:
+
+```ts
+observer
+  .addObserverDetector('turn-server-health-detector')
+  .addObserverDetector('turn-server-outage-detector', { minClientsAtPeak: 10 })
+  .addValidator('remote-track-resolver');
+```
+
+#### Removing them
+
+By **name**, on the entity — which removes *every* instance under that name:
+
+```ts
+observer.removeObserverDetector('turn-server-outage-detector');   // → 1
+observer.removeCallDetector('call-concurrent-issue-detector');    // stops it everywhere
+observedCall.removeDetector('issue-fan-out-detector');            // this call only
+```
+
+By **instance**, through the registry — which is where instances live, since `add*` returns the
+entity rather than the detector:
+
+```ts
+observer
+  .addObserverDetector('client-population-issue-detector', { issueTypes: [ 'cpulimitation' ], groupBy: 'browser' })
+  .addObserverDetector('client-population-issue-detector', { issueTypes: [ 'cpulimitation' ], groupBy: 'operationSystem' });
+
+const [ byBrowser, byOs ] = observer.detectors.getAll('client-population-issue-detector');
+
+observer.detectors.remove(byOs);   // keeps the browser axis running
+```
+
+`Detectors` is a small collection: `instances` (a copy, in registration order), `listOfNames`,
+`size`, `get(name)`, `getAll(name)`, `has(name)`, `add(detector)`, `remove(detector)`,
+`removeByName(name)`, `clear()`, and it is iterable — `for (const detector of call.detectors)`.
+`instances` being a copy is deliberate: removing while iterating the live array would skip entries,
+and "drop the ones that look like X" is the most natural thing to want to write.
+
+Two things worth knowing:
+
+- **By name removes every instance under it**, not the first. A name can legitimately be registered
+  more than once — `ClientPopulationIssueDetector` is meant to be added once per `groupBy` axis — and
+  "remove whichever is first in the array" is not something a caller can predict from a name. Go via
+  `detectors.getAll(name)` + `detectors.remove(instance)` when you mean one of them.
+- **`removeCallDetector` affects calls already open, by default.** Otherwise whether a detector runs
+  would depend on when a call happened to join, which is not a state anyone can reason about. Pass
+  `{ includeOpenCalls: false }` to change only what future calls are built with.
+
+Every removal path calls the detector's `close()`, so it unsubscribes from the issue registry and
+drops any timers or bus listeners. A detector removed without closing would keep being fed matching
+issues for the life of the call — invisible, unbounded, and it would still look healthy if you
+inspected it.
 
 Detectors are named by their kebab-case `NAME`, and the name types the config — an unknown name or a
 key that belongs to a different detector will not compile. Each detector owns its defaults in its own
@@ -1092,6 +1151,23 @@ onDeploy(() => observer.addValidator('simulcast-receivers'));   // check again
 `observer.validators` is the set currently running — normally empty, since each removes itself on
 finishing. There is no revalidation timer: a deploy, not elapsed time, is what makes a structural
 verdict stale, so re-checking means starting another.
+
+**Cancelling.** A check that has not decided can be stopped, by name or by instance:
+
+```ts
+observer.cancelValidator('simulcast-receivers', 'sfu redeployed');
+
+// or one specific instance — `observer.validators` holds what is running
+for (const validator of observer.validators) observer.cancelValidator(validator, 'shutting down');
+```
+
+Cancelling is **not** silent discarding. The validator finishes `inconclusive` with your reason,
+emits `validation-ready` like any other completion, and removes itself. That matters twice over:
+anything waiting on the verdict would otherwise wait forever, and *"we stopped asking"* is a
+materially different outcome from *"we asked and learned nothing"* — which is exactly what an
+`inconclusive` carrying a reason records. Pass a real reason; the default tells the reader nothing
+they could not already infer. `observer.close()` cancels whatever is still running with
+`'observer closed'`.
 
 | Validator | `addValidator` name | Question | Also raises |
 |-----------|---------------------|----------|-------------|
