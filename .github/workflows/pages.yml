@@ -6,7 +6,13 @@ name: Docs (GitHub Pages)
 # `/<repo>/` subpath, so the discoverable file is e.g.
 #   https://<owner>.github.io/observer-js/llms.txt
 #
-# One-time setup: in the repo, Settings → Pages → "Build and deployment" → Source: "GitHub Actions".
+# ONE-TIME MANUAL SETUP, required before the first run can succeed:
+#   repo → Settings → Pages → "Build and deployment" → Source: "GitHub Actions"
+#
+# There is no way to automate this from the workflow. `actions/configure-pages` has an `enablement`
+# input that calls the API to create the Pages site, but that call needs repo-administration rights
+# which `GITHUB_TOKEN` does not have and which `permissions:` cannot grant — it fails with
+# "Resource not accessible by integration".
 
 on:
   push:
@@ -37,7 +43,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Assemble site
         run: |
@@ -86,18 +92,18 @@ jobs:
           HTML
           echo "Assembled _site:"; ls -R _site
 
+      # NOTE no `enablement: true`. That option asks the API to CREATE the Pages site, which needs
+      # repo-administration rights the workflow's GITHUB_TOKEN does not have and cannot be granted
+      # through `permissions:` — it fails with "Resource not accessible by integration". Enabling
+      # Pages is a one-time manual step; see the header comment.
       - name: Setup Pages
-        uses: actions/configure-pages@v5
-        with:
-          # Auto-enable Pages (Build source = GitHub Actions) if it isn't already, so the very
-          # first run doesn't require toggling it manually in Settings -> Pages.
-          enablement: true
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

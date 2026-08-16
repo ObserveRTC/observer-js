@@ -12,6 +12,9 @@ export default defineConfig({
 	dts: true,
 	sourcemap: true,
 	clean: true,
+	// Node-only, stated explicitly rather than left to the default: this library reads `getStats()`
+	// samples on a server and has no browser build. `tsconfig.json` matches — no `dom` lib.
+	platform: 'node',
 	target: 'node22',
 	splitting: false,
 	outDir: 'dist',

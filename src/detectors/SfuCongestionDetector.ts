@@ -148,8 +148,8 @@ export class SfuCongestionDetector implements Detector, ActiveIssueTracker {
 
 		// Do not hold the process open. This is a monitoring side-channel: if the application has
 		// nothing else to do, it should be allowed to exit, and without this a library import alone
-		// keeps Node alive forever. Guarded because `unref` exists on Node timers but not in browsers
-		// or under some test fake-timer implementations.
+		// keeps Node alive forever. Optional-called because some fake-timer implementations return a
+		// handle without `unref`, and a monitoring detail must never break a caller's test run.
 		this.timer.unref?.();
 	}
 	public get size() {
