@@ -14,6 +14,43 @@ The organising principle, and the thing to understand before reading the rest:
 > counters. It answers the questions no browser can: *who else is in this state right now, what do
 > they have in common, and where in publisher → SFU → subscriber does the fault begin?*
 
+### Call summaries (new, opt-in)
+
+A `CallSummary` is the one thing that outlives a call: who was in it, what was raised against it,
+how it scored. Everything else here is about *now* and throws its state away when the call ends.
+
+```ts
+const observer = new Observer({
+  callSummary: { include: [ 'clients', 'issues', 'turnServers', 'scores' ] },
+});
+
+observer.on('call-summary', ({ summary }) => archive(summary));
+```
+
+- **Configured at construction, or not at all.** `callSummary` absent or `null` means no summaries
+  and not one extra bus subscription. There is no runtime switch, because a record you can turn on
+  halfway through is a record with a hole in it — calls from before and after would carry different
+  sections with nothing to say which.
+- **Sections are opt-in and `include` defaults to `[]`.** An absent section means "not collected",
+  never "nothing happened" — the same rule as `inconclusive` on a validator. No default-empty
+  section is offered, because it would make the misreading easy.
+- **`enrich` folds anything else in**, from any call-scoped event, typed against that event's
+  payload, landing in `summary.attachments`. Observer-scoped events are rejected at compile time:
+  there is no single call to attribute a fleet-wide fact to.
+- **It is `attachments`, not `appData`.** `appData` is live working state that may hold
+  unserialisable references; a summary exists to be shipped, and arrives while its call is being
+  torn down. Attach serialisable facts — the router's `id`, not the router.
+- **`summary.issues` is a plain `CallIssue[]`**, in the order raised. No derived tallies: a count is
+  `issues.length`, a per-type count is one `filter`.
+- **`maxIssues` / `maxClientIds` bound the growing lists**, and `summary.truncated` states the
+  shortfall — present only when something was really dropped. That is what makes dropping safe: the
+  true count stays recoverable as `issues.length + (truncated?.issues ?? 0)`.
+- **`call-summary` fires inside `close()`**, while the call is still in `observer.observedCalls`.
+- Cost is one listener per subscribed event type for the whole observer, not one per call, and
+  percentiles are computed once at close.
+
+See [Call summaries](README.md#call-summaries).
+
 ### ⚠️ Breaking changes
 
 **`ObservedInboundRtp.bitrate` is now bits per second.** It was computed as

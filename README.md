@@ -58,14 +58,15 @@ and emits a single, unified stream of typed events the application can react to.
 8. [API reference](#api-reference)
 9. [Schema types (`ClientSample`)](#schema-types-clientsample)
 10. [Detectors (server-side extension point)](#detectors-server-side-extension-point)
-11. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
-12. [Mediasoup router observation](#mediasoup-router-observation)
-13. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
-14. [Injecting data into a client](#injecting-data-into-a-client)
-15. [Logging](#logging)
-16. [Design notes](#design-notes)
-17. [Error-handling philosophy](#error-handling-philosophy)
-18. [Development & extension guide](#development--extension-guide)
+11. [Call summaries](#call-summaries)
+12. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
+13. [Mediasoup router observation](#mediasoup-router-observation)
+14. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
+15. [Injecting data into a client](#injecting-data-into-a-client)
+16. [Logging](#logging)
+17. [Design notes](#design-notes)
+18. [Error-handling philosophy](#error-handling-philosophy)
+19. [Development & extension guide](#development--extension-guide)
 
 ---
 
@@ -392,6 +393,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `call-empty` | — | last client left the call |
 | `call-not-empty` | — | first client joined a previously-empty call |
 | `call-issue` | `{ issue: CallIssue }` | `call.addIssue(...)` (server-side detector finding) |
+| `call-summary` | `{ summary: CallSummary }` | the call is closing and a [summary](#call-summaries) was configured. Emitted **inside** `close()`, while the call is still reachable |
 
 #### Client level — scope `{ observer, observedCall, observedClient }`
 
@@ -463,6 +465,9 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     appData?: AppData;
     closeClientIfIdleForMs?: number;
     closeCallIfEmptyForMs?: number;
+    // accumulate a per-call summary (see Call summaries). Absent or null = off, and nothing
+    // subscribes to anything. `{}` is valid: a summary with no built-in sections.
+    callSummary?: Partial<CallSummaryConfig> | null;
     // appData factories — run when an entity is created without explicit appData
     // (incl. lazily by accept()). appData is application-owned; accept `context` never touches it.
     createCallAppData?: (p: { callId: string; observer: Observer }) => Record<string, unknown>;
@@ -510,6 +515,9 @@ Key members:
 - `close(): void`
 - `readonly detectors: Detectors` — observer-scoped registry. **Starts empty**; nothing is implicit
 - `readonly callDetectorConfigs: Map<name, config>` — what `addCallDetector` recorded
+- `readonly callSummaryCollector?: CallSummaryCollector` — owns the resolved `config.callSummary`,
+  the summary subscriptions, and the summaries. `undefined` when summaries are off, which is the
+  only place that answer lives
 - `readonly validators: Set<RunningValidator>` — normally empty; each removes itself on finishing
 - `readonly activeIssuesRegistry: ActiveIssuesRegistry` — the fleet's open client issues
 - `readonly observedCalls: Map<string, ObservedCall>`
@@ -549,6 +557,7 @@ Key members:
 - aggregates: `numberOfIssues`, `numberOfPeerConnections`, `numberOfInboundRtpStreams`,
   `numberOfOutboundRtpStreams`, `numberOfDataChannels`, `maxNumberOfClients`,
   `clientsUsedTurn: Set<string>`, `startedAt?`, `endedAt?`, `closedAt?`, `closed`
+- `summary?: CallSummary` — the live record of this call, when [summaries](#call-summaries) are on
 - `update()`, `close()`
 
 ### `ObservedClient`
@@ -1357,6 +1366,109 @@ Note the trap this one has to guard against, and why it checks `call.remoteTrack
 rather than trusting the flag alone: **"no subscribers" and "no resolver configured" produce the
 identical observation.** Without a resolver it would report every published track in the call as
 unconsumed.
+
+## Call summaries
+
+Everything else in this library is about *now*. Detectors answer "is something wrong right now",
+validators answer a structural question once, and both read state the call throws away when it ends.
+A **call summary** is the one thing that outlives the call: who was in it, what was raised against
+it, how it scored — the questions asked *after* the meeting, by support, by billing, by whoever is
+writing the incident note.
+
+It is configured on the observer, at construction:
+
+```ts
+const observer = new Observer({
+  callSummary: {
+    include: [ 'clients', 'issues', 'turnServers', 'scores' ],
+  },
+});
+
+observer.on('call-summary', ({ summary }) => archive(summary));
+```
+
+Omit `callSummary`, or set it to `null`, and there are no summaries and **not one extra bus
+subscription**. Pass an object — `{}` is valid — and every call this observer creates carries one.
+
+> **Why construction-time, when detectors are added per call?** A summary is a record of what
+> happened, and a record you can switch on halfway through is a record with a hole in it. Calls that
+> started before the switch would carry different sections from calls that started after, with
+> nothing on either to say which. One shape for every call, or none.
+
+### Sections are opt-in, and absence means "not collected"
+
+`include` picks from four built-ins, and **the default is `[]`** — none of them:
+
+| Section | Contains |
+|---------|----------|
+| `clients` | `clientIds` (join order), `peak`, `joined`, `left`. Identifiers and counts only |
+| `issues` | `CallIssue[]`, in the order raised, capped by `maxIssues` |
+| `turnServers` | `serverUrls` that carried media, and `clientsRelayed` |
+| `scores` | `min` / `max` / `median` of the call score, and `samples` |
+
+**A missing section means it was never collected — never "nothing happened".** Reading
+`summary.issues === undefined` as "this call was clean" is the one misreading this type invites, so
+there is no default-empty section to make it easy. This is the same rule as `inconclusive` on a
+validator: silence is not success.
+
+The `clients` section is deliberately identifiers and counts. Anything *about* a client — browser,
+platform, region — is already on `observedClient` while the call is live, and belongs in
+`attachments` via an enricher if you want it kept; see below.
+
+### Enrichers: fold in anything, from any call-scoped event
+
+```ts
+new Observer({
+  callSummary: {
+    include: [ 'issues' ],
+    enrich: {
+      'client-joined': (summary, { observedClient }) => {
+        // serialisable facts only — the region string, never the live object it came from
+        ((summary.attachments.regions ??= []) as string[]).push(String(observedClient.appData.region));
+      },
+    },
+  },
+});
+```
+
+Each enricher is typed against its own event's payload. Only **call-scoped** events are accepted —
+the ones carrying an `observedCall`. An enricher on `observer-issue` or `validation-ready` will not
+compile, because there is no single call to attribute a fleet-wide fact to, and quietly writing it
+into every open summary would be worse than a type error.
+
+The library never writes to `summary.attachments`, so nothing you put there can collide with a
+section added in a future version.
+
+> **Why `attachments` and not `appData`.** `appData` is live working state hung off an entity for
+> that entity's lifetime, and it may hold things that cannot be serialised — a mediasoup router, a
+> socket. A summary is the opposite: it outlives the call so it can be **shipped**, and it reaches
+> you on `call-summary` while the call it describes is being torn down, so an unserialisable value
+> in it points at something already gone. Same contract as `attachments` on a `ClientSample`: read
+> the live object off `observedCall` / `observedClient` in the enricher, attach what serialises —
+> the router's `id`, not the router. An enricher that throws is logged and skipped — a summary is a
+side-channel, and nothing about a call should break because a field could not be recorded.
+
+### Caps announce what they dropped
+
+`maxIssues` (default `500`) and `maxClientIds` (default `10_000`) bound the two unbounded lists.
+When either bites, `summary.truncated` appears with the shortfall — present **only** when something
+was actually dropped. That is what makes dropping safe: the true count is recoverable as
+`issues.length + (truncated?.issues ?? 0)`. A silently truncated summary is worse than no summary,
+because someone will count `issues.length` and report it as the issue count.
+
+`issues` is the plain array, with no derived tallies alongside it. A count is `issues.length` and a
+per-type count is one `filter` — both cheaper at the call site than kept correct here.
+
+### Reading it
+
+`observedCall.summary` is live: read it at any point during the call. It is also delivered once on
+`call-summary`, emitted **inside** `close()` while the call is still in `observer.observedCalls` —
+after that the call is gone and there is nothing left to ask. `observer.close()` closes its calls
+first and its collector afterwards, so every summary still makes it out.
+
+Cost is **one bus listener per subscribed event type, for the whole observer** — not one per call. A
+per-call design would be quadratic in concurrent calls: at 500 calls and eight events, 4 000
+listeners each doing 500 no-op invocations per event. Percentiles are computed once, at close.
 
 ## Remote track resolution (mediasoup / SFU)
 

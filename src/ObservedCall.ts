@@ -9,6 +9,7 @@ import { RemoteTrackResolver } from './resolvers/RemoteTrackResolver';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { AvailableCallScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { CallIssue } from './common/Issue';
+import type { CallSummary } from './summaries/CallSummary';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedCallScope } from './ObserverEvents';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
@@ -61,6 +62,15 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		value: undefined,
 	};
 	public remoteTrackResolver?: RemoteTrackResolver;
+
+	/**
+	 * The accumulating record of this call's life, or `undefined` when no summary was configured.
+	 *
+	 * Live — read it at any point during the call. It is also delivered once on `call-summary` when
+	 * the call closes. See `CallSummary`: an absent section means "not collected", never "nothing
+	 * happened".
+	 */
+	public summary?: CallSummary;
 
 	/**
 	 * Published tracks that currently have **no** subscriber linked to them.
@@ -176,6 +186,22 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	}
 
 	/**
+	 * Start accumulating this call's summary, if the observer was configured for summaries.
+	 *
+	 * Called by `createObservedCall`; you should not need it. It takes no configuration of its own on
+	 * purpose: the collector subscribes to exactly the events the observer's `include` requires, so a
+	 * per-call section outside that set would be created and then never written to — an empty section
+	 * that reads as "nothing happened". One shape per observer is the only shape that can be filled.
+	 *
+	 * The collector builds it rather than this method, so the resolved configuration never has to
+	 * leave the one object that owns it. Returns `undefined` when summaries are off, and is
+	 * idempotent: an existing summary is kept, not restarted.
+	 */
+	public enableSummary(): CallSummary | undefined {
+		return (this.summary ??= this.observer.callSummaryCollector?.createSummary(this.callId));
+	}
+
+	/**
 	 * Remove a detector from **this call** by name, returning how many were removed.
 	 *
 	 * **Every** instance under the name goes — a name can legitimately be registered more than once.
@@ -239,6 +265,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
 		this.closedAt = Date.now();
+
+		if (this.summary) {
+			// Finalise and deliver while the call is still reachable: `call-closed` below removes it
+			// from `observer.observedCalls`, and a summary handed over after that has no call to read.
+			this.observer.callSummaryCollector?.finalise(this);
+			this._notify('call-summary', { ...this.eventScope, summary: this.summary });
+		}
 
 		this.detectors.clear();
 		this.activeIssuesRegistry.clear();

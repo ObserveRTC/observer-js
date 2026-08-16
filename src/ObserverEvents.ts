@@ -19,6 +19,7 @@ import type { ObservedInboundTrack } from './ObservedInboundTrack';
 import type { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import type { ClientSample, ClientEvent, ClientIssue, ClientMetaData, ExtensionStat } from './schema/ClientSample';
 import type { CallIssue, ObserverIssue } from './common/Issue';
+import type { CallSummary } from './summaries/CallSummary';
 import type { ValidationReport } from './validators/Validator';
 import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
@@ -88,6 +89,13 @@ export type ObserverEvents = {
 	'call-empty': [ObservedCallScope];
 	'call-not-empty': [ObservedCallScope];
 	'call-issue': [ObservedCallScope & { issue: CallIssue }];
+
+	/**
+	 * A call's summary was finalised. Emitted from inside `close()`, while the call is still in
+	 * `observer.observedCalls` — after that there is nothing left to ask. Only fires for calls that
+	 * had a summary configured.
+	 */
+	'call-summary': [ObservedCallScope & { summary: CallSummary }];
 
 	// client level
 	'client-added': [ObservedClientScope];

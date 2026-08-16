@@ -13,6 +13,8 @@ import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
 import type { ObserverIssue } from './common/Issue';
 import { ActiveIssuesRegistry } from './issues/ActiveIssuesRegistry';
+import { CallSummaryCollector } from './summaries/CallSummaryCollector';
+import { defaultCallSummaryConfig, type CallSummaryConfig } from './summaries/CallSummary';
 import type { Detector } from './detectors/Detector';
 import { SfuCongestionDetector } from './detectors/SfuCongestionDetector';
 import { ObserverConcurrentIssueDetector } from './detectors/ObserverConcurrentIssueDetector';
@@ -70,6 +72,37 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	 * yourself, and note that observer-scoped detectors and validators run *nowhere else*.
 	 */
 	autoUpdateOnCallUpdate?: boolean;
+
+	/**
+	 * Accumulate a {@link CallSummary} on every call this observer creates.
+	 *
+	 * **Absent or `null` means no summaries at all** — no accumulation, and not one bus subscription.
+	 * Pass an object (`{}` is valid) to switch it on; anything you leave out takes its default from
+	 * `defaultCallSummaryConfig`, including `include: []`, which collects *no* built-in section. A
+	 * summary that only runs `enrich` is a perfectly good summary.
+	 *
+	 * ```ts
+	 * const observer = new Observer({
+	 *   callSummary: {
+	 *     include: [ 'clients', 'issues' ],
+	 *     enrich: {
+	 *       'client-joined': (summary, { observedClient }) => {
+	 *         ((summary.attachments.regions ??= []) as string[]).push(String(observedClient.appData.region));
+	 *       },
+	 *     },
+	 *   },
+	 * });
+	 *
+	 * observer.on('call-summary', ({ summary }) => archive(summary));
+	 * ```
+	 *
+	 * This is construction-time and fixed for the observer's life, unlike detectors, which are added
+	 * per call as an application decides what to watch. A summary is a record of what happened, and a
+	 * record you can turn on halfway through is a record with a hole in it — calls that started
+	 * earlier would carry different sections from calls that started later, with nothing on either to
+	 * say which. One shape for every call, or none.
+	 */
+	callSummary?: Partial<CallSummaryConfig> | null;
 
 	inboundTrackDegradationThresholds?: {
 		deltaFreezeCount: number,
@@ -186,6 +219,15 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	Partial<AvailableCallScopeDetectorsConfigs[keyof AvailableCallScopeDetectorsConfigs]>
 	>();
 
+	/**
+	 * Owns every call's summary: the resolved `config.callSummary`, the bus subscriptions that keep
+	 * the summaries current (one per event type, not one per call), and the summaries themselves.
+	 *
+	 * `undefined` when `config.callSummary` was absent or `null` — so its presence *is* the answer to
+	 * "are summaries on", and nothing is subscribed to anything.
+	 */
+	public readonly callSummaryCollector?: CallSummaryCollector;
+
 	public constructor(config: Partial<ObserverConfig<AppData>> = {}) {
 		super();
 		this.setMaxListeners(Infinity);
@@ -199,6 +241,16 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			...config,
 		};
 
+		if (this.config.callSummary) {
+			// The defaults are resolved once, here, and the collector is the only thing that holds the
+			// result — there is no second copy on the observer to drift from `config`. One collector
+			// holds one subscription per event type it needs, not one per call; see
+			// `CallSummaryCollector` for why the per-call alternative is quadratic in concurrent calls.
+			this.callSummaryCollector = new CallSummaryCollector(this, {
+				...defaultCallSummaryConfig,
+				...this.config.callSummary,
+			});
+		}
 	}
 
 	public get numberOfCalls() {
@@ -433,6 +485,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		// Build the call's track resolver from the configured factory (if any).
 		observedCall.remoteTrackResolver = this.config.createRemoteTrackResolver?.(observedCall);
 
+		observedCall.enableSummary();
+
 		// Exactly what the application registered, in registration order. Nothing is created
 		// implicitly: a call with no configured detectors runs none.
 		for (const [ name, detectorConfig ] of this.callDetectorConfigs) {
@@ -540,6 +594,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		// Free anything waiting on a verdict rather than leaving it hanging.
 		for (const validator of [ ...this.validators ]) validator.cancel('observer closed');
 		this.validators.clear();
+		// After the calls, so each one's `call-summary` still fires with its subscriptions intact.
+		this.callSummaryCollector?.close();
 		// Each call cleared its own issues on close; this covers anything raised after that.
 		this.activeIssuesRegistry.clear();
 

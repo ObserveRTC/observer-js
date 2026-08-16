@@ -205,6 +205,23 @@ export type {
 	CodecConsistencyReportPayload,
 	CodecEvidence,
 } from './validators/CodecConsistencyValidator';
+// Call summaries: the record of what happened in a call, accumulated over its life and delivered on
+// `call-summary` when it closes. Opt-in with `new Observer({ callSummary: { ... } })`; an absent
+// section means "not collected", never "nothing happened".
+export { createCallSummary, defaultCallSummaryConfig } from './summaries/CallSummary';
+export type {
+	CallSummary,
+	CallSummaryConfig,
+	CallSummarySection,
+	CallSummaryEnrichers,
+	CallSummaryEnricher,
+	CallScopedEventName,
+	CallSummaryClients,
+	CallSummaryTurnServers,
+	CallSummaryScores,
+	CallSummaryTruncation,
+} from './summaries/CallSummary';
+export { CallSummaryCollector } from './summaries/CallSummaryCollector';
 // The interpretation layer: what a correlated cohort implies, and where to look.
 export { concludeCallIssue, concludeObserverIssue } from './detectors/IssueConclusion';
 export type {
