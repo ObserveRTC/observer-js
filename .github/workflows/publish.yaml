@@ -19,10 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # NOTE deliberately no `registry-url`. That input makes setup-node write an `.npmrc` containing
+      #   //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+      # and yarn 1 resolves env placeholders when it *parses* config, so it throws
+      # "Failed to replace env in config: ${NODE_AUTH_TOKEN}" before installing anything — and
+      # `NODE_AUTH_TOKEN` no longer exists, because publishing moved to Trusted Publishing (OIDC).
+      # npm defaults to registry.npmjs.org anyway, and mints its own short-lived credential.
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
 
       # Trusted Publishing requires npm >= 11.5.1, which is newer than the npm bundled with Node 22.
       - name: Upgrade npm

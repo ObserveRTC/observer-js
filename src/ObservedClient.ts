@@ -174,6 +174,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public close() {
 		if (this.closed) return;
 
+		// The idle timer is armed on every accepted sample and was never disarmed here, so closing a
+		// client left a live handle for up to `closeClientIfIdleForMs` (60 s by default) that would
+		// eventually fire `close()` on an already-closed client. Harmless in effect, but it pins the
+		// event loop — which is why a test suite would not exit.
+		if (this.closeTimer) {
+			clearTimeout(this.closeTimer);
+			this.closeTimer = undefined;
+		}
+
 		this._flushPendingInjections();
 
 		const activeIssues = [ ...this.activeIssues.values() ];
@@ -380,6 +389,11 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.closeTimer = setTimeout(() => {
 				this.close();
 			}, this.settings.closeClientIfIdleForMs);
+
+			// Do not let a monitoring timer be the reason a process stays alive. It still fires
+			// normally while the application is running; it just stops holding the event loop open on
+			// its own. Optional-called because some fake-timer implementations omit `unref`.
+			this.closeTimer.unref?.();
 		}
 
 		// Done processing this sample. Stop directing injections at it, then persist the FINAL,

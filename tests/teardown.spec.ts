@@ -50,3 +50,58 @@ describe('auto-teardown timers', () => {
 		observer.close();
 	});
 });
+
+/**
+ * Timers must not outlive the thing that armed them.
+ *
+ * Both `ObservedClient` (idle timer, armed on every accepted sample) and `ObservedCall` (empty-call
+ * timer, armed when the last client leaves) used to leave their handle live after `close()`. The
+ * effect was invisible — the callback checks `closed` and returns — but the handle pinned the event
+ * loop, so a process that had finished its work would sit there for up to a minute. Jest reported it
+ * as 231 open handles and a worker that had to be force-exited.
+ */
+describe('timers do not outlive close()', () => {
+	const sample = (clientId: string, callId = 'call-1') => ({
+		callId,
+		clientId,
+		timestamp: Date.now(),
+		peerConnections: [ { peerConnectionId: `pc-${clientId}` } ],
+	} as never);
+
+	it('clears the client idle timer on close', () => {
+		jest.useRealTimers();
+
+		const observer = new Observer({ autoUpdateOnCallUpdate: false, closeClientIfIdleForMs: 60_000 });
+
+		observer.accept(sample('alice'));
+
+		const client = observer.getObservedCall('call-1')!.getObservedClient('alice')!;
+
+		expect((client as unknown as { closeTimer?: unknown }).closeTimer).toBeDefined();
+
+		client.close();
+
+		expect((client as unknown as { closeTimer?: unknown }).closeTimer).toBeUndefined();
+
+		observer.close();
+	});
+
+	it('clears the empty-call timer on close', () => {
+		jest.useRealTimers();
+
+		const observer = new Observer({ autoUpdateOnCallUpdate: false, closeCallIfEmptyForMs: 60_000 });
+
+		observer.accept(sample('alice'));
+
+		const call = observer.getObservedCall('call-1')!;
+
+		// The empty-call timer is armed when the last client leaves.
+		call.getObservedClient('alice')!.close();
+		expect((call as unknown as { closeTimer?: unknown }).closeTimer).toBeDefined();
+
+		call.close();
+		expect((call as unknown as { closeTimer?: unknown }).closeTimer).toBeUndefined();
+
+		observer.close();
+	});
+});

@@ -214,6 +214,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.update(); // last update before closing
 		this.closed = true;
 
+		// Disarm the empty-call timer. It is armed when the last client leaves, so closing the call
+		// directly (rather than letting the timer do it) previously left a live handle behind.
+		if (this.closeTimer) {
+			clearTimeout(this.closeTimer);
+			this.closeTimer = undefined;
+		}
+
 		let minSampleTimestamps: number | undefined;
 		let maxSampleTimestamps: number | undefined;
 		const clients = [ ...this.observedClients.values() ];
@@ -286,6 +293,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 					this.closeTimer = setTimeout(() => {
 						this.close();
 					}, this.settings.closeCallIfEmptyForMs);
+
+					// See `ObservedClient`: a monitoring timer must not be the reason a process stays
+					// alive. It still fires while the application runs.
+					this.closeTimer.unref?.();
 				}
 			}
 			++this.totalRemovedClients;
