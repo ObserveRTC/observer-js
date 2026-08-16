@@ -17,10 +17,10 @@ module.exports = {
   // silently eroding. Raise them when coverage improves; never lower them to make a build pass.
   coverageThreshold: {
     global: {
-      statements: 80,
-      branches: 56,
-      functions: 73,
-      lines: 83,
+      statements: 84,
+      branches: 62,
+      functions: 76,
+      lines: 87,
     },
   },
 }
