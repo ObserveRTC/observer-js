@@ -262,7 +262,10 @@ deliberately distinct:
 
 - **`appData`** — application-assigned extra info that identifies/decorates an entity, fixed at
   creation (via `settings.appData` or the `createCallAppData` / `createClientAppData` factories),
-  or assigned by the app on the `*-added` events. The library never changes it.
+  or assigned by the app on the `*-added` events. The library never changes it. The factories
+  **receive the context of the `accept()` that triggered the creation**, so a fact carried on the
+  context can be baked into `appData` at birth — but it is copied by the factory, deliberately, not
+  written across by the library.
 - **`context`** — passed per `accept()`, may differ on every call, and is carried straight
   through to the `*-updated` events that the `accept()` triggers, then discarded.
 
@@ -470,8 +473,8 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     callSummary?: Partial<CallSummaryConfig> | null;
     // appData factories — run when an entity is created without explicit appData
     // (incl. lazily by accept()). appData is application-owned; accept `context` never touches it.
-    createCallAppData?: (p: { callId: string; observer: Observer }) => Record<string, unknown>;
-    createClientAppData?: (p: { clientId: string; observedCall: ObservedCall }) => Record<string, unknown>;
+    createCallAppData?: (p: { callId: string; observer: Observer; acceptCtx?: AcceptContext }) => Record<string, unknown>;
+    createClientAppData?: (p: { clientId: string; observedCall: ObservedCall; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     // sink factory — produces a per-client sink that receives every accepted sample (see Sinks).
     createClientSink?: (p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined;
     // remote-track-resolver factory — produces a call's RemoteTrackResolver (see Remote track resolution).
@@ -480,26 +483,36 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
 ```
 
 **appData factories.** Instead of pre-creating a call/client (or assigning on `call-added` /
-`client-added`) just to enrich its `appData`, register a factory once. It runs in the entity's
-constructor whenever it's created without an explicit `settings.appData` — including the lazy
-creation inside `accept()`. The `client` factory receives the already-created parent
-`observedCall`, so it can derive fields from it. `appData` is application-owned and is never
-modified by the `accept()` context.
+`client-added`) just to enrich its `appData`, register a factory once. It runs whenever the entity
+is created without an explicit `settings.appData` — including the lazy creation inside `accept()`.
+The `client` factory receives the already-created parent `observedCall`, so it can derive fields
+from it.
+
+Both also receive **`acceptCtx`**: the [`AcceptContext`](#context-the-acceptcontext) of the
+`accept()` that caused the creation, or `undefined` when you created the entity yourself. This is
+what lets an [accept middleware](#accept-middlewares-global-pre-dispatch-hook) resolve something
+once — a tenant, a trace id — and have it land in `appData` at birth, instead of every factory
+re-deriving it from the sample.
 
 ```ts
 const observer = new Observer({
-  createCallAppData:   ({ callId })                 => ({ callId, startedAt: Date.now(), region: 'eu' }),
-  createClientAppData: ({ clientId, observedCall }) => ({ clientId, region: observedCall.appData.region }),
+  createCallAppData:   ({ callId, acceptCtx })      => ({ callId, startedAt: Date.now(), tenant: acceptCtx?.tenant }),
+  createClientAppData: ({ clientId, observedCall }) => ({ clientId, tenant: observedCall.appData.tenant }),
 });
+
+observer.accept(sample, { tenant: 'acme' });
 ```
+
+`appData` stays application-owned: the context is *offered* to the factory, never written across by
+the library, and it is still not stored on any entity.
 
 Key members:
 
 - `accept(sample: ClientSample, context?: AcceptContext): void`
 - `addAcceptMiddleware(...mw: AcceptMiddleware[]): this` / `removeAcceptMiddleware(...mw): this` — global pre-dispatch sample hooks (see [Accept middlewares](#accept-middlewares-global-pre-dispatch-hook))
 - `getObservedCall<T>(callId): ObservedCall<T> | undefined`
-- `createObservedCall<T>(settings): ObservedCall<T> | undefined`
-- `getOrCreateObservedCall<T>(settings): ObservedCall<T> | undefined`
+- `createObservedCall<T>(settings, acceptCtx?): ObservedCall<T> | undefined`
+- `getOrCreateObservedCall<T>(settings, acceptCtx?): ObservedCall<T> | undefined`
 - `addIssue(issue: Omit<ObserverIssue, 'scope'>): void` — raise an **observer-level** finding → emits `observer-issue`. `scope` is stamped for you
 - `update(): void` — force an aggregation/`observer-updated` tick
 - `addObserverDetector(name, config?): this` — build a cross-call detector onto `observer.detectors`
@@ -544,7 +557,7 @@ Key members:
 
 - `readonly callId: string`, `appData: AppData`
 - `readonly observedClients: Map<string, ObservedClient>`, `get numberOfClients()`
-- `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings)`, `getOrCreateObservedClient<T>(settings)` (all `… | undefined`)
+- `getObservedClient<T>(clientId)`, `createObservedClient<T>(settings, acceptCtx?)`, `getOrCreateObservedClient<T>(settings, acceptCtx?)` (all `… | undefined`)
 - `addIssue(issue: Omit<CallIssue, 'scope'>): void` — raise a **call-level** finding → emits `call-issue`. `scope` is stamped for you
 - `addDetector(name, config?): this` — build a call-scoped detector onto this call only
 - `removeDetector(name): number` — remove it from this call, `close()`ing it. For one specific

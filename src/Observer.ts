@@ -53,10 +53,10 @@ export type AcceptMiddlewarePayload = {
 export type AcceptMiddleware = Middleware<AcceptMiddlewarePayload>;
 
 /** Produces the initial `appData` for a call created without an explicit `appData`. */
-export type CallAppDataFactory = (params: { callId: string, observer: Observer }) => Record<string, unknown>;
+export type CallAppDataFactory = (params: { callId: string, observer: Observer, acceptCtx?: AcceptContext }) => Record<string, unknown>;
 
 /** Produces the initial `appData` for a client created without an explicit `appData`. */
-export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall }) => Record<string, unknown>;
+export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall, acceptCtx?: AcceptContext }) => Record<string, unknown>;
 
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	appData?: AppData,
@@ -454,8 +454,13 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		return this.observedCalls.get(callId) as ObservedCall<T>;
 	}
 
+	/**
+	 * @param acceptCtx the `accept()` context, when this call is being created to receive a sample.
+	 * Passed on to `ObserverConfig.createCallAppData`, so the factory can read whatever the caller (or
+	 * an accept middleware) put there — a tenant, a region, a trace id.
+	 */
 	public createObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		settings: ObservedCallSettings<T>
+		settings: ObservedCallSettings<T>, acceptCtx?: AcceptContext
 	): ObservedCall<T> | undefined {
 		if (this.closed) {
 			logger.warn('Attempted to create a call (callId: %s) on a closed observer', settings.callId);
@@ -472,7 +477,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		const callSettings = {
 			...settings,
 			closeCallIfEmptyForMs: settings.closeCallIfEmptyForMs ?? this.config.closeCallIfEmptyForMs,
-			appData: settings.appData ?? this.config.createCallAppData?.({ callId: settings.callId, observer: this }),
+			appData: settings.appData ?? this.config.createCallAppData?.({ callId: settings.callId, observer: this, acceptCtx }),
 		} as ObservedCallSettings<T>;
 
 		const callActiveIssuesRegistry = new ActiveIssuesRegistry(this.activeIssuesRegistry);
@@ -517,9 +522,9 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	}
 
 	public getOrCreateObservedCall<T extends Record<string, unknown> = Record<string, unknown>>(
-		settings: ObservedCallSettings<T>
+		settings: ObservedCallSettings<T>, acceptCtx?: AcceptContext
 	): ObservedCall<T> | undefined {
-		return this.getObservedCall<T>(settings.callId) ?? this.createObservedCall<T>(settings);
+		return this.getObservedCall<T>(settings.callId) ?? this.createObservedCall<T>(settings, acceptCtx);
 	}
 
 	public createObservedMediasoupRouter<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -624,24 +629,15 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return;
 		}
 
-		let call = this.getObservedCall(sample.callId);
+		// The context is handed to the create methods rather than used to pre-compute `appData` here:
+		// they already run the factories for anything created without explicit `appData`, and calling
+		// them from both places is two implementations of one rule, waiting to disagree.
+		const call = this.getOrCreateObservedCall({ callId: sample.callId }, context);
 
-		if (!call) {
-			call = this.createObservedCall({
-				callId: sample.callId,
-				appData: this.config.createCallAppData?.({ callId: sample.callId, observer: this }),
-			});
-		}
 		if (!call) return;
 
-		let client = call.getObservedClient(sample.clientId);
+		const client = call.getOrCreateObservedClient({ clientId: sample.clientId }, context);
 
-		if (!client) {
-			client = call.createObservedClient({
-				clientId: sample.clientId,
-				appData: this.config.createClientAppData?.({ clientId: sample.clientId, observedCall: call }),
-			});
-		}
 		if (!client) return;
 
 		client.accept(sample, context);

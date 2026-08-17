@@ -51,6 +51,35 @@ observer.on('call-summary', ({ summary }) => archive(summary));
 
 See [Call summaries](README.md#call-summaries).
 
+### `appData` factories see the accept context
+
+`createCallAppData` and `createClientAppData` now receive `acceptCtx` — the `AcceptContext` of the
+`accept()` that caused the entity to be created, or `undefined` when you created it yourself. An
+[accept middleware](README.md#accept-middlewares-global-pre-dispatch-hook) can resolve a tenant or a
+trace id once, and the factory can bake it into `appData` at birth instead of re-deriving it from
+the sample.
+
+```ts
+new Observer({
+  createCallAppData: ({ callId, acceptCtx }) => ({ callId, tenant: acceptCtx?.tenant }),
+});
+
+observer.accept(sample, { tenant: 'acme' });
+```
+
+`appData` stays application-owned: the context is offered to the factory, never written across by
+the library, and still never stored on an entity.
+
+`createObservedCall` / `getOrCreateObservedCall` / `createObservedClient` /
+`getOrCreateObservedClient` all take an optional trailing `acceptCtx` so the same applies when you
+create entities yourself.
+
+**Fixed: `createObservedClient` mutated the settings object it was given.** It wrote the resolved
+`appData` and `closeClientIfIdleForMs` back onto the caller's object, so a settings object reused as
+a template came back carrying the first client's `appData` — and every later client built from it
+silently inherited that, factory or not. It now applies defaults to a copy, as `createObservedCall`
+already did.
+
 ### ⚠️ Breaking changes
 
 **`ObservedInboundRtp.bitrate` is now bits per second.** It was computed as

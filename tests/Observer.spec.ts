@@ -160,6 +160,49 @@ describe('Observer', () => {
 
 			observer.close();
 		});
+
+		// The context is what an accept middleware writes into, so a factory that cannot see it has to
+		// re-derive from the sample what the middleware already worked out.
+		it('hands the accept() context to both factories', () => {
+			const seen: Record<string, unknown>[] = [];
+			const observer = new Observer({
+				createCallAppData: ({ acceptCtx }) => (seen.push({ level: 'call', ...acceptCtx }), { ...acceptCtx }),
+				createClientAppData: ({ acceptCtx }) => (seen.push({ level: 'client', ...acceptCtx }), { ...acceptCtx }),
+			});
+
+			observer.accept(makeSample({}), { tenant: 'acme' });
+
+			expect(seen).toEqual([
+				{ level: 'call', tenant: 'acme' },
+				{ level: 'client', tenant: 'acme' },
+			]);
+			expect(observer.getObservedCall('call-1')?.appData.tenant).toBe('acme');
+
+			observer.close();
+		});
+
+		// `createObservedClient` used to write the resolved defaults back onto the caller's object, so a
+		// settings object reused as a template came back carrying the first client's appData — and
+		// every later client silently inherited it, factory or not.
+		it('does not mutate the settings object it was given', () => {
+			const observer = new Observer({
+				createClientAppData: ({ clientId }) => ({ clientId }),
+			});
+			const call = observer.createObservedCall({ callId: 'call-1' })!;
+			const settings: { clientId: string, appData?: Record<string, unknown> } = { clientId: 'alice' };
+
+			call.createObservedClient(settings);
+
+			expect(settings.appData).toBeUndefined();
+			expect(settings).toEqual({ clientId: 'alice' });
+
+			settings.clientId = 'bob';
+			const bob = call.createObservedClient(settings);
+
+			expect(bob?.appData.clientId).toBe('bob');
+
+			observer.close();
+		});
 	});
 
 	describe('per-client sinks', () => {

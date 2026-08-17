@@ -285,7 +285,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		return this.observedClients.get(clientId) as ObservedClient<ClientAppData>;
 	}
 
-	public createObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(settings: ObservedClientSettings<ClientAppData>): ObservedClient<ClientAppData> | undefined {
+	public createObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
+		settings: ObservedClientSettings<ClientAppData>, acceptCtx?: AcceptContext
+	): ObservedClient<ClientAppData> | undefined {
 		if (this.closed) {
 			logger.warn('Attempted to create a client (clientId: %s) on a closed call %s', settings.clientId, this.callId);
 
@@ -297,15 +299,19 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			return this.observedClients.get(settings.clientId) as ObservedClient<ClientAppData>;
 		}
 
-		if (!settings.closeClientIfIdleForMs) {
-			settings.closeClientIfIdleForMs = this.observer.config.closeClientIfIdleForMs;
-		}
-		if (settings.appData === undefined) {
-			settings.appData = this.observer.config.createClientAppData?.({ clientId: settings.clientId, observedCall: this }) as ClientAppData;
-		}
+		const clientSettings: ObservedClientSettings<ClientAppData> = {
+			...settings,
+			closeClientIfIdleForMs: settings.closeClientIfIdleForMs || this.observer.config.closeClientIfIdleForMs,
+			appData: settings.appData ?? this.observer.config.createClientAppData?.({
+				clientId: settings.clientId,
+				observedCall: this,
+				acceptCtx,
+			}) as ClientAppData,
+		};
+
 		const observedClientIssueRegistry = new ObservedClientIssueRegistry(this.activeIssuesRegistry);
 		const result = new ObservedClient<ClientAppData>(
-			settings,
+			clientSettings,
 			this,
 			observedClientIssueRegistry,
 		);
@@ -366,9 +372,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	}
 
 	public getOrCreateObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(
-		settings: ObservedClientSettings<ClientAppData>
+		settings: ObservedClientSettings<ClientAppData>, acceptCtx?: AcceptContext
 	): ObservedClient<ClientAppData> | undefined {
-		return this.getObservedClient<ClientAppData>(settings.clientId) ?? this.createObservedClient<ClientAppData>(settings);
+		return this.getObservedClient<ClientAppData>(settings.clientId) ?? this.createObservedClient<ClientAppData>(settings, acceptCtx);
 	}
 
 	public update(context?: AcceptContext) {
