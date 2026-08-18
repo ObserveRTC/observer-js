@@ -134,8 +134,12 @@ export {
 export type {
 	ClientPopulationIssueDetectorConfig,
 	ClientPopulationAxis,
+	ClientLocationResolver,
 	ClientPopulation,
 } from './detectors/ClientPopulationIssueDetector';
+// Geographic grouping: a grid cell key, not a radius — see the module for why.
+export { geohash, GEOHASH_CELL_SIZES } from './utils/geohash';
+export type { ClientLocation } from './utils/geohash';
 export {
 	SfuCongestionDetector,
 } from './detectors/SfuCongestionDetector';

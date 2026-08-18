@@ -80,6 +80,61 @@ a template came back carrying the first client's `appData` — and every later c
 silently inherited that, factory or not. It now applies defaults to a copy, as `createObservedCall`
 already did.
 
+### Geographic grouping: `ClientPopulationIssueDetector` gains a `location` axis
+
+`groupBy: 'location'` groups clients by **geohash cell** instead of by browser or OS, which is the
+grouping network symptoms actually cluster by — and the one the class previously admitted it could not
+see.
+
+```ts
+observer.addObserverDetector('client-population-issue-detector', {
+  issueTypes: [ 'congestion', 'ice-disconnected' ],
+  groupBy: 'location',
+  locationPrecision: 3,                       // ~156 km cells
+  resolveClientLocation: (client) => client.attachments?.geo as { latitude: number, longitude: number },
+});
+```
+
+The client still owns "RTT jumped" — client-monitor's `CongestionDetector` compares each peer
+connection's RTT to its own EWMA baseline and needs a bandwidth-limitation corroboration first, and
+absolute RTT is not comparable between clients anyway. This detector adds only what no endpoint can
+see: that the affected clients are in the same place at the same time.
+
+- **Cells, not radii.** A geohash prefix is a stable O(1) key; "within N km" is order-dependent
+  clustering with no stable group identity, which a cooldown and a control group both need.
+- **Only the cell key is reported.** Coordinates never reach the issue payload, which matters because
+  payloads are archived into call summaries.
+- **`resolveClientLocation` is required** for this axis — there is no coordinate field in
+  `ClientSample`. Without it the detector warns at construction and finds nothing, instead of silently
+  reporting no findings forever.
+- **The confounder is stated, not hidden.** Geography correlates with SFU and TURN topology, so the
+  finding concludes `infrastructure` and refers to `SfuCongestionDetector` /
+  `TurnServerHealthDetector` rather than claiming an attribution the control group cannot support.
+
+New exports: `geohash`, `GEOHASH_CELL_SIZES`, `ClientLocation`, `ClientLocationResolver`.
+
+### Fixed: remote track resolution was one-shot
+
+`RemoteTrackResolver` linked tracks only on `*-track-added`, which fires once per track. A strategy
+that could not produce a publisher id at that instant lost the track **for its entire life**, even
+though `attachments` are replaced on every sample. An unresolvable outbound track never even reached
+`unconsumedOutboundTracks`, so it was invisible to `UnconsumedTrackDetector` too.
+
+Unresolved tracks are now held and retried on their own `*-track-updated` — exactly when new stats
+arrive for them — leaving the pending set on the first success or on removal. A linked track costs one
+`Set.has` per update. `resolver.pendingTrackCounts` exposes what is still waiting.
+
+This mattered most for strategies backed by an application's own mapping (a server-side
+`ssrc -> producerId` table), where population is inherently racy against sample arrival.
+
+### Remote track resolution is documented as standalone
+
+Resolution and mediasoup router observation are independent opt-ins: nothing in `RemoteTrackResolver`
+reads `ObservedMediasoupRouter` and vice versa. If your application already builds its own per-router
+report, set `createRemoteTrackResolver` and never call `createObservedMediasoupRouter(...)` — no
+`MediasoupRouterSample` is built and every resolver-dependent detector still works. See
+[Remote track resolution](README.md#resolution-stands-alone--you-do-not-need-router-observation).
+
 ### ⚠️ Breaking changes
 
 **`ObservedInboundRtp.bitrate` is now bits per second.** It was computed as

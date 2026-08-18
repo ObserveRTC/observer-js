@@ -276,3 +276,165 @@ describe('ClientPopulationIssueDetector', () => {
 		observer.close();
 	});
 });
+
+/**
+ * The `location` axis: is this symptom concentrated in one *place*?
+ *
+ * Same gate as the endpoint axes — relative risk against a control group — but the population is a
+ * geohash cell. What these pin down is that the cell key is what travels (never the coordinates), and
+ * that a misconfigured or un-locatable client is excluded rather than lumped into a fake place.
+ */
+
+const geoSample = (
+	clientId: string,
+	geo: { latitude: number, longitude: number } | undefined,
+	issues?: Issue[],
+	callId = 'call-1',
+): ClientSample => ({
+	callId,
+	clientId,
+	timestamp: 1000,
+	peerConnections: [ { peerConnectionId: `pc-${clientId}` } ],
+	clientIssues: issues,
+	attachments: geo ? { geo } : undefined,
+} as unknown as ClientSample);
+
+const BUDAPEST = { latitude: 47.4979, longitude: 19.0402 };
+const LONDON = { latitude: 51.5074, longitude: -0.1278 };
+
+const geoConfig = {
+	issueTypes: [ 'congestion' ],
+	groupBy: 'location' as const,
+	locationPrecision: 3,
+	resolveClientLocation: (client: { attachments?: Record<string, unknown> }) =>
+		client.attachments?.geo as { latitude: number, longitude: number } | undefined,
+	minPopulationSize: 6,
+	minAffectedClients: 4,
+	minControlSize: 6,
+	affectedRatioThreshold: 0.3,
+	minRelativeRisk: 3,
+};
+
+function geoPopulation(
+	observer: Observer,
+	prefix: string,
+	geo: { latitude: number, longitude: number } | undefined,
+	size: number,
+	affected: number,
+) {
+	for (let i = 0; i < size; i++) {
+		observer.accept(geoSample(
+			`${prefix}-${i}`,
+			geo,
+			i < affected ? [ raise('congestion', `${prefix}-${i}`) ] : undefined,
+			`call-${i % 3}`,
+		));
+	}
+}
+
+describe('ClientPopulationIssueDetector (location axis)', () => {
+	it('reports congestion concentrated in one geographic cell', () => {
+		const { observer, found } = newObserver();
+
+		observer.addObserverDetector('client-population-issue-detector', geoConfig);
+
+		geoPopulation(observer, 'hu', BUDAPEST, 6, 5);
+		geoPopulation(observer, 'uk', LONDON, 8, 1);
+
+		observer.update();
+
+		expect(found).toHaveLength(1);
+
+		const payload = payloadOf(found[0]);
+
+		expect(payload.axis).toBe('location');
+		expect(payload.affectedClients).toBe(5);
+		expect(payload.controlClients).toBe(8);
+		// Geography is a path story, not a client-build story.
+		expect(found[0].conclusion?.faultDomain).toBe('infrastructure');
+
+		observer.close();
+	});
+
+	// These payloads get archived into call summaries, so what leaves the detector has to be a place
+	// at the configured resolution — not a participant's position.
+	it('puts the cell key in the payload and never the coordinates', () => {
+		const { observer, found } = newObserver();
+
+		observer.addObserverDetector('client-population-issue-detector', geoConfig);
+
+		geoPopulation(observer, 'hu', BUDAPEST, 6, 5);
+		geoPopulation(observer, 'uk', LONDON, 8, 1);
+
+		observer.update();
+
+		const serialised = JSON.stringify(found[0]);
+
+		expect(payloadOf(found[0]).population).toBe('u2m');
+		expect(serialised).not.toContain('47.4979');
+		expect(serialised).not.toContain('19.0402');
+		expect(serialised).not.toContain('latitude');
+
+		observer.close();
+	});
+
+	// The control group has to work on this axis too: a fleet-wide problem is not a regional one, and
+	// naive share-based grouping would indict whichever region has the most users.
+	it('stays quiet when every region is equally affected', () => {
+		const { observer, found } = newObserver();
+
+		observer.addObserverDetector('client-population-issue-detector', geoConfig);
+
+		geoPopulation(observer, 'hu', BUDAPEST, 8, 6);
+		geoPopulation(observer, 'uk', LONDON, 8, 6);
+
+		observer.update();
+
+		expect(found).toHaveLength(0);
+
+		observer.close();
+	});
+
+	// A client whose location we cannot read is not in an "unknown" place — a bucket of every real
+	// region would have a meaningless rate, and leaving them in the control group dilutes it.
+	it('excludes clients whose location cannot be resolved from both groups', () => {
+		const { observer, found } = newObserver();
+
+		observer.addObserverDetector('client-population-issue-detector', geoConfig);
+
+		geoPopulation(observer, 'hu', BUDAPEST, 6, 5);
+		geoPopulation(observer, 'uk', LONDON, 8, 1);
+		// Eight unhappy clients with no coordinates: enough to change every ratio if they counted.
+		geoPopulation(observer, 'nowhere', undefined, 8, 8);
+
+		observer.update();
+
+		expect(found).toHaveLength(1);
+		expect(payloadOf(found[0]).clients).toBe(6);
+		expect(payloadOf(found[0]).controlClients).toBe(8);
+
+		observer.close();
+	});
+
+	// Silence must not be the reward for misconfiguration. Nothing can be detected without a resolver,
+	// so the detector says so at construction rather than reporting "no findings" forever.
+	it('warns and finds nothing when no resolveClientLocation was given', () => {
+		const { observer, found } = newObserver();
+		const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+		observer.addObserverDetector('client-population-issue-detector', {
+			...geoConfig,
+			resolveClientLocation: undefined,
+		});
+
+		geoPopulation(observer, 'hu', BUDAPEST, 6, 5);
+		geoPopulation(observer, 'uk', LONDON, 8, 1);
+
+		observer.update();
+
+		expect(found).toHaveLength(0);
+
+		warn.mockRestore();
+		observer.close();
+	});
+});

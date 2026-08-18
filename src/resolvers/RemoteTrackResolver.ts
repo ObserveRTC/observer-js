@@ -39,6 +39,24 @@ export class RemoteTrackResolver {
 	private readonly _publisherIdToOutboundTrack = new Map<string, ObservedOutboundTrack>();
 	private readonly _subscriberIdToInboundTrack = new Map<string, ObservedInboundTrack>();
 
+	/**
+	 * Tracks whose publisher id the strategy could not resolve **yet**.
+	 *
+	 * A track announces itself once, but its `attachments` are replaced on every sample, so a key that
+	 * is missing from the first sample can appear on the second — and a strategy backed by an
+	 * application's own mapping (a server-side `ssrc -> producerId` table, say) is inherently racy
+	 * against sample arrival. Resolving only at `*-track-added` meant losing those tracks for their
+	 * entire life, silently: an unresolvable outbound track never even reaches
+	 * `unconsumedOutboundTracks`, so it is invisible to `UnconsumedTrackDetector` too.
+	 *
+	 * So they wait here and are retried on their own `*-track-updated`, i.e. exactly when new stats
+	 * arrived for them. A track leaves on its first successful resolution or on removal, which makes
+	 * a linked track cost one `Set.has` per update and bounds these sets by the unresolved tracks
+	 * alive right now.
+	 */
+	private readonly _pendingInboundTracks = new Set<ObservedInboundTrack>();
+	private readonly _pendingOutboundTracks = new Set<ObservedOutboundTrack>();
+
 	public constructor(
 		public readonly observedCall: ObservedCall,
 		private readonly resolvers: RemoteTrackResolvers,
@@ -59,17 +77,38 @@ export class RemoteTrackResolver {
 			if (p.observedCall === this.observedCall) this._removeOutboundTrack(p.observedOutboundTrack);
 		};
 
+		// Retry, and only for what is actually waiting — see `_pendingInboundTracks`.
+		const onInboundUpdated = (p: ObserverEvents['inbound-track-updated'][0]) => {
+			if (p.observedCall !== this.observedCall) return;
+			if (this._pendingInboundTracks.has(p.observedInboundTrack)) this._addInboundTrack(p.observedInboundTrack);
+		};
+		const onOutboundUpdated = (p: ObserverEvents['outbound-track-updated'][0]) => {
+			if (p.observedCall !== this.observedCall) return;
+			if (this._pendingOutboundTracks.has(p.observedOutboundTrack)) this._addOutboundTrack(p.observedOutboundTrack);
+		};
+
 		observedCall.once('close', () => {
 			observer.off('inbound-track-added', onInboundAdded);
 			observer.off('inbound-track-removed', onInboundRemoved);
 			observer.off('outbound-track-added', onOutboundAdded);
 			observer.off('outbound-track-removed', onOutboundRemoved);
+			observer.off('inbound-track-updated', onInboundUpdated);
+			observer.off('outbound-track-updated', onOutboundUpdated);
+			this._pendingInboundTracks.clear();
+			this._pendingOutboundTracks.clear();
 		});
 
 		observer.on('inbound-track-added', onInboundAdded);
 		observer.on('inbound-track-removed', onInboundRemoved);
 		observer.on('outbound-track-added', onOutboundAdded);
 		observer.on('outbound-track-removed', onOutboundRemoved);
+		observer.on('inbound-track-updated', onInboundUpdated);
+		observer.on('outbound-track-updated', onOutboundUpdated);
+	}
+
+	/** Tracks still waiting for a resolvable publisher id. Diagnostics; normally both are empty. */
+	public get pendingTrackCounts(): { inbound: number, outbound: number } {
+		return { inbound: this._pendingInboundTracks.size, outbound: this._pendingOutboundTracks.size };
 	}
 
 	/** The published (outbound) track for a publisher id, if any. */
@@ -94,7 +133,13 @@ export class RemoteTrackResolver {
 	private _addInboundTrack(inboundTrack: ObservedInboundTrack) {
 		const publisherId = this.resolvers.resolveInboundTrackPublisherId(inboundTrack);
 
-		if (!publisherId) return;
+		if (!publisherId) {
+			this._pendingInboundTracks.add(inboundTrack);
+
+			return;
+		}
+
+		this._pendingInboundTracks.delete(inboundTrack);
 
 		const subscriberId = this.resolvers.resolveInboundTrackSubscriberId?.(inboundTrack);
 
@@ -113,6 +158,8 @@ export class RemoteTrackResolver {
 	}
 
 	private _removeInboundTrack(inboundTrack: ObservedInboundTrack) {
+		this._pendingInboundTracks.delete(inboundTrack);
+
 		// Use the stored link to unlink; no need to re-resolve the publisher id here.
 		const outboundTrack = inboundTrack.remoteOutboundTrack;
 
@@ -134,7 +181,13 @@ export class RemoteTrackResolver {
 	private _addOutboundTrack(outboundTrack: ObservedOutboundTrack) {
 		const publisherId = this.resolvers.resolveOutboundTrackPublisherId(outboundTrack);
 
-		if (!publisherId) return;
+		if (!publisherId) {
+			this._pendingOutboundTracks.add(outboundTrack);
+
+			return;
+		}
+
+		this._pendingOutboundTracks.delete(outboundTrack);
 
 		this._publisherIdToOutboundTrack.set(publisherId, outboundTrack);
 		// Unconsumed until a subscriber links below — a new publisher legitimately starts this way.
@@ -155,6 +208,8 @@ export class RemoteTrackResolver {
 	}
 
 	private _removeOutboundTrack(outboundTrack: ObservedOutboundTrack) {
+		this._pendingOutboundTracks.delete(outboundTrack);
+
 		const publisherId = this.resolvers.resolveOutboundTrackPublisherId(outboundTrack);
 
 		// Only clear the map entry if it still points at this track (guards republish races).

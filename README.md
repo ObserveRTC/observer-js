@@ -1114,9 +1114,10 @@ What each adds that no endpoint can know:
   reasons "clients in unrelated calls share only the infrastructure, so it must be us" — right for
   network symptoms, **wrong for endpoint ones**. `cpulimitation` across six unrelated calls is not an
   SFU event; CPU is owned by the endpoint, so what those endpoints share is a browser version or a
-  client release. Groups by `browser` / `engine` / `platform` / `operationSystem`, one axis per
-  instance. The gate is **relative risk**, not share: "30% of Chrome 141 is unhappy" means nothing if
-  30% of everyone is, and a share-based rule simply indicts whichever browser is most popular.
+  client release. Groups by `browser` / `engine` / `platform` / `operationSystem` / `location`, one
+  axis per instance. The gate is **relative risk**, not share: "30% of Chrome 141 is unhappy" means
+  nothing if 30% of everyone is, and a share-based rule simply indicts whichever browser is most
+  popular. See [the `location` axis](#grouping-by-place-the-location-axis) for the geographic form.
 - **`SfuCongestionDetector`** — *is congestion spiking across the fleet right now?* Counts distinct
   clients reporting congestion in fixed wall-clock buckets and compares each bucket against a
   median+MAD baseline of the ones before it. Buckets rather than update ticks on purpose: the tick is
@@ -1152,6 +1153,45 @@ observer.addObserverDetector('observer-concurrent-issue-detector', {
   issueTypes: [ 'ice-disconnected', 'ice-connection-failed', 'ice-transport-stalled' ],
 });
 ```
+
+### Grouping by place: the `location` axis
+
+If your clients report coordinates, `ClientPopulationIssueDetector` can group by **where they are**
+instead of what they run — which is the grouping network symptoms actually cluster by:
+
+```ts
+observer.addObserverDetector('client-population-issue-detector', {
+  issueTypes: [ 'congestion', 'ice-disconnected' ],
+  groupBy: 'location',
+  locationPrecision: 3,                       // geohash chars: 3 ~156 km, 4 ~39 km, 5 ~5 km
+  resolveClientLocation: (client) => client.attachments?.geo as { latitude: number, longitude: number },
+});
+```
+
+**The client still owns "RTT jumped".** client-monitor's `CongestionDetector` compares each peer
+connection's RTT against its own EWMA baseline and requires a bandwidth-limitation corroboration
+before raising `congestion`. Absolute RTT is not comparable between clients — someone 200 ms away is
+*always* 200 ms away, so the only signal is deviation from that client's own baseline, which is
+exactly what the client measures. The observer's contribution is the part no endpoint can see: that
+many of the affected clients are **in the same place at the same time**.
+
+Three things to know:
+
+- **Cells, not radii.** The population is a geohash prefix. "Within N km" is a clustering problem —
+  order-dependent, no stable group name, pairwise cost — and a detector needs the *same* group key on
+  every tick for its cooldown and control group to mean anything. The cost is that a cell boundary can
+  split two adjacent clients, which biases towards missing a finding rather than inventing one.
+- **Only the cell key is reported.** `payload.population` is the geohash; coordinates never enter the
+  issue. These payloads get archived into [call summaries](#call-summaries), so that matters.
+- **Geography is confounded with your topology.** The control group is "everyone outside this cell",
+  which cannot separate *"the path into this region degraded"* from *"the SFU serving this region
+  degraded"*. If a region maps largely onto one deployment, both hypotheses fit the same evidence —
+  so the finding concludes `infrastructure` and points you at `SfuCongestionDetector` /
+  `TurnServerHealthDetector`, which answer whether clients elsewhere on the same server also
+  degraded. It does not claim an attribution it cannot support.
+
+Coordinates are not in `ClientSample`, so `resolveClientLocation` is required; without it the detector
+logs a warning at construction and finds nothing, rather than quietly reporting no findings forever.
 
 ### Validators — one-shot structural checks
 
@@ -1527,6 +1567,56 @@ const observer = new Observer({
 
 For the mediasoup factory, the application puts `producerId` / `consumerId` (and optionally
 `direction`, `label`) into the track `attachments`.
+
+### Resolution stands alone — you do not need router observation
+
+Track resolution and [mediasoup router observation](#mediasoup-router-observation) are two
+**independent** opt-ins that happen to share a vendor name. Nothing in `RemoteTrackResolver` reads
+`ObservedMediasoupRouter`, and nothing in `ObservedMediasoupRouter` touches calls, clients or tracks.
+
+So if your application already builds its own per-router report and you only want the detectors that
+need publisher↔subscriber links, set `createRemoteTrackResolver` and simply never call
+`observer.createObservedMediasoupRouter(...)`. No `MediasoupRouterSample` is created, nothing
+accumulates, and these keep working:
+
+`UnconsumedTrackDetector`, `PublisherFaultCorroborationDetector`, `TrackDeliveryMismatchDetector`,
+`IssueFanOutDetector`, `RemoteTrackResolverValidator`, `SimulcastReceiverValidator`.
+
+### Backing a strategy with your own mapping
+
+The three resolvers are plain functions returning a link key, so they can read a table your own
+report already maintains rather than something the client attached. The only requirement is a key
+**visible on both sides**. SSRC is the useful one, because it needs no client cooperation at all —
+mediasoup knows each consumer's `rtpParameters.encodings[].ssrc` server-side, and the subscriber's
+inbound RTP reports the same value:
+
+```ts
+// your own table, filled where you already create consumers
+const ssrcToProducerId = new Map<number, string>();
+
+const observer = new Observer({
+  createRemoteTrackResolver: (observedCall) => new RemoteTrackResolver(observedCall, {
+    resolveOutboundTrackPublisherId: (out) => out.attachments?.producerId as string | undefined,
+    resolveInboundTrackPublisherId:  (inb) => {
+      const ssrc = inb.getInboundRtp()?.ssrc;
+
+      return ssrc === undefined ? undefined : ssrcToProducerId.get(ssrc);
+    },
+  }),
+});
+```
+
+> **A key that arrives late still links.** A track announces itself once, but its `attachments` are
+> replaced on every sample and a table like the one above is inherently racy against sample arrival.
+> Tracks whose key does not resolve at first sight are held and retried on their own
+> `*-track-updated`, i.e. exactly when new stats arrive for them — so a key that appears on the second
+> sample links then, rather than being lost for the track's lifetime. `resolver.pendingTrackCounts`
+> reports how many are still waiting; in a healthy setup it is `{ inbound: 0, outbound: 0 }`.
+
+If a strategy resolves *nothing* the failure is quiet — "no subscribers" and "no links resolved" look
+identical from the outside. That is what
+[`RemoteTrackResolverValidator`](#validators--one-shot-structural-checks) is for; run it once in
+staging after wiring up a custom strategy.
 
 ---
 
