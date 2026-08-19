@@ -47,17 +47,8 @@ jobs:
         shell: bash
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          # A prerelease version (e.g. 1.0.0-beta.3) cannot be published to "latest"; use its
-          # prerelease label (e.g. "beta") as the dist-tag. A stable version (1.0.0) -> "latest".
-          if [[ "$VERSION" == *-* ]]; then
-            PRE="${VERSION#*-}"     # beta.3
-            TAG="${PRE%%.*}"        # beta
-          else
-            TAG="latest"
-          fi
           echo "branch=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       # Skip (don't fail) if this exact version is already on npm — avoids a red build when a
@@ -75,11 +66,21 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # master -> publish to the version's dist-tag ("latest" for stable, e.g. "beta" for a prerelease).
+      # master -> always "latest", whatever the version looks like.
+      #
+      # master is the release line: whatever is on it is what `npm install @observertc/observer-js`
+      # should give you. The dist-tag is therefore a property of the *branch*, not of the version
+      # string — a prerelease version on master is still the current release.
+      #
+      # Note npm permits a prerelease version under "latest"; it is a convention that stops it, not a
+      # rule. The consequence is deliberate and worth being clear about: while `package.json` reads
+      # e.g. 1.0.0-beta.20, a plain `npm install` resolves to that beta. Publish prereleases you do
+      # *not* want installed by default from a branch other than master.
+      #
       # Auth is via OIDC (trusted publisher); provenance is attached automatically.
       - name: Publish
         if: steps.ctx.outputs.branch == 'master' && steps.published.outputs.exists == 'false'
-        run: npm publish --access public --ignore-scripts --tag "${{ steps.ctx.outputs.tag }}"
+        run: npm publish --access public --ignore-scripts --tag latest
 
       # develop -> publish a per-commit release candidate under a custom dist-tag.
       - name: Make snapshot version

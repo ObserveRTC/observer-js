@@ -160,6 +160,21 @@ Where a value is a description of your system rather than a preference, it now s
 should be your collector's actual sampling period, and several de-bounce fields count *ticks* rather
 than time, so what they mean depends on your sample rate.
 
+### Publishing: master always publishes to `latest`
+
+The dist-tag is now a property of the **branch**, not of the version string. Anything pushed to
+`master` publishes as `latest`, whether the version is stable or a prerelease.
+
+Previously the workflow derived the tag from the version — `1.0.0-beta.20` went to the `beta` tag and
+only a stable `1.0.0` reached `latest`. That left `npm install @observertc/observer-js` resolving to
+whatever was last released as stable rather than to the current release line.
+
+Worth being explicit about the consequence: npm *permits* a prerelease under `latest` — it is a
+convention that normally prevents it, not a rule — so while `package.json` reads `1.0.0-beta.20`, a
+plain `npm install` now resolves to that beta. Prereleases that should **not** be installed by default
+belong on a branch other than `master`; `develop` already publishes per-commit snapshots under their
+own dist-tag and is unaffected.
+
 ### ⚠️ Breaking changes
 
 **`ObservedInboundRtp.bitrate` is now bits per second.** It was computed as
