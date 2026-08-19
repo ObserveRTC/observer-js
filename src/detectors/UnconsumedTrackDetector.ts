@@ -8,13 +8,33 @@ export const UnconsumedTrackTypes = {
 
 export type UnconsumedTrackDetectorConfig = {
 
-	/** How long a track must stay unconsumed while sending before reporting (ms). Default `30_000`. */
+	/**
+	 * How long a track must stay unconsumed **while still sending** before it is reported (ms).
+	 * Default `30_000`.
+	 *
+	 * This is the main guard against a false alarm, because a gap between publishing and the first
+	 * subscription is completely normal at join time — and again after every renegotiation. Sensible
+	 * range `15_000`–`120_000`. Too low and you report every join; too high and you tolerate wasted
+	 * uplink for longer than you need to. Waste is not an outage, so err high.
+	 */
 	minUnconsumedDurationInMs: number;
 
-	/** Ignore tracks below this bitrate — a trickle isn't worth an alert (bps). Default `50_000`. */
+	/**
+	 * Ignore tracks sending below this bitrate (**bits per second**). Default `50_000` (50 kbps).
+	 *
+	 * The point of the detector is wasted bandwidth, and a track trickling keep-alive packets wastes
+	 * none worth an alert. Typical `20_000`–`100_000`: muted or paused tracks sit near zero, a real
+	 * video track is hundreds of kbps. Set it to `0` to report every unconsumed track regardless of
+	 * cost.
+	 */
 	minBitrate: number;
 
-	/** Re-arm time (ms) per track. Default `300_000`. */
+	/**
+	 * Re-arm time per track (ms). Default `300_000`.
+	 *
+	 * Long on purpose: an unconsumed track usually *stays* unconsumed, so a short cooldown means a
+	 * steady drip of the same finding for the life of the call. Typical `300_000`–`900_000`.
+	 */
 	cooldownMs: number;
 };
 

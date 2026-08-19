@@ -71,26 +71,62 @@ export type ClientPopulationIssueDetectorConfig = {
 	 */
 	includeVersion: boolean;
 
-	/** Minimum clients in a population before its rate means anything. Default `20`. */
+	/**
+	 * Clients in a population before its rate means anything. Default `20`.
+	 *
+	 * Higher than the other detectors' minimums on purpose: this one compares *rates*, and a rate over
+	 * five clients is not a rate. Sensible range `20`–`100`. On the `location` axis this is the field
+	 * most likely to silence the detector — a city-sized cell rarely holds twenty concurrent
+	 * participants, so reach for a coarser `locationPrecision` before lowering this.
+	 */
 	minPopulationSize: number;
 
-	/** Minimum affected clients in the population. Default `5`. */
+	/**
+	 * Affected clients required within the population. Default `5`.
+	 *
+	 * Checked independently of `affectedRatioThreshold`, so one unlucky user on a rare browser cannot
+	 * page anyone however striking the ratio looks. Sensible range `5`–`20`.
+	 */
 	minAffectedClients: number;
 
-	/** Share of the population that must be affected. Default `0.3`. */
+	/**
+	 * Share of the population that must be affected, `0`–`1`. Default `0.3`.
+	 *
+	 * Lower than the per-call thresholds deliberately: an issue hitting 30% of one browser version while
+	 * the rest of the fleet is clean is already a strong signal, and endpoint faults rarely affect
+	 * *everyone* on a build. Typical `0.2`–`0.5`. This is the weakest of the gates —
+	 * `minRelativeRisk` is what makes the finding mean anything.
+	 */
 	affectedRatioThreshold: number;
 
 	/**
 	 * How many times worse the suspect population must be than the rest of the fleet. Default `3`.
 	 *
-	 * This is the control, and it is what makes the finding mean anything. See the class description.
+	 * **This is the gate that makes the finding mean anything** — see the class description. Typical
+	 * `2`–`10`. At `2` you will see populations that are merely somewhat worse, which is often just a
+	 * different usage pattern; at `10` only stark, unambiguous concentrations survive. A spotless
+	 * control group yields `Infinity`, which clears any threshold, so the minimum-count gates above are
+	 * what stop that from being trivial.
 	 */
 	minRelativeRisk: number;
 
-	/** Minimum clients **outside** the suspect population before a comparison is possible. Default `20`. */
+	/**
+	 * Clients **outside** the suspect population before a comparison is possible. Default `20`.
+	 *
+	 * "Worse than everyone else" needs an everyone else. Sensible range `20`–`100`. Note the practical
+	 * consequence: a fleet that is overwhelmingly one browser can never have that browser reported,
+	 * because there is no control group left — which is honest, since at 95% Chrome you cannot separate a
+	 * Chrome fault from a fleet-wide one.
+	 */
 	minControlSize: number;
 
-	/** Re-arm time (ms) per (population, issue type). Default `300_000`. */
+	/**
+	 * Re-arm time per (population, issue type) in ms. Default `300_000`.
+	 *
+	 * Long by design: a bad client build is a condition lasting days, not an event, and the action it
+	 * prompts — ship a fix, roll back a version — is not one you take twice an hour. Typical
+	 * `300_000`–`3_600_000`.
+	 */
 	cooldownMs: number;
 };
 

@@ -20,22 +20,51 @@ export type CallConcurrentIssueDetectorConfig = {
 	 */
 	issueTypes: string[];
 
-	/** Minimum participants in the call before a ratio is meaningful. Default `3`. */
+	/**
+	 * Participants the call needs before a ratio means anything. Default `3`.
+	 *
+	 * In a 1:1 call "half the participants" is one person, which is a client problem and not a call
+	 * problem — `2` effectively disables the ratio gate. Raise it for large-meeting products where you
+	 * only care once a handful are affected.
+	 */
 	minClients: number;
 
-	/** Minimum distinct clients sharing the open issue. Default `3`. */
+	/**
+	 * Distinct clients that must share the issue. Default `3`.
+	 *
+	 * The absolute floor under `affectedRatioThreshold`, so a small call cannot clear a ratio with two
+	 * unlucky people. Sensible range `2`–`5`; `2` is the lowest that can still mean "more than one
+	 * participant", which is the whole premise.
+	 */
 	minAffectedClients: number;
 
-	/** Fraction of the call's participants that must share it. Default `0.5`. */
+	/**
+	 * Fraction of the call's participants that must share it, `0`–`1`. Default `0.5`.
+	 *
+	 * Typical `0.3`–`0.7`. Lower catches partial events — a subset on one SFU worker — at the cost of
+	 * firing on a few coincidentally unhappy participants; `1` demands literally everyone, which real
+	 * incidents rarely produce because someone always reconnects first.
+	 */
 	affectedRatioThreshold: number;
 
 	/**
-	 * When the onsets fall within this span (ms), the finding is escalated to `ISSUE_ONSET_BURST` —
-	 * they didn't just overlap, they started together. Default `2_000`.
+	 * Onsets falling within this span (ms) escalate the finding to `ISSUE_ONSET_BURST` — they did not
+	 * just overlap, they started together. Default `2_000`.
+	 *
+	 * Bound this by your sampling period, not below it: onsets are only known as accurately as clients
+	 * report them, so a window shorter than one sampling period can only fire by luck. Typical
+	 * `1_000`–`5_000`. Wider makes the escalation meaningless, since unrelated issues drift into the
+	 * same window.
 	 */
 	onsetBurstWindowInMs: number;
 
-	/** Re-arm time (ms) per issue type. Default `60_000`. */
+	/**
+	 * Re-arm time per issue type (ms). Default `60_000`.
+	 *
+	 * A shared event is one incident, not one per tick. Too low and a persistent problem raises an
+	 * issue every tick for as long as it lasts; too high and a genuinely new occurrence is swallowed
+	 * by the previous one's cooldown. Typical `30_000`–`300_000`.
+	 */
 	cooldownMs: number;
 };
 

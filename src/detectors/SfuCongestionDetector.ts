@@ -36,31 +36,85 @@ export type SfuCongestionDetectorReport = {
 }
 
 export type SfuCongestionDetectorConfig = {
-	// the client-issue types that, when raised, are considered "congestion" for this indicator
+
+	/**
+	 * Client issue types counted as "congestion" for this indicator. Default `[ 'congestion' ]`.
+	 *
+	 * Keep this narrow. Every type you add widens what counts as a congested client, and the whole
+	 * method rests on comparing *like with like* across time buckets — mixing in a type that appears
+	 * for unrelated reasons raises the baseline and buries the spike you are looking for.
+	 */
 	consumedClientIssueTypes: string[];
-	// the type the observer-issue would be raised with, if/when this indicator is wired to emit one
+
+	/** The `observer-issue` type raised when a bucket is judged congested. Default `'sfu-congestion'`. */
 	emittedObserverIssueType: string;
 
-	// the duration the client takes to send a sample; samplesSendingTimeInMs * 2 is the bucket
-	// duration, so every client gets a fair chance to report within one bucket
+	/**
+	 * How long your clients take to send a sample (ms). Default `10_000`.
+	 *
+	 * **Set this to your collector's actual sampling period** — it is a description of your clients,
+	 * not a tuning knob. The bucket is `samplesSendingTimeInMs * 2`, so every client gets a fair
+	 * chance to report at least once inside each bucket. Set it too short and clients that simply had
+	 * not reported yet look absent, so the ratio jumps around on sampling noise; too long and the
+	 * detector reacts slowly and averages a spike away.
+	 */
 	samplesSendingTimeInMs: number;
 
-	// how many completed buckets to keep as history (the candidate bucket plus its baseline)
+	/**
+	 * Completed buckets kept as history — the candidate plus its baseline. Default `30`.
+	 *
+	 * At the default bucket size this is ~10 minutes of baseline. Sensible range `10`–`60`. Longer is
+	 * more robust to a single odd bucket but slower to accept a genuinely changed normal (a growth
+	 * spurt, a new region coming online); shorter adapts quickly but lets a sustained problem become
+	 * the new baseline and stop being reported.
+	 */
 	historySize: number;
 
-	// no statistical judgement is made until at least this many buckets (baseline + candidate) exist
+	/**
+	 * Buckets required before any judgement is made. Default `5`.
+	 *
+	 * Below this the detector is silent, which is the point: a median and MAD over two buckets is not
+	 * a baseline. Costs `minHistorySize * samplesSendingTimeInMs * 2` of warm-up after start — about
+	 * 100 s at the defaults. Do not lower it to make a test fire faster; shorten the bucket instead.
+	 */
 	minHistorySize: number;
 
-	// the minimum number of distinct clients that must be congested in the candidate bucket
+	/**
+	 * Distinct congested clients required in the candidate bucket. Default `3`.
+	 *
+	 * The absolute floor beneath every ratio below, so that a tiny fleet cannot produce a finding: two
+	 * unhappy clients out of four is 50% and means nothing. Raise it on a large fleet where three
+	 * clients is always noise.
+	 */
 	minAffectedClients: number;
 
-	// the candidate's congested-client ratio must clear the baseline median by at least this much
+	/**
+	 * How far the candidate's congested-client **ratio** must exceed the baseline median, in absolute
+	 * terms (`0`–`1`). Default `0.05`, i.e. five percentage points.
+	 *
+	 * This is the practical-significance gate: it stops a statistically striking move from 0.5% to 2%
+	 * being reported as an event. Typical `0.03`–`0.15`.
+	 */
 	minAbsoluteRatioIncrease: number;
 
-	// the candidate's congested-client ratio must be at least this many times the baseline median
+	/**
+	 * How many times the baseline median the candidate ratio must reach. Default `2`.
+	 *
+	 * Multiplicative counterpart to the absolute gate — both must pass. Typical `1.5`–`3`. Below
+	 * `1.5` ordinary fluctuation qualifies; above ~`4` only near-total events do.
+	 */
 	minRelativeRatioIncrease: number;
 
-	// the candidate's robust z-score (median + MAD baseline) must be at least this high
+	/**
+	 * Robust z-score the candidate must reach against a median+MAD baseline. Default `3`.
+	 *
+	 * The statistical-significance gate. `3` is the conventional "clearly outside normal variation";
+	 * `2` is noticeably chattier, `4`–`5` only for very stable fleets. Median and MAD rather than mean
+	 * and standard deviation on purpose — a couple of past incidents in the history would inflate a
+	 * standard deviation enough to hide the next one. Note that a perfectly flat baseline gives
+	 * `MAD = 0`, where any increase scores `Infinity`; the two ratio gates above are what keep that
+	 * honest.
+	 */
 	robustZThreshold: number;
 }
 

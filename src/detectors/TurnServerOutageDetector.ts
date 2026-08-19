@@ -10,8 +10,11 @@ export const TurnServerOutageTypes = {
 export type TurnServerOutageDetectorConfig = {
 
 	/**
-	 * How many clients a server must have been carrying at its peak before its collapse means
-	 * anything. Below this, one or two people leaving looks like an outage. Default `5`.
+	 * Clients a server must have been carrying at its peak before its collapse means anything. Default
+	 * `5`.
+	 *
+	 * Below this, one or two people leaving looks like an outage. Sensible range `5`–`50`; the higher it
+	 * is the more confident the finding, and the more small deployments go unwatched.
 	 */
 	minClientsAtPeak: number;
 
@@ -22,8 +25,11 @@ export type TurnServerOutageDetectorConfig = {
 	lossRatioThreshold: number;
 
 	/**
-	 * Window (ms) the peak population is measured over. Long enough to span a real outage's onset,
-	 * short enough that yesterday's peak isn't held against today. Default `120_000`.
+	 * Window the peak population is measured over (ms). Default `120_000`.
+	 *
+	 * Long enough to span a real outage's onset, short enough that yesterday's peak is not held against
+	 * today. Typical `60_000`–`600_000`. Too long and the natural end of a busy period reads as a
+	 * collapse; too short and a gradual failure never shows a peak to fall from.
 	 */
 	peakWindowMs: number;
 
@@ -34,13 +40,30 @@ export type TurnServerOutageDetectorConfig = {
 	 */
 	requireControlGroup: boolean;
 
-	/** Minimum clients elsewhere before the control group is statistically worth anything. Default `5`. */
+	/**
+	 * Clients elsewhere before the control group is worth anything. Default `5`.
+	 *
+	 * If you run a single TURN server there is never a control group, so with `requireControlGroup: true`
+	 * this detector can never fire — which is correct rather than unfortunate: with one relay you cannot
+	 * distinguish "the relay died" from "everyone went home". Sensible range `5`–`20`.
+	 */
 	minControlGroupClients: number;
 
-	/** Fraction of the control group that must still be healthy. Default `0.7`. */
+	/**
+	 * Fraction of the control group that must still be healthy, `0`–`1`. Default `0.7`.
+	 *
+	 * The evidence that the rest of the world is fine. Typical `0.6`–`0.9`. Set it too high and a
+	 * concurrent unrelated problem elsewhere masks a real outage; too low and a fleet-wide network event
+	 * gets blamed on whichever server lost clients first.
+	 */
 	controlGroupHealthyRatio: number;
 
-	/** Consecutive ticks the condition must hold before raising. Default `2`. */
+	/**
+	 * Consecutive `observer.update()` ticks the condition must hold before raising. Default `2`.
+	 *
+	 * Counts ticks, not time. `1` will fire on a single tick where a batch of clients happened to be
+	 * between samples; `2`–`4` is the useful range for something this consequential to declare.
+	 */
 	consecutiveTicks: number;
 
 	/**

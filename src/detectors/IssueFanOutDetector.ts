@@ -26,16 +26,41 @@ export type IssueFanOutDetectorConfig = {
 	 */
 	issueTypes: string[];
 
-	/** Minimum receivers of the track before a ratio is meaningful. Default `3`. */
+	/**
+	 * Receivers a track needs before a ratio means anything. Default `3`.
+	 *
+	 * With two receivers, "60% affected" is one of them — which is the single-receiver case below, not
+	 * a fan-out. Sensible range `2`–`5`; in small calls a published track rarely has more than a couple
+	 * of subscribers, so raising this can silence the detector entirely.
+	 */
 	minReceivers: number;
 
-	/** Fraction of a track's receivers that must share the issue. Default `0.6`. */
+	/**
+	 * Fraction of a track's receivers that must share the issue, `0`–`1`. Default `0.6`.
+	 *
+	 * The higher this is, the more the finding points at the publisher rather than at the network
+	 * between: *everyone* receiving this track badly is hard to explain any other way. Typical
+	 * `0.5`–`0.8`. Below `0.5` you are reporting "some receivers", which usually means their own
+	 * last miles.
+	 */
 	affectedRatioThreshold: number;
 
-	/** Also report the "only one receiver is affected" case. Default `true`. */
+	/**
+	 * Also report when exactly one receiver is affected. Default `true`.
+	 *
+	 * Kept on because the finding is *useful and correctly weaker*: it is raised with a lower
+	 * confidence and the opposite conclusion — one unhappy receiver out of eight points at that
+	 * receiver, not at the publisher. Turn it off if you only want publisher-blaming findings and
+	 * treat single-receiver trouble as the client's own business.
+	 */
 	reportSingleReceiver: boolean;
 
-	/** Re-arm time (ms) per (track, issue type). Default `60_000`. */
+	/**
+	 * Re-arm time per (track, issue type) in ms. Default `60_000`.
+	 *
+	 * Per track, so a call with many bad publishers still reports each of them. Typical
+	 * `30_000`–`300_000`.
+	 */
 	cooldownMs: number;
 };
 

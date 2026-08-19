@@ -47,16 +47,41 @@ export type RemoteTrackResolverReportPayload = ({
 
 export type RemoteTrackResolverValidatorConfig = {
 
-	/** Participants a call needs before it can plausibly have publisher↔subscriber links. Default `2`. */
+	/**
+	 * Participants a call needs before it can plausibly have publisher↔subscriber links. Default `2`.
+	 *
+	 * A one-person call has nobody to subscribe to anyone, so counting it would dilute the ratio with
+	 * calls that *could not* have produced a link. `2` is the true minimum here and there is little
+	 * reason to raise it.
+	 */
 	minClients: number;
 
-	/** Inbound tracks that must be present in a call before it counts as a check. Default `2`. */
+	/**
+	 * Inbound tracks a call must have before it counts as a check. Default `2`.
+	 *
+	 * Same idea: no subscribed tracks means nothing to link. Sensible range `2`–`5`.
+	 */
 	minInboundTracks: number;
 
-	/** Share of inbound tracks that must be linked to conclude the resolver works. Default `0.5`. */
+	/**
+	 * Share of inbound tracks that must be linked to conclude the resolver works, `0`–`1`. Default
+	 * `0.5`.
+	 *
+	 * Deliberately lenient, because a partially-linked call is normal: tracks arrive before their
+	 * publisher is known, and simulcast layers or probing streams may have no publisher at all. The
+	 * question is "is this resolver wired up", not "is every track linked". Typical `0.3`–`0.7`. Raising
+	 * it toward `1` turns the check into a strictness audit and it will report failure on healthy
+	 * systems.
+	 */
 	linkedRatioThreshold: number;
 
-	/** Eligible calls to observe before concluding either way. One could be a race. Default `3`. */
+	/**
+	 * Eligible calls to observe before concluding either way. Default `3`.
+	 *
+	 * One call could be a race — every track happening to arrive before its publisher. Typical `3`–`10`.
+	 * Note that a low value makes a *pass* less trustworthy than a failure: linking nothing repeatedly is
+	 * conclusive, linking things once might be luck.
+	 */
 	minChecks: number;
 };
 

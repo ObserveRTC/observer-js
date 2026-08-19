@@ -59,13 +59,29 @@ export type CodecConsistencyValidatorConfig = {
 	 */
 	expected?: Partial<Record<'audio' | 'video', string>>;
 
-	/** Which kinds to inspect. Default both. */
+	/**
+	 * Which kinds to inspect. Default `[ 'audio', 'video' ]`.
+	 *
+	 * Narrow it when only one matters: audio codec splits are the ones that usually cost transcoding,
+	 * while video splits are more often a deliberate per-client decision.
+	 */
 	kinds: ('audio' | 'video')[];
 
-	/** Participants a call needs before disagreement is meaningful. Default `3`. */
+	/**
+	 * Participants a call needs before disagreement is meaningful. Default `3`.
+	 *
+	 * In a 1:1 call "the participants disagree" is two clients differing, which can be a legitimate
+	 * negotiation outcome rather than a fault. Sensible range `3`–`5`.
+	 */
 	minClients: number;
 
-	/** Calls to inspect before concluding. Default `3`. */
+	/**
+	 * Calls to inspect before concluding. Default `3`.
+	 *
+	 * A structural property of your negotiation, so a handful of calls is plenty — but one call could be
+	 * an unusual mix of participants. Typical `3`–`10`. Higher delays the verdict without adding much,
+	 * since the answer does not vary call to call.
+	 */
 	minChecks: number;
 };
 

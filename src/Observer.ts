@@ -59,8 +59,41 @@ export type CallAppDataFactory = (params: { callId: string, observer: Observer, 
 export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall, acceptCtx?: AcceptContext }) => Record<string, unknown>;
 
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
+
+	/**
+	 * Application-owned data for the observer itself. Never read or modified by the library.
+	 *
+	 * For per-call / per-client data prefer `createCallAppData` / `createClientAppData`, which run at
+	 * creation time and can see the `accept()` context.
+	 */
 	appData?: AppData,
+
+	/**
+	 * Close a client that has not produced a sample for this long (ms). Default `60_000`.
+	 *
+	 * This is the **liveness timeout for a participant**, so set it from your client's sampling
+	 * period, not from taste: a client sampling every 5 s needs several missed samples to look gone.
+	 * Sensible range `3x`–`10x` the sampling period; `60_000` suits the usual 2–10 s collectors.
+	 *
+	 * Too low and a client that merely paused (tab backgrounded, brief network drop) is closed and
+	 * then re-created as a *new* client, which restarts its detectors and splits one participant into
+	 * two in any summary. Too high and left participants linger, inflating `peak`, the denominators of
+	 * every ratio-based detector, and memory. `undefined` disables the timeout — then nothing closes
+	 * an abandoned client but your own `client.close()`.
+	 */
 	closeClientIfIdleForMs?: number,
+
+	/**
+	 * Close a call once it has had zero clients for this long (ms). Default `60_000`.
+	 *
+	 * The grace period exists so a brief empty moment — everyone reconnecting after a network blip,
+	 * the last participant refreshing — does not end the call and start a new one under the same
+	 * `callId`. Sensible range `10_000`–`300_000`.
+	 *
+	 * Too low splits one meeting into several calls, and each split emits its own `call-summary`. Too
+	 * high keeps dead calls in `observedCalls`, holding their detectors and summaries in memory.
+	 * `undefined` disables it: the call then lives until you call `call.close()`.
+	 */
 	closeCallIfEmptyForMs?: number,
 
 	/**
@@ -104,16 +137,83 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	 */
 	callSummary?: Partial<CallSummaryConfig> | null;
 
+	/**
+	 * Thresholds that mark a **received** track as degraded. Omitted (the default) means no track is
+	 * ever marked degraded — `inboundTrack.degraded` stays `false` and `degradationReasons` stays
+	 * empty, so this is opt-in and absence is *not* a clean bill of health.
+	 *
+	 * Each field is an **exclusive upper bound**: the reason is added when the measured value is
+	 * strictly greater. All are evaluated on every update and any number can fire at once;
+	 * `degradationReasons` lists the ones that did.
+	 *
+	 * These feed `CallHealthAggregator` and `outboundTrack.degradedRatio` (how many of a publisher's
+	 * receivers are unhappy), which is what `TrackDeliveryMismatchDetector` and
+	 * `PublisherFaultCorroborationDetector` read. They are **not** a substitute for client issues:
+	 * client-monitor already decides "this endpoint is in trouble" with hysteresis and multi-signal
+	 * confirmation. Treat these as a coarse per-track flag for cross-participant comparison, and keep
+	 * them loose enough that a single bad tick does not trip them.
+	 */
 	inboundTrackDegradationThresholds?: {
+
+		/**
+		 * Freezes counted **in one sampling period**, not since the start of the call. `1` means "any
+		 * freeze at all this tick", which is strict; `2`–`3` tolerates the odd frame hiccup.
+		 * Reason: `'freezes'`.
+		 */
 		deltaFreezeCount: number,
+
+		/**
+		 * Fraction of frames dropped, `0`–`1`. Typical `0.05`–`0.2`; below ~`0.02` you are inside
+		 * normal jitter for most decoders. Reason: `'frames-dropped'`.
+		 */
 		framesDroppedRatio: number,
+
+		/**
+		 * Jitter buffer delay in **ms**. Typical `150`–`500`: audio stays intelligible well past
+		 * `200`, while conversation turn-taking suffers beyond ~`400`. Reason:
+		 * `'jitter-buffer-delay'`.
+		 */
 		jitterBufferDelayInMs: number,
+
+		/**
+		 * Concealed (synthesised) audio samples as a fraction, `0`–`1`. Typical `0.05`–`0.15`; above
+		 * ~`0.1` is usually audible as robotic or clipped speech. Reason: `'concealment'`.
+		 */
 		concealmentRatio: number,
+
+		/**
+		 * Round-trip time in **ms**, as reported for this inbound stream. Typical `250`–`500`.
+		 * Remember this is absolute, not relative to the participant's own baseline — a genuinely
+		 * distant participant will sit permanently above any fixed bound, which is why "RTT got
+		 * worse" belongs to client-monitor and not here. Reason: `'rtt'`.
+		 */
 		rttInMs: number,
 	},
 
+	/**
+	 * Thresholds that mark a **published** track as degraded, from what the receivers report back.
+	 * Omitted (the default) means neither threshold-based reason can fire.
+	 *
+	 * Note two reasons are added regardless of this setting, because they need no threshold:
+	 * `quality-limited-<reason>` when the encoder reports a `qualityLimitationReason`, and
+	 * `no-packets-sent` when an unmuted track sent nothing in a sampling period.
+	 *
+	 * Also an **exclusive upper bound** per field, evaluated on every update.
+	 */
 	outboundTrackDegradationThresholds?: {
+
+		/**
+		 * Fraction of packets lost as reported by the remote end, `0`–`1`. Typical `0.02`–`0.1`;
+		 * anything under ~`0.01` is normal on the open internet and will fire constantly. Reason:
+		 * `'remote-fraction-lost'`.
+		 */
 		fractionLost: number,
+
+		/**
+		 * Round-trip time in **ms** as reported by the remote end. Typical `250`–`500`, and absolute
+		 * rather than baseline-relative — see the note on the inbound `rttInMs`. Reason:
+		 * `'remote-rtt'`.
+		 */
 		rttInMs: number,
 	},
 

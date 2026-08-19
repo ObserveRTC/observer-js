@@ -135,6 +135,31 @@ report, set `createRemoteTrackResolver` and never call `createObservedMediasoupR
 `MediasoupRouterSample` is built and every resolver-dependent detector still works. See
 [Remote track resolution](README.md#resolution-stands-alone--you-do-not-need-router-observation).
 
+### Every config field is documented for IntelliSense
+
+A pass over all fifteen `*Config` types plus `ObserverConfig`, so hovering a field in your editor
+tells you what it does, its **units**, its **default**, a **sensible range**, and what going too far in
+either direction costs you. No behaviour change.
+
+The substantive fixes:
+
+- **`SfuCongestionDetectorConfig` used `//` line comments**, which JSDoc tooling ignores entirely — the
+  whole type hovered with nothing at all. Converted, with defaults and ranges added.
+- **`ObserverConfig.inboundTrackDegradationThresholds` / `outboundTrackDegradationThresholds` had no
+  documentation of any kind.** Each threshold now states its unit, that it is an *exclusive* upper
+  bound, the `degradationReasons` string it produces, and a typical range. Also noted: absence is not a
+  clean bill of health — with the thresholds unset no track is ever marked degraded — and the two
+  reasons (`quality-limited-*`, `no-packets-sent`) that fire regardless of any threshold.
+- **`closeClientIfIdleForMs` / `closeCallIfEmptyForMs` / `appData` were undocumented.** These are the
+  first fields anyone sets and their failure modes are not obvious: too low a client timeout re-creates a
+  paused participant as a *new* client, restarting its detectors and splitting one person into two in
+  any summary; too low a call timeout splits one meeting into several calls, each emitting its own
+  `call-summary`.
+
+Where a value is a description of your system rather than a preference, it now says so — `samplesSendingTimeInMs`
+should be your collector's actual sampling period, and several de-bounce fields count *ticks* rather
+than time, so what they mean depends on your sample rate.
+
 ### ⚠️ Breaking changes
 
 **`ObservedInboundRtp.bitrate` is now bits per second.** It was computed as

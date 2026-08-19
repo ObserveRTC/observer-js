@@ -31,10 +31,22 @@ export type PublisherFaultCorroborationDetectorConfig = {
 	 */
 	receiverIssueTypes: string[];
 
-	/** Minimum subscribers of the track that must be complaining. Default `2`. */
+	/**
+	 * Subscribers of the track that must be complaining at the same time. Default `2`.
+	 *
+	 * `1` still yields a genuine two-sided corroboration — publisher and one receiver agreeing is
+	 * already more than either says alone — but `2` rules out the case where a single receiver's own
+	 * downlink is at fault and merely coincides with the publisher's complaint. Sensible range `1`–`3`;
+	 * higher mostly costs you findings in small calls, where a track may only have two subscribers.
+	 */
 	minAffectedReceivers: number;
 
-	/** Re-arm time (ms) per published track. Default `60_000`. */
+	/**
+	 * Re-arm time per published track (ms). Default `60_000`.
+	 *
+	 * Typical `30_000`–`300_000`. This detector raises the highest-confidence finding in the library,
+	 * so it is the one you least want repeating every tick.
+	 */
 	cooldownMs: number;
 };
 

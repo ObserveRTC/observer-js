@@ -9,23 +9,51 @@ export const TurnServerHealthTypes = {
 
 export type TurnServerHealthDetectorConfig = {
 
-	/** Minimum clients on a server before a ratio is meaningful. Default `5`. */
+	/**
+	 * Clients a server must be carrying before its ratio means anything. Default `5`.
+	 *
+	 * With two relayed clients, "half are degraded" is one person having a bad time. Sensible range
+	 * `5`–`20`; raise it if you run many small TURN deployments, since each needs enough traffic to be
+	 * measurable on its own.
+	 */
 	minClientsPerServer: number;
 
-	/** Fraction of a server's clients that must have an open issue. Default `0.5`. */
+	/**
+	 * Fraction of a server's clients that must have an open issue, `0`–`1`. Default `0.5`.
+	 *
+	 * Typical `0.4`–`0.7`. Remember each finding also carries the *other* servers' ratios, so the
+	 * threshold is not doing the comparison on its own — a server at 50% next to peers at 45% reads very
+	 * differently from one next to peers at 3%. Below `0.3` you will report servers that are merely
+	 * carrying unlucky clients.
+	 */
 	degradedRatioThreshold: number;
 
 	/**
-	 * Which client issue types count as "in trouble". Empty (default) means **any** open issue —
-	 * appropriate here, because the question is not *what* is wrong with each client but whether
-	 * trouble clusters on one relay.
+	 * Which client issue types count as "in trouble". Empty (the default) means **any** open issue.
+	 *
+	 * The permissive default is deliberate and unusual for this library: the question is not *what* is
+	 * wrong with each client but whether trouble clusters on one relay, and a relay problem shows up as
+	 * whatever symptom each client happens to notice first. Narrow it to network types
+	 * (`congestion`, `ice-disconnected`) if endpoint issues like `cpulimitation` are common enough in
+	 * your fleet to blur the comparison between servers.
 	 */
 	issueTypes: string[];
 
-	/** Consecutive ticks the condition must hold before raising. Default `2`. */
+	/**
+	 * Consecutive `observer.update()` ticks the condition must hold before raising. Default `2`.
+	 *
+	 * The de-bounce. `1` reacts immediately and will fire on a single tick where several clients
+	 * happened to be mid-reconnect; `2`–`3` costs a tick or two of delay and removes most of that.
+	 * Note this counts *ticks*, not time, so how long it actually waits depends on your sample rate.
+	 */
 	consecutiveTicks: number;
 
-	/** Re-arm time (ms) before raising again for the same server. Default `60_000`. */
+	/**
+	 * Re-arm time per server (ms). Default `60_000`.
+	 *
+	 * Shorter than the outage detector's, because degradation is a condition you may want re-reported as
+	 * it persists or worsens, not a single event. Typical `60_000`–`300_000`.
+	 */
 	cooldownMs: number;
 };
 

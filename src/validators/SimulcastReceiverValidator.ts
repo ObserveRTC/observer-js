@@ -48,22 +48,62 @@ export type SimulcastReceiverReportPayload = ({
 
 export type SimulcastReceiverValidatorConfig = {
 
-	/** Minimum receivers of a published track before the comparison means anything. */
+	/**
+	 * Receivers a published track needs before the comparison means anything. Default `3`.
+	 *
+	 * The question is whether *one* receiver drags *the others* down, which needs at least one other to
+	 * be dragged — so `3` gives a worst receiver plus two to compare against. `2` is the technical
+	 * minimum but makes "median of the others" a single number. Sensible range `3`–`5`.
+	 */
 	minReceivers: number;
 
-	/** How long a track's bitrates are correlated over (ms). */
+	/**
+	 * How long bitrates are correlated over (ms). Default `10_000`.
+	 *
+	 * Long enough to contain a real adaptation response — the publisher's encoder reacting to a
+	 * bandwidth estimate takes seconds, not milliseconds. Typical `10_000`–`30_000`. Too short and you
+	 * catch transient jitter rather than a sustained relationship; too long and a genuine change is
+	 * averaged out by the healthy period around it.
+	 */
 	windowMs: number;
 
-	/** Samples needed inside the window before it can be judged. */
+	/**
+	 * Samples needed inside the window before it can be judged. Default `5`.
+	 *
+	 * A correlation over two or three points is meaningless. Combined with `windowMs` this implies a
+	 * sampling period: 5 samples in 10 s needs clients reporting at least every ~2 s. If your collector
+	 * is slower, widen `windowMs` rather than lowering this.
+	 */
 	minSamples: number;
 
-	/** The worst receiver must be at most this share of the median, or there is nothing to be dragged by. */
+	/**
+	 * The worst receiver must be at most this share of the median receiver, `0`–`1`. Default `0.5`.
+	 *
+	 * The precondition, not the finding: unless somebody is genuinely doing much worse than the rest,
+	 * there is nothing for the publisher to be dragged *by* and the check has nothing to look at.
+	 * Typical `0.4`–`0.7`. Higher makes the check run more often on weaker evidence; lower means it
+	 * rarely finds a qualifying situation at all.
+	 */
 	outlierRatioThreshold: number;
 
-	/** How closely the publisher must follow the worst receiver to count as dragged. */
+	/**
+	 * How closely the publisher must track the worst receiver to count as dragged, `0`–`1`. Default
+	 * `0.8`.
+	 *
+	 * This is the finding: the publisher sending at ≥80% of the *worst* receiver's rate means it has
+	 * collapsed to the lowest common denominator instead of serving everyone else properly. Typical
+	 * `0.7`–`0.9`. Toward `1` you only catch total collapse; below ~`0.6` normal encoder behaviour can
+	 * look like dragging.
+	 */
 	trackingRatioThreshold: number;
 
-	/** Clean checks required before concluding per-receiver adaptation. One could be luck. */
+	/**
+	 * Clean checks required before concluding per-receiver adaptation works. Default `3`.
+	 *
+	 * One clean check could be luck — the qualifying moment might simply not have been bad enough. This
+	 * is what stops a lucky sample from being reported as a pass, so raising it strengthens the verdict
+	 * at the cost of taking longer to reach one. Typical `3`–`10`.
+	 */
 	minChecks: number;
 };
 

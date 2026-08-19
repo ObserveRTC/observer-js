@@ -3,16 +3,46 @@ import { pageHinkley, mannKendallVerdict, type PageHinkleyResult, type MannKenda
 export type TrendTesterConfig = {
 
 	/**
-	 * How many of the most recent values to keep. The one knob that controls how far back "trend"
-	 * looks, for both tests — there is deliberately no separate window per test.
+	 * How many of the most recent values to keep. Default `30`, floored at `2`.
+	 *
+	 * The one knob controlling how far back "trend" looks, for both tests — there is deliberately no
+	 * separate window per test. This counts *samples*, so the time it spans depends on how often you
+	 * push. Mann-Kendall needs roughly 8–10 points before its significance test is worth anything, so
+	 * below ~`10` it will mostly answer `no-trend`. Typical `20`–`60`: long enough for a stable
+	 * baseline, short enough that a sustained change eventually becomes the new normal instead of being
+	 * flagged forever.
 	 */
 	size?: number;
 
-	/** Page-Hinkley's drift tolerance and detection threshold — see {@link pageHinkley}. */
+	/**
+	 * Page-Hinkley's **drift tolerance** — change smaller than this is treated as noise and never
+	 * accumulated. Default `0`. See {@link pageHinkley}.
+	 *
+	 * Expressed in the units of whatever you push, so there is no universally good value: for RTT in ms
+	 * a few ms is a reasonable tolerance. The default `0` accumulates *every* deviation, which is the
+	 * most sensitive setting. Too low and ordinary fluctuation accumulates into a false step change; too
+	 * high and a real but gradual shift never accumulates at all.
+	 */
 	pageHinkleyDelta?: number;
+
+	/**
+	 * Page-Hinkley's **detection threshold** — how much accumulated drift counts as a step change.
+	 * Default `50`. See {@link pageHinkley}.
+	 *
+	 * Also in your units, and the direct sensitivity control: lower detects smaller or earlier steps and
+	 * false-positives more; higher waits for unmistakable ones. Worth tuning against a recorded series
+	 * rather than by intuition, because the right value depends entirely on the scale and noisiness of
+	 * the metric you feed it.
+	 */
 	pageHinkleyLambda?: number;
 
-	/** Mann-Kendall's significance level — see {@link mannKendallVerdict}. */
+	/**
+	 * Mann-Kendall's significance level. Default `0.05`. See {@link mannKendallVerdict}.
+	 *
+	 * Conventional values are `0.01`, `0.05` and `0.1`. This is the probability of claiming a monotonic
+	 * trend that is not really there: `0.01` is stricter and slower to call a trend, `0.1` more
+	 * sensitive and noisier.
+	 */
 	mannKendallAlpha?: number;
 };
 

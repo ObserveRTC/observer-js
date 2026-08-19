@@ -25,19 +25,39 @@ export const TrackDeliveryMismatchTypes = {
 
 export type TrackDeliveryMismatchDetectorConfig = {
 
-	/** The receiver-side issue type meaning "no media arriving". Default `'dry-inbound-track'`. */
+	/**
+	 * The receiver-side issue type meaning "no media arriving". Default `'dry-inbound-track'`, which is
+	 * what client-monitor-js raises. Only change it if you raise your own equivalent.
+	 */
 	dryInboundIssueType: string;
 
-	/** The publisher-side issue type meaning "not producing". Default `'dry-outbound-track'`. */
+	/**
+	 * The publisher-side issue type meaning "not producing". Default `'dry-outbound-track'`, as raised
+	 * by client-monitor-js. The pairing of these two types is the whole detector: their **disagreement**
+	 * is the finding.
+	 */
 	dryOutboundIssueType: string;
 
-	/** Minimum subscribers before "all of them" means anything. Default `2`. */
+	/**
+	 * Subscribers required before "all of them" means anything. Default `2`.
+	 *
+	 * With one subscriber, "every receiver is dry" is a single client's report and carries no more
+	 * weight than the client issue already does. Sensible range `2`–`4`.
+	 */
 	minReceivers: number;
 
-	/** Fraction of subscribers that must be dry to call it a whole-track delivery failure. Default `1`. */
+	/**
+	 * Fraction of subscribers that must be dry to call it a whole-track delivery failure. Default `1`.
+	 *
+	 * `1` — literally all of them — on purpose. The inference here is sharp: the publisher says it is
+	 * sending and *every* receiver says nothing arrives, so the fault is between them, in the SFU's
+	 * forwarding. Lowering it to `0.8` admits mixed evidence, where some receivers do get the media, and
+	 * the conclusion no longer follows: that is a per-receiver problem and `IssueFanOutDetector`'s
+	 * question. Do not lower it without deciding what the finding then means.
+	 */
 	allReceiversRatio: number;
 
-	/** Re-arm time (ms) per (track, verdict). Default `60_000`. */
+	/** Re-arm time per (track, verdict) in ms. Default `60_000`. Typical `30_000`–`300_000`. */
 	cooldownMs: number;
 
 };

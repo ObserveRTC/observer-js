@@ -33,13 +33,35 @@ export type CallSummaryConfig = {
 	 */
 	include: CallSummarySection[];
 
-	/** Fold arbitrary state in from any call-scoped event. See {@link CallSummaryEnrichers}. */
+	/**
+	 * Fold arbitrary state in from any call-scoped event, into `summary.attachments`. See
+	 * {@link CallSummaryEnrichers}.
+	 *
+	 * Each enricher runs on **every** occurrence of its event, for its own call, so prefer the
+	 * low-frequency lifecycle events (`client-joined`, `call-issue`) over `client-updated`, which fires
+	 * once per sample per client. Keep them cheap and side-effect free: an enricher that throws is logged
+	 * and skipped rather than allowed to disturb the call, but one that is slow is on the ingestion path.
+	 */
 	enrich?: CallSummaryEnrichers;
 
-	/** Cap on the retained issue log. Default `500`. See the note on truncation. */
+	/**
+	 * Cap on retained issues. Default `500`.
+	 *
+	 * A bound on memory per call, so scale it by how long your calls run and how noisy they are, not by
+	 * taste — a two-hour call with a struggling participant can raise hundreds. Past the cap issues are
+	 * dropped and `summary.truncated.issues` counts them, so the real total stays recoverable as
+	 * `issues.length + (truncated?.issues ?? 0)`. `0` collects the count only, keeping no issue objects.
+	 */
 	maxIssues: number;
 
-	/** Cap on retained client ids. Default `10_000`. */
+	/**
+	 * Cap on retained client ids. Default `10_000`.
+	 *
+	 * High because the elements are short strings and the usual reason to read a summary is *who was in
+	 * this call*. It exists so a webinar-scale room cannot grow the summary without limit. Overflow is
+	 * counted in `summary.truncated.clientIds`; `joined`, `left` and `peak` are unaffected by the cap,
+	 * since they are counters rather than a list.
+	 */
 	maxClientIds: number;
 };
 

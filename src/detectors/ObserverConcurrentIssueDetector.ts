@@ -23,7 +23,13 @@ export type ObserverConcurrentIssueDetectorConfig = {
 	 */
 	issueTypes: string[];
 
-	/** Minimum distinct clients sharing the open issue. Default `3`. */
+	/**
+	 * Distinct clients that must share the open issue. Default `3`.
+	 *
+	 * Absolute, deliberately — see `affectedCallRatioThreshold` for why no client *ratio* exists at
+	 * this scope. Sensible range `3`–`10`; scale it with fleet size, since three clients is a real
+	 * signal across five calls and background noise across five hundred.
+	 */
 	minAffectedClients: number;
 
 	/**
@@ -50,12 +56,22 @@ export type ObserverConcurrentIssueDetectorConfig = {
 	affectedCallRatioThreshold: number;
 
 	/**
-	 * When the onsets fall within this span (ms), the finding is escalated to
-	 * `CROSS_CALL_ISSUE_ONSET_BURST`. Default `2_000`.
+	 * Onsets falling within this span (ms) escalate the finding to `CROSS_CALL_ISSUE_ONSET_BURST`.
+	 * Default `2_000`.
+	 *
+	 * This is the strongest evidence the detector produces: independent calls starting to fail *at the
+	 * same instant* has no explanation other than something they share. Keep it at or above your
+	 * sampling period — onsets are only as precise as clients report them — and no wider than a few
+	 * seconds, or unrelated failures drift into the same window. Typical `1_000`–`5_000`.
 	 */
 	onsetBurstWindowInMs: number;
 
-	/** Re-arm time (ms) per issue type. Default `60_000`. */
+	/**
+	 * Re-arm time per issue type (ms). Default `60_000`.
+	 *
+	 * Typical `60_000`–`600_000`. A fleet-wide event is one incident: without a cooldown a sustained
+	 * outage would raise an issue on every tick for its whole duration.
+	 */
 	cooldownMs: number;
 };
 
