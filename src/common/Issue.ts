@@ -5,8 +5,9 @@ import type { IssueConclusion } from '../detectors/IssueConclusion';
  *
  * ### Why this is not `ClientIssue`
  *
- * `ClientIssue` is a **wire** type: it arrives inside a `ClientSample`, so its `payload` has to be a
- * string. Server-raised findings were reusing it, which forced every detector to `JSON.stringify` a
+ * `ClientIssue` is a **wire** type: it arrives inside a `ClientSample`, so its `payload` is bound to
+ * what the schema can carry — a record of primitives since schema 3.5.0, a JSON string on samples
+ * from earlier clients. Server-raised findings were reusing it, which forced every detector to `JSON.stringify` a
  * perfectly good object on the way out and every handler to `JSON.parse` it back on the way in —
  * paying serialisation on a path where nothing is ever serialised, and losing type information in
  * both directions. These go straight to an in-process handler, so they carry the object.

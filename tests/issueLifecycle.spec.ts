@@ -4,7 +4,7 @@ import { CallConcurrentIssueDetector, CallConcurrentIssueTypes, CallConcurrentIs
 import { ObserverConcurrentIssueDetector, ObserverConcurrentIssueTypes, ObserverConcurrentIssueDetectorConfig } from '../src/detectors/ObserverConcurrentIssueDetector';
 import { IssueFanOutDetector, IssueFanOutTypes, IssueFanOutDetectorConfig } from '../src/detectors/IssueFanOutDetector';
 import type { ResolvedActiveClientIssue } from '../src/issues/ActiveClientIssue';
-import { makeSample } from './helpers/samples';
+import { legacyPayload, makeSample } from './helpers/samples';
 import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 // Each detector fills in its own defaults for whatever a partial config omits, so an empty object is
@@ -25,14 +25,14 @@ const defaultCallDetectorsConfig: {
 
 const PRODUCER = 'P';
 
-/** A raise entry as client-monitor-js >= 4.6.0 puts it on the wire. */
+/** A raise entry as pre-3.5.0 client-monitor-js (>= 4.6.0) puts it on the wire: a JSON string payload. */
 function raise(type: string, key: string, payload: Record<string, unknown> = {}, timestamp = Date.now()) {
-	return { type, key, payload: JSON.stringify(payload), timestamp };
+	return { type, key, payload: legacyPayload(payload), timestamp };
 }
 
 /** The `<type>-resolved` companion sharing the same key. */
 function resolve(type: string, key: string, payload: Record<string, unknown> = {}, timestamp = Date.now()) {
-	return { type: `${type}-resolved`, key, payload: JSON.stringify(payload), timestamp };
+	return { type: `${type}-resolved`, key, payload: legacyPayload(payload), timestamp };
 }
 
 function issueSample(clientId: string, timestamp: number, clientIssues: ReturnType<typeof raise>[]) {
@@ -80,6 +80,35 @@ describe('client issue lifecycle', () => {
 		expect(resolved[0].durationInMs).toBe(4200);
 		expect(resolved[0].comment).toBe('recovered');
 		expect(resolved[0].resolvedBy).toBe('client');
+
+		observer.close();
+	});
+
+	it('handles schema 3.5.0 record payloads exactly like the pre-3.5.0 string generation', () => {
+		const observer = newObserver();
+		const resolved: ResolvedActiveClientIssue[] = [];
+
+		observer.on('client-issue-resolved', ({ resolvedIssue }) => resolved.push(resolvedIssue));
+
+		// A 3.5.0 client ships the payload as a record — no JSON string anywhere.
+		observer.accept(issueSample('B', 1000, [
+			{ type: 'congestion', key: 'k1', payload: { peerConnectionId: 'pcB' }, timestamp: 1000 },
+		]));
+
+		const client = clientOf(observer, 'B')!;
+		const active = client.activeIssues.get('k1')!;
+
+		expect(client.activeIssues.size).toBe(1);
+		expect(active.peerConnectionId).toBe('pcB');
+		expect(active.payload).toEqual({ peerConnectionId: 'pcB' });
+
+		observer.accept(issueSample('B', 2000, [
+			{ type: 'congestion-resolved', key: 'k1', payload: { raisedAt: 1000, durationInMs: 4200 }, timestamp: 5200 },
+		]));
+
+		expect(client.activeIssues.size).toBe(0);
+		expect(resolved).toHaveLength(1);
+		expect(resolved[0].durationInMs).toBe(4200);
 
 		observer.close();
 	});

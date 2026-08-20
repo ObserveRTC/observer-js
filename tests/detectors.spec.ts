@@ -2,7 +2,7 @@ import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import { CallHealthAggregator } from '../src/utils/CallHealthAggregator';
 import { TurnServerHealthDetector, TurnServerHealthTypes, TurnServerHealthDetectorConfig } from '../src/detectors/TurnServerHealthDetector';
-import { makeSample, type InboundSpec } from './helpers/samples';
+import { legacyPayload, makeSample, type InboundSpec } from './helpers/samples';
 import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 // `TurnServerHealthDetector` fills in its own defaults for whatever a partial config omits, so an
@@ -12,8 +12,9 @@ const defaultObserverDetectorsConfig: { turnServerHealthDetector: Partial<TurnSe
 	turnServerHealthDetector: {},
 };
 
+/** A raise entry as pre-3.5.0 clients put it on the wire: a JSON string payload. */
 const raise = (type: string, key: string, payload: Record<string, unknown>, timestamp: number) =>
-	({ type, key, payload: JSON.stringify(payload), timestamp });
+	({ type, key, payload: legacyPayload(payload), timestamp });
 
 
 function newObserver() {
@@ -174,7 +175,7 @@ describe('TurnServerHealthDetector (observer level, issue-driven)', () => {
 
 		for (const id of ids) {
 			observer.accept(relaySample(id, 3000, badUrl, [
-				{ type: 'congestion-resolved', key: `k-${id}`, payload: JSON.stringify({ raisedAt: 2000 }), timestamp: 3000 },
+				{ type: 'congestion-resolved', key: `k-${id}`, payload: legacyPayload({ raisedAt: 2000 }), timestamp: 3000 },
 			]));
 		}
 		observer.update();

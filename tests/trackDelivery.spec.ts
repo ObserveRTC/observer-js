@@ -2,13 +2,14 @@ import { Observer } from '../src/Observer';
 import { createDefaultMediasoupRemoteTrackResolverFactory } from '../src/resolvers/RemoteTrackResolverFactories';
 import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchTypes } from '../src/detectors/TrackDeliveryMismatchDetector';
 import { UnconsumedTrackDetector, UnconsumedTrackTypes } from '../src/detectors/UnconsumedTrackDetector';
-import { makeSample } from './helpers/samples';
+import { legacyPayload, makeSample } from './helpers/samples';
 import { payloadOf, type CollectedIssue } from './helpers/issues';
 
 const PRODUCER = 'P';
 
+/** A raise entry as pre-3.5.0 clients put it on the wire: a JSON string payload. */
 const raise = (type: string, key: string, payload: Record<string, unknown>, timestamp: number) =>
-	({ type, key, payload: JSON.stringify(payload), timestamp });
+	({ type, key, payload: legacyPayload(payload), timestamp });
 
 function newObserver(withResolver = true) {
 	const observer = new Observer({

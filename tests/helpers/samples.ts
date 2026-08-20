@@ -1,4 +1,21 @@
 import { ClientSample, PeerConnectionSample, InboundRtpStats, OutboundRtpStats } from '../../src/schema/ClientSample';
+import type { ClientEvent, ClientIssue } from '../../src/schema/ClientSample';
+
+/**
+ * A payload of either wire generation: schema 3.5.0 carries a record, samples from clients on
+ * earlier schema versions carry the same payload serialised as a JSON string. The observer accepts
+ * both at runtime, so the specs feed both.
+ */
+export type WirePayload = ClientEvent['payload'] | string;
+
+/**
+ * A pre-3.5.0 payload, exactly as older clients put it on the wire. The cast is deliberate: the
+ * 3.5.0 type says record, the old wire says string, and the back-compat path is what these specs
+ * exercise with it.
+ */
+export function legacyPayload(payload: Record<string, unknown>): ClientIssue['payload'] {
+	return JSON.stringify(payload) as unknown as ClientIssue['payload'];
+}
 
 let _ts = 1_700_000_000_000;
 
@@ -87,7 +104,7 @@ export type SampleSpec = {
 	clientId?: string,
 	timestamp?: number,
 	attachments?: Record<string, unknown>,
-	clientEvents?: { type: string, timestamp?: number, payload?: string }[],
+	clientEvents?: { type: string, timestamp?: number, payload?: WirePayload }[],
 	peerConnections?: PeerConnectionSpec[],
 };
 
@@ -214,7 +231,7 @@ export function makeSample(spec: SampleSpec = {}): ClientSample {
 		callId: spec.callId ?? 'call-1',
 		clientId: spec.clientId ?? 'client-1',
 		attachments: spec.attachments,
-		clientEvents: spec.clientEvents?.map((e) => ({ type: e.type, timestamp: e.timestamp ?? timestamp, payload: e.payload })),
+		clientEvents: spec.clientEvents?.map((e) => ({ type: e.type, timestamp: e.timestamp ?? timestamp, payload: e.payload as ClientEvent['payload'] })),
 		peerConnections: (spec.peerConnections ?? []).map((pc) => buildPeerConnection(pc, timestamp)),
 	};
 }

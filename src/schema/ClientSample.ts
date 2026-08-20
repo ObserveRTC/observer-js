@@ -1,4 +1,4 @@
-export const schemaVersion = '3.0.0';
+export const schemaVersion = '3.5.0';
 
 /**
 * The WebRTC app provided custom stats payload
@@ -13,7 +13,7 @@ export type ExtensionStat = {
 	/**
 	* The payload of the extension stats the custom app provides
 	*/
-	payload?: string;
+	payload?: Record<string, boolean | string | number>;
 
 }
 
@@ -28,9 +28,9 @@ export type ClientMetaData = {
 	type: string;
 
 	/**
-	* The value associated with the event, if applicable.
+	* The attributes of the meta data entry, if applicable.
 	*/
-	payload?: string;
+	payload?: Record<string, boolean | string | number>;
 
 	/**
 	* The unique identifier of the peer connection for which the event was generated.
@@ -65,16 +65,14 @@ export type ClientIssue = {
 	type: string;
 
 	/**
-	* Identity of a **stateful** issue, shared by its raise entry and its `<type>-resolved`
-	* companion, so a server can open an active issue on the raise and close it on the match
-	* (client-monitor-js >= 4.6.0, `sendResolvedIssuesToServer`). One-shot issues have no key.
+	* Identifier of the related issue or resolution when it is provided.
 	*/
 	key?: string;
 
 	/**
-	* The value associated with the event, if applicable.
+	* The attributes of the issue, if applicable.
 	*/
-	payload?: string;
+	payload?: Record<string, boolean | string | number>;
 
 	/**
 	* The timestamp in epoch format when the event was generated.
@@ -94,9 +92,9 @@ export type ClientEvent = {
 	type: string;
 
 	/**
-	* The value associated with the event, if applicable.
+	* The attributes of the event, if applicable.
 	*/
-	payload?: string;
+	payload?: Record<string, boolean | string | number>;
 
 	/**
 	* The timestamp in epoch format when the event was generated.
@@ -106,7 +104,7 @@ export type ClientEvent = {
 }
 
 /**
-* Certificates
+* Certificate Stats
 */
 export type CertificateStats = {
 
@@ -136,7 +134,7 @@ export type CertificateStats = {
 	base64Certificate?: string;
 
 	/**
-	* The certificate ID of the issuer (nullable).
+	* The certificate ID of the issuer.
 	*/
 	issuerCertificateId?: string;
 
@@ -158,7 +156,7 @@ export type IceCandidatePairStats = {
 	id: string;
 
 	/**
-	* The timestamp of when the stats were recorded, in seconds.
+	* The timestamp of when the stats were recorded, in milliseconds.
 	*/
 	timestamp: number;
 
@@ -177,7 +175,10 @@ export type IceCandidatePairStats = {
 	*/
 	remoteCandidateId?: string;
 
-	state?: 'new' | 'in-progress' | 'waiting' | 'failed' | 'succeeded' | 'cancelled' | 'inprogress';
+	/**
+	* The checklist state of this candidate pair. Values follow the W3C RTCStatsIceCandidatePairState enum (frozen, waiting, in-progress, failed, succeeded). Two further values are accepted for backward compatibility and are not part of the current spec: `new` (never standardised) and `cancelled` (removed from the spec after 2016).
+	*/
+	state?: 'new' | 'frozen' | 'in-progress' | 'waiting' | 'failed' | 'succeeded' | 'cancelled' | 'inprogress';
 
 	/**
 	* Whether this candidate pair has been nominated.
@@ -297,7 +298,7 @@ export type IceCandidateStats = {
 	transportId?: string;
 
 	/**
-	* The IP address of the ICE candidate (nullable).
+	* The IP address of the ICE candidate.
 	*/
 	address?: string;
 
@@ -459,7 +460,17 @@ export type IceTransportStats = {
 	selectedCandidatePairChanges?: number;
 
 	/**
-	* Additional information attached to this stats
+	* Number of congestion control feedback (CCFB) messages sent on this transport.
+	*/
+	ccfbMessagesSent?: number;
+
+	/**
+	* Number of congestion control feedback (CCFB) messages received on this transport.
+	*/
+	ccfbMessagesReceived?: number;
+
+	/**
+	* Additional information attached to this stats.
 	*/
 	attachments?: Record<string, unknown>;
 
@@ -689,7 +700,7 @@ export type MediaSourceStats = {
 }
 
 /**
-* Remote Outbound RTPs
+* Remote Outbound RTP Stats
 */
 export type RemoteOutboundRtpStats = {
 
@@ -798,7 +809,29 @@ export type QualityLimitationDurations = {
 }
 
 /**
-* Outbound RTPs
+* Cumulative PSNR measurements for Y, U, V components.
+*/
+export type PsnrSum = {
+
+	/**
+	* PSNR value for the Y (luminance) component.
+	*/
+	y: number;
+
+	/**
+	* PSNR value for the U (chrominance) component.
+	*/
+	u: number;
+
+	/**
+	* PSNR value for the V (chrominance) component.
+	*/
+	v: number;
+
+}
+
+/**
+* Outbound RTP Stats
 */
 export type OutboundRtpStats = {
 
@@ -861,6 +894,11 @@ export type OutboundRtpStats = {
 	* The RID value of the RTP stream.
 	*/
 	rid?: string;
+
+	/**
+	* Index of the encoding in the encoding array.
+	*/
+	encodingIndex?: number;
 
 	/**
 	* The total number of header bytes sent on this stream.
@@ -933,6 +971,16 @@ export type OutboundRtpStats = {
 	qpSum?: number;
 
 	/**
+	* Cumulative PSNR measurements for Y, U, V components.
+	*/
+	psnrSum?: PsnrSum;
+
+	/**
+	* Total number of PSNR measurements collected.
+	*/
+	psnrMeasurements?: number;
+
+	/**
 	* The total time spent encoding frames on this stream in seconds.
 	*/
 	totalEncodeTime?: number;
@@ -943,9 +991,14 @@ export type OutboundRtpStats = {
 	totalPacketSendDelay?: number;
 
 	/**
-	* The reason for any quality limitation on this stream.
+	* The reason for any quality limitation on this stream (e.g., 'cpu', 'bandwidth', 'other').
 	*/
 	qualityLimitationReason?: string;
+
+	/**
+	* The duration of quality limitation reasons categorized by type.
+	*/
+	qualityLimitationDurations?: QualityLimitationDurations;
 
 	/**
 	* The number of resolution changes due to quality limitations.
@@ -973,7 +1026,7 @@ export type OutboundRtpStats = {
 	encoderImplementation?: string;
 
 	/**
-	* Indicates whether the encoder is power efficient.
+	* Indicates whether the encoder is power-efficient.
 	*/
 	powerEfficientEncoder?: boolean;
 
@@ -988,9 +1041,9 @@ export type OutboundRtpStats = {
 	scalabilityMode?: string;
 
 	/**
-	* The duration of quality limitation reasons categorized by type.
+	* Number of packets sent with ECT(1) congestion marking.
 	*/
-	qualityLimitationDurations?: QualityLimitationDurations;
+	packetsSentWithEct1?: number;
 
 	/**
 	* Additional information attached to this stats.
@@ -1000,7 +1053,7 @@ export type OutboundRtpStats = {
 }
 
 /**
-* Remote Inbound RTPs
+* Remote Inbound RTP Stats
 */
 export type RemoteInboundRtpStats = {
 
@@ -1040,6 +1093,26 @@ export type RemoteInboundRtpStats = {
 	packetsReceived?: number;
 
 	/**
+	* Total number of RTP packets received for this SSRC marked with the ECT(1) marking.
+	*/
+	packetsReceivedWithEct1?: number;
+
+	/**
+	* Total number of RTP packets received for this SSRC marked with the CE marking.
+	*/
+	packetsReceivedWithCe?: number;
+
+	/**
+	* Total number of RTP packets for which an RFC8888 report has been sent with a zero R bit.
+	*/
+	packetsReportedAsLost?: number;
+
+	/**
+	* Total number of RTP packets reported as lost but later recovered in a subsequent RFC8888 report.
+	*/
+	packetsReportedAsLostButRecovered?: number;
+
+	/**
 	* The total number of packets lost on this stream.
 	*/
 	packetsLost?: number;
@@ -1075,6 +1148,11 @@ export type RemoteInboundRtpStats = {
 	roundTripTimeMeasurements?: number;
 
 	/**
+	* Number of packets with ECT(1) marking that were bleached by a middlebox.
+	*/
+	packetsWithBleachedEct1Marking?: number;
+
+	/**
 	* Additional information attached to this stats
 	*/
 	attachments?: Record<string, unknown>;
@@ -1082,7 +1160,7 @@ export type RemoteInboundRtpStats = {
 }
 
 /**
-* Inbound RTPs
+* Inbound RTP Stats
 */
 export type InboundRtpStats = {
 
@@ -1127,6 +1205,26 @@ export type InboundRtpStats = {
 	packetsReceived?: number;
 
 	/**
+	* Total number of RTP packets received for this SSRC marked with the ECT(1) marking.
+	*/
+	packetsReceivedWithEct1?: number;
+
+	/**
+	* Total number of RTP packets received for this SSRC marked with the CE marking.
+	*/
+	packetsReceivedWithCe?: number;
+
+	/**
+	* Total number of RTP packets for which an RFC8888 report has been sent with a zero R bit.
+	*/
+	packetsReportedAsLost?: number;
+
+	/**
+	* Total number of RTP packets reported as lost but later recovered in a subsequent RFC8888 report.
+	*/
+	packetsReportedAsLostButRecovered?: number;
+
+	/**
 	* Number of packets lost on the RTP stream.
 	*/
 	packetsLost?: number;
@@ -1137,7 +1235,7 @@ export type InboundRtpStats = {
 	jitter?: number;
 
 	/**
-	* The MediaStream ID of the RTP stream.
+	* The media stream identification tag from the SDP media section.
 	*/
 	mid?: string;
 
@@ -1257,17 +1355,17 @@ export type InboundRtpStats = {
 	bytesReceived?: number;
 
 	/**
-	* Number of NACKs sent.
+	* Number of NACKs received.
 	*/
 	nackCount?: number;
 
 	/**
-	* Number of Full Intra Requests sent.
+	* Number of Full Intra Requests received.
 	*/
 	firCount?: number;
 
 	/**
-	* Number of Picture Loss Indications sent.
+	* Number of Picture Loss Indications received.
 	*/
 	pliCount?: number;
 
@@ -1491,9 +1589,14 @@ export type OutboundTrackSample = {
 	kind: string;
 
 	/**
-	* Calculated score for track (details should be added to attachments)
+	* Calculated score for track (details should be added to scoreReasons)
 	*/
 	score?: number;
+
+	/**
+	* Details for score calculation
+	*/
+	scoreReasons?: string[];
 
 	/**
 	* Additional information attached to this stats
@@ -1523,9 +1626,14 @@ export type InboundTrackSample = {
 	kind: string;
 
 	/**
-	* Calculated score for track (details should be added to attachments)
+	* Calculated score for track (details should be added to scoreReasons)
 	*/
 	score?: number;
+
+	/**
+	* Details for score calculation
+	*/
+	scoreReasons?: string[];
 
 	/**
 	* Additional information attached to this stats
@@ -1535,7 +1643,7 @@ export type InboundTrackSample = {
 }
 
 /**
-* docs
+* A sample containing statistics and metrics for a WebRTC peer connection
 */
 export type PeerConnectionSample = {
 
@@ -1550,9 +1658,14 @@ export type PeerConnectionSample = {
 	attachments?: Record<string, unknown>;
 
 	/**
-	* Calculated score for peer connection (details should be added to attachments)
+	* Calculated score for peer connection (details should be added to scoreReasons)
 	*/
 	score?: number;
+
+	/**
+	* Details for score calculation
+	*/
+	scoreReasons?: string[];
 
 	/**
 	* Inbound Track Stats items
@@ -1570,22 +1683,22 @@ export type PeerConnectionSample = {
 	codecs?: CodecStats[];
 
 	/**
-	* Inbound RTPs
+	* Inbound RTP Stats
 	*/
 	inboundRtps?: InboundRtpStats[];
 
 	/**
-	* Remote Inbound RTPs
+	* Remote Inbound RTP Stats
 	*/
 	remoteInboundRtps?: RemoteInboundRtpStats[];
 
 	/**
-	* Outbound RTPs
+	* Outbound RTP Stats
 	*/
 	outboundRtps?: OutboundRtpStats[];
 
 	/**
-	* Remote Outbound RTPs
+	* Remote Outbound RTP Stats
 	*/
 	remoteOutboundRtps?: RemoteOutboundRtpStats[];
 
@@ -1625,7 +1738,7 @@ export type PeerConnectionSample = {
 	iceCandidatePairs?: IceCandidatePairStats[];
 
 	/**
-	* Certificates
+	* Certificate Stats
 	*/
 	certificates?: CertificateStats[];
 
@@ -1657,9 +1770,14 @@ export type ClientSample = {
 	attachments?: Record<string, unknown>;
 
 	/**
-	* Calculated score for client (details should be added to attachments)
+	* Calculated score for client (details should be added to scoreReasons)
 	*/
 	score?: number;
+
+	/**
+	* Details for score calculation
+	*/
+	scoreReasons?: string[];
 
 	/**
 	* Samples taken PeerConnections
