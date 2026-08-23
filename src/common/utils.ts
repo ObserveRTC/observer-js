@@ -52,3 +52,38 @@ export function parseJsonObject(value?: unknown): Record<string, unknown> | unde
 
 	return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
 }
+
+/**
+ * Best-effort read of a wire `scoreReasons` field. Schema 3.6.0 carries it as a record of
+ * reason key → the points that reason subtracted from the score; samples from clients on
+ * earlier schema versions (3.5.x) carried the reason *keys only*, as a `string[]`. A legacy
+ * array is folded into the record shape with a magnitude of `0` — the key still conveys the
+ * reason, and `0` keeps any downstream summing of contributions honest about the magnitude
+ * the old wire never carried. Record entries whose value is not a finite number are dropped.
+ * An empty result collapses to `undefined`, matching the client's "omitted when there is
+ * nothing to explain"; anything unreadable is data to ignore rather than an exception to
+ * propagate.
+ */
+export function normalizeScoreReasons(value?: unknown): Record<string, number> | undefined {
+	if (value === undefined || value === null) return undefined;
+
+	const result: Record<string, number> = {};
+
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			if (typeof entry !== 'string' || entry.length === 0) continue;
+
+			result[entry] = 0;
+		}
+	} else if (typeof value === 'object') {
+		for (const [ key, magnitude ] of Object.entries(value as Record<string, unknown>)) {
+			if (typeof magnitude !== 'number' || !Number.isFinite(magnitude)) continue;
+
+			result[key] = magnitude;
+		}
+	} else {
+		return undefined;
+	}
+
+	return Object.keys(result).length === 0 ? undefined : result;
+}

@@ -7,7 +7,7 @@ import * as MetaData from './schema/ClientMetaTypes';
 import { ClientEventTypes } from './schema/ClientEventTypes';
 import { ObservedCall } from './ObservedCall';
 import { ClientMetaTypes } from './schema/ClientMetaTypes';
-import { parseJsonAs, parseJsonObject } from './common/utils';
+import { normalizeScoreReasons, parseJsonAs, parseJsonObject } from './common/utils';
 import { CalculatedScore } from './scores/CalculatedScore';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
@@ -264,6 +264,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.usingTCP = false;
 		this.currentMinRttInMs = undefined;
 		this.currentMaxRttInMs = undefined;
+
+		sample.scoreReasons = normalizeScoreReasons(sample.scoreReasons);
+		for (const pcSample of sample.peerConnections ?? []) {
+			pcSample.scoreReasons = normalizeScoreReasons(pcSample.scoreReasons);
+
+			for (const trackSample of pcSample.inboundTracks ?? []) {
+				trackSample.scoreReasons = normalizeScoreReasons(trackSample.scoreReasons);
+			}
+			for (const trackSample of pcSample.outboundTracks ?? []) {
+				trackSample.scoreReasons = normalizeScoreReasons(trackSample.scoreReasons);
+			}
+		}
 
 		this._mergePendingInjections(sample);
 

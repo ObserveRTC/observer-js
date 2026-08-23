@@ -1,10 +1,10 @@
-export const schemaVersion = '3.5.0';
+
+export const schemaVersion = "3.6.0";
 
 /**
 * The WebRTC app provided custom stats payload
 */
 export type ExtensionStat = {
-
 	/**
 	* The type of the extension stats the custom app provides
 	*/
@@ -21,7 +21,6 @@ export type ExtensionStat = {
 * A list of additional client events.
 */
 export type ClientMetaData = {
-
 	/**
 	* The name of the event used as an identifier (e.g., MEDIA_TRACK_MUTED, USER_REJOINED, etc.).
 	*/
@@ -58,7 +57,6 @@ export type ClientMetaData = {
 * A list of client issues.
 */
 export type ClientIssue = {
-
 	/**
 	* The name of the issue
 	*/
@@ -85,7 +83,6 @@ export type ClientIssue = {
 * A list of client events.
 */
 export type ClientEvent = {
-
 	/**
 	* The name of the event used as an identifier (e.g., MEDIA_TRACK_MUTED, USER_REJOINED, etc.).
 	*/
@@ -107,7 +104,6 @@ export type ClientEvent = {
 * Certificate Stats
 */
 export type CertificateStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -149,7 +145,6 @@ export type CertificateStats = {
 * ICE Candidate Pair Stats
 */
 export type IceCandidatePairStats = {
-
 	/**
 	* The unique identifier for this RTCStats object.
 	*/
@@ -178,7 +173,7 @@ export type IceCandidatePairStats = {
 	/**
 	* The checklist state of this candidate pair. Values follow the W3C RTCStatsIceCandidatePairState enum (frozen, waiting, in-progress, failed, succeeded). Two further values are accepted for backward compatibility and are not part of the current spec: `new` (never standardised) and `cancelled` (removed from the spec after 2016).
 	*/
-	state?: 'new' | 'frozen' | 'in-progress' | 'waiting' | 'failed' | 'succeeded' | 'cancelled' | 'inprogress';
+	state?: "new" | "frozen" | "in-progress" | "waiting" | "failed" | "succeeded" | "cancelled" | "inprogress";
 
 	/**
 	* Whether this candidate pair has been nominated.
@@ -281,7 +276,6 @@ export type IceCandidatePairStats = {
 * ICE Candidate Stats
 */
 export type IceCandidateStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -368,7 +362,6 @@ export type IceCandidateStats = {
 * ICE Transport Stats
 */
 export type IceTransportStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -480,7 +473,6 @@ export type IceTransportStats = {
 * Data Channels Stats
 */
 export type DataChannelStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -542,7 +534,6 @@ export type DataChannelStats = {
 * PeerConnection Transport Stats
 */
 export type PeerConnectionTransportStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -574,7 +565,6 @@ export type PeerConnectionTransportStats = {
 * Media Playout Stats
 */
 export type MediaPlayoutStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -626,7 +616,6 @@ export type MediaPlayoutStats = {
 * Audio Source Stats
 */
 export type MediaSourceStats = {
-
 	/**
 	* The timestamp of the stat.
 	*/
@@ -703,7 +692,6 @@ export type MediaSourceStats = {
 * Remote Outbound RTP Stats
 */
 export type RemoteOutboundRtpStats = {
-
 	/**
 	* The timestamp for this stats object in DOMHighResTimeStamp format.
 	*/
@@ -785,7 +773,6 @@ export type RemoteOutboundRtpStats = {
 * The duration of quality limitation reasons categorized by type.
 */
 export type QualityLimitationDurations = {
-
 	/**
 	* Duration of no quality limitation in seconds.
 	*/
@@ -812,7 +799,6 @@ export type QualityLimitationDurations = {
 * Cumulative PSNR measurements for Y, U, V components.
 */
 export type PsnrSum = {
-
 	/**
 	* PSNR value for the Y (luminance) component.
 	*/
@@ -834,7 +820,6 @@ export type PsnrSum = {
 * Outbound RTP Stats
 */
 export type OutboundRtpStats = {
-
 	/**
 	* The timestamp for this stats object in DOMHighResTimeStamp format.
 	*/
@@ -1056,7 +1041,6 @@ export type OutboundRtpStats = {
 * Remote Inbound RTP Stats
 */
 export type RemoteInboundRtpStats = {
-
 	/**
 	* The timestamp for this stats object in DOMHighResTimeStamp format.
 	*/
@@ -1163,7 +1147,6 @@ export type RemoteInboundRtpStats = {
 * Inbound RTP Stats
 */
 export type InboundRtpStats = {
-
 	/**
 	* The time the stats were collected, in high-resolution time.
 	*/
@@ -1520,7 +1503,6 @@ export type InboundRtpStats = {
 * Codec items
 */
 export type CodecStats = {
-
 	/**
 	* The timestamp when the stats were generated.
 	*/
@@ -1572,7 +1554,6 @@ export type CodecStats = {
 * Outbound Track Stats items
 */
 export type OutboundTrackSample = {
-
 	/**
 	* The timestamp when the stats were generated.
 	*/
@@ -1594,9 +1575,9 @@ export type OutboundTrackSample = {
 	score?: number;
 
 	/**
-	* Details for score calculation
+	* Reasons for the score calculation, mapping each reason to how much it contributed to the score
 	*/
-	scoreReasons?: string[];
+	scoreReasons?: Record<string, number>;
 
 	/**
 	* Additional information attached to this stats
@@ -1609,7 +1590,6 @@ export type OutboundTrackSample = {
 * Inbound Track Stats items
 */
 export type InboundTrackSample = {
-
 	/**
 	* The timestamp when the stats were generated.
 	*/
@@ -1631,9 +1611,9 @@ export type InboundTrackSample = {
 	score?: number;
 
 	/**
-	* Details for score calculation
+	* Reasons for the score calculation, mapping each reason to how much it contributed to the score
 	*/
-	scoreReasons?: string[];
+	scoreReasons?: Record<string, number>;
 
 	/**
 	* Additional information attached to this stats
@@ -1646,7 +1626,6 @@ export type InboundTrackSample = {
 * A sample containing statistics and metrics for a WebRTC peer connection
 */
 export type PeerConnectionSample = {
-
 	/**
 	* Unique identifier of the stats object.
 	*/
@@ -1663,9 +1642,9 @@ export type PeerConnectionSample = {
 	score?: number;
 
 	/**
-	* Details for score calculation
+	* Reasons for the score calculation, mapping each reason to how much it contributed to the score
 	*/
-	scoreReasons?: string[];
+	scoreReasons?: Record<string, number>;
 
 	/**
 	* Inbound Track Stats items
@@ -1748,7 +1727,6 @@ export type PeerConnectionSample = {
 * docs
 */
 export type ClientSample = {
-
 	/**
 	* The timestamp the sample is created in GMT
 	*/
@@ -1775,9 +1753,9 @@ export type ClientSample = {
 	score?: number;
 
 	/**
-	* Details for score calculation
+	* Reasons for the score calculation, mapping each reason to how much it contributed to the score
 	*/
-	scoreReasons?: string[];
+	scoreReasons?: Record<string, number>;
 
 	/**
 	* Samples taken PeerConnections
