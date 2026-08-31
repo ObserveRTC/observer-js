@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 1.0.0 — 2026-08-31
 
 First stable release of `@observertc/observer-js` — a server-side Node.js library that turns a stream
 of WebRTC `ClientSample`s into a live, queryable model of every call, correlates that model **across
@@ -159,6 +159,45 @@ The substantive fixes:
 Where a value is a description of your system rather than a preference, it now says so — `samplesSendingTimeInMs`
 should be your collector's actual sampling period, and several de-bounce fields count *ticks* rather
 than time, so what they mean depends on your sample rate.
+
+### Sample schema 3.7.0, and every earlier payload generation still reads
+
+The bundled schema types are **3.7.0** (`schemaVersion`, exported from the package). Three
+generations of `ClientSample` have shipped inside the 1.0.0 line and the library accepts all of them
+on the same `accept()` call, because a fleet is never on one client version:
+
+- **pre-3.5.0** — `ClientEvent`, `ClientIssue`, `ClientMetaData` and `ExtensionStat` carried
+  `payload` as a pre-serialised JSON **string**;
+- **3.5.0 / 3.6.0** — the same payloads became **records of primitives**, and 3.6.0 turned
+  `scoreReasons` from a `string[]` of labels into a `Record<string, number>` mapping each reason to
+  how much it took off the score;
+- **3.7.0** — payload values widened from primitives to **free-form JSON**, so a payload may nest
+  objects and arrays. Structured context (`{ device: { os: { name, version } } }`) no longer has to be
+  flattened into dotted keys or stringified into one field and parsed back out.
+
+**Nothing has to move in step.** Every payload read inside the library goes through `parseJsonAs` /
+`parseJsonObject`, which pass an object through untouched and parse a string, so an old client and a
+new one produce the same object downstream; `normalizeScoreReasons` folds a legacy `string[]` into the
+record shape with a magnitude of `0`, which keeps any summing of contributions honest about the
+magnitude the old wire never carried. `tests/payloadWireGenerations.spec.ts` asserts this per
+generation rather than leaving it to be discovered in production.
+
+**What this asks of you:** a payload value is now `unknown`, so narrow before reading it —
+`typeof payload.trackId === 'string'` rather than a bare `payload.trackId`. Writers need no change:
+everything that was valid before still is. The wire format itself did not move between 3.6.0 and
+3.7.0 — a 3.6.0 decoder reads a 3.7.0 stream and the reverse — only the TypeScript type did.
+
+### The public type surface is complete
+
+Eighteen schema types plus `CalculatedScore`, `MediaKind`, `MiddlewareProcessor`,
+`ObservedCallSettings`, `ObservedClientSettings`, `ObservedTURN` and `ObservedTurnServer` appeared in
+public signatures — `ObservedInboundRtp.stats`, `kind` on every track and RTP entity, the settings
+object `createObservedClient` takes, the `client-extension-stats` payload — without being exported
+from the entry point. They were reachable but not nameable: a consumer could hold one of these values
+and still not write the type of the function that takes it, because the name was not importable.
+
+All of them are exported now, along with `schemaVersion`, so an application can assert which schema
+generation the build it installed speaks. Purely additive — no existing export changed.
 
 ### Publishing: master always publishes to `latest`
 

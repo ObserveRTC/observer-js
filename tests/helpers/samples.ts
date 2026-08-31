@@ -2,9 +2,9 @@ import { ClientSample, PeerConnectionSample, InboundRtpStats, OutboundRtpStats }
 import type { ClientEvent, ClientIssue } from '../../src/schema/ClientSample';
 
 /**
- * A payload of either wire generation: schema 3.5.0 carries a record, samples from clients on
- * earlier schema versions carry the same payload serialised as a JSON string. The observer accepts
- * both at runtime, so the specs feed both.
+ * A payload of either wire generation: schema 3.5.0 and later carry a record (free-form JSON values
+ * since 3.7.0, so it may nest), samples from clients on earlier schema versions carry the same
+ * payload serialised as a JSON string. The observer accepts both at runtime, so the specs feed both.
  */
 export type WirePayload = ClientEvent['payload'] | string;
 

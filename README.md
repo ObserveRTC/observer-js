@@ -31,8 +31,9 @@ and emits a single, unified stream of typed events the application can react to.
 - **Drop it in safely** — warn-don't-throw, a pluggable logger, dual **ESM + CommonJS**, and **no**
   media-stack dependency in the core.
 
-> **Status:** `1.0.0-beta`. The API described here is current and intended to be implemented
-> against directly. This document is written to be self-sufficient: an engineer (or an AI
+> **Status:** `1.0.0` — the first stable release. The API described here is current and intended to
+> be implemented against directly; it follows semver from here, so a breaking change means a 2.0.0.
+> [`CHANGELOG.md`](./CHANGELOG.md) is the full statement of what the 1.0.0 line contains. This document is written to be self-sufficient: an engineer (or an AI
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
@@ -680,13 +681,17 @@ type PeerConnectionSample = {
   certificates?;
 };
 
-type ClientEvent     = { type: string; payload?: string; timestamp?: number; /* +ids */ };
-type ClientIssue     = { type: string; payload?: string; timestamp?: number };
-type ClientMetaData  = { type: string; payload?: string; timestamp?: number; /* +ids */ };
-type ExtensionStat   = { type: string; payload?: string };
+type ClientEvent     = { type: string; payload?: Record<string, unknown>; timestamp?: number; /* +ids */ };
+type ClientIssue     = { type: string; payload?: Record<string, unknown>; key?: string; timestamp?: number };
+type ClientMetaData  = { type: string; payload?: Record<string, unknown>; timestamp?: number; /* +ids */ };
+type ExtensionStat   = { type: string; payload?: Record<string, unknown> };
 ```
 
-`payload` fields are JSON strings; the library parses the ones it understands.
+`payload` fields are objects (schema **3.7.0**: free-form JSON, so a payload may nest objects and
+arrays), and the library reads the ones it understands. **Older clients keep working**: a payload
+from a pre-3.5.0 client arrives as a JSON string and is parsed on the way in, so a fleet running a
+mix of client versions needs no coordination — every reader sees the same object either way. Values
+inside a payload are `unknown`, so narrow before use (`typeof p.trackId === 'string'`).
 
 **`ClientEventTypes`** (enum of known `event.type` values): `CLIENT_JOINED`, `CLIENT_LEFT`,
 `PEER_CONNECTION_OPENED/CLOSED/STATE_CHANGED`, `MEDIA_TRACK_ADDED/REMOVED/MUTED/UNMUTED/RESUMED`,
@@ -728,8 +733,8 @@ then lean **steady-state ticks**.
   ],
 
   "clientMetaItems": [                                  // environment & devices, one-off (10 in the real sample)
-    { "type": "USER_AGENT_DATA", "payload": "{…Chrome 148 / macOS…}" },
-    { "type": "MEDIA_DEVICE",    "payload": "{…\"BRIO 4K Stream Edition\"…}" }
+    { "type": "USER_AGENT_DATA", "payload": { "…": "Chrome 148 / macOS" } },
+    { "type": "MEDIA_DEVICE",    "payload": { "label": "BRIO 4K Stream Edition" } }
     // …mic / camera / speaker devices…
   ],
 
@@ -789,7 +794,8 @@ observer.on('call-issue', ({ observedCall, issue }) => {
 });
 ```
 
-(`ClientIssue`, the type on samples, keeps its string payload — that one really is a wire format.)
+(`ClientIssue`, the type on samples, is a wire format — its payload may arrive as a JSON string from
+a pre-3.5.0 client, which is why the library parses it before you see it.)
 
 The registry is also an open extension point, on **`ObservedCall`**:
 

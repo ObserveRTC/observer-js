@@ -26,10 +26,15 @@ export function pushFinite(target: number[], value: number | undefined): void {
  * than throwing — every caller here is reading data that arrived over the wire, where a bad value is
  * data to ignore rather than an exception to propagate.
  *
- * Payloads arrive in two shapes. Schema 3.5.0 delivers them as records, ready to use; samples from
- * clients on earlier schema versions carry the same payload as a JSON string. An object passes
- * through untouched, a string is parsed — so every reader handles both wire generations without
- * knowing which one it is looking at.
+ * Payloads arrive in two shapes. Schema 3.5.0 and later deliver them as records, ready to use;
+ * samples from clients on earlier schema versions carry the same payload as a JSON string. An object
+ * passes through untouched, a string is parsed — so every reader handles both wire generations
+ * without knowing which one it is looking at.
+ *
+ * Since schema 3.7.0 a record's values are free-form JSON rather than primitives, so a payload may
+ * nest objects and arrays to any depth. That widening costs the readers here nothing — they already
+ * treat every value as `unknown` and narrow with a `typeof` guard before use — but it is the reason
+ * a value must never be read bare: `payload.role` is `unknown`, not `string`.
  *
  * The single payload entry point; {@link parseJsonObject} adds the "and it must be an object"
  * guarantee on top, which is what every wire-payload reader actually wants.

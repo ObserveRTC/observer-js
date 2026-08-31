@@ -32,9 +32,13 @@ export type {
 
 export { Observer } from './Observer';
 export { ObservedCall } from './ObservedCall';
+// The settings object `createObservedCall` / `getOrCreateObservedCall` take.
+export type { ObservedCallSettings } from './ObservedCall';
 export { ObservedInboundTrack } from './ObservedInboundTrack';
 export { ObservedOutboundTrack } from './ObservedOutboundTrack';
 export { ObservedClient } from './ObservedClient';
+// The settings object `createObservedClient` / `getOrCreateObservedClient` take.
+export type { ObservedClientSettings } from './ObservedClient';
 export { ObservedPeerConnection } from './ObservedPeerConnection';
 export { ObservedMediaSource } from './ObservedMediaSource';
 export { ObservedMediaPlayout } from './ObservedMediaPlayout';
@@ -49,10 +53,41 @@ export { ObservedMediasoupRouter } from './ObservedMediasoupRouter';
 export { ObservedIceCandidatePair } from './ObservedIceCandidatePair';
 export { ObservedIceCandidate } from './ObservedIceCandidate';
 export { ObservedIceTransport } from './ObservedIceTransport';
+// Both are reachable from public fields: `ObservedPeerConnection.observedTurnServer`, and the
+// TURN view a call/observer keeps.
+export { ObservedTurnServer } from './ObservedTurnServer';
+export { ObservedTURN } from './ObservedTURN';
+export type { ObservedTURNEventMap } from './ObservedTURN';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
 export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
 export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
+// The rest of the sample schema. These appear in public signatures (`ObservedInboundRtp.stats`,
+// `injectExtensionStat`, the `client-extension-stats` payload, …), so a consumer writing a typed
+// helper against one needs to be able to name it. `schemaVersion` says which generation of the
+// schema this build speaks.
+export { schemaVersion } from './schema/ClientSample';
+export type {
+	ExtensionStat,
+	PeerConnectionSample,
+	InboundTrackSample,
+	OutboundTrackSample,
+	InboundRtpStats,
+	OutboundRtpStats,
+	RemoteInboundRtpStats,
+	RemoteOutboundRtpStats,
+	QualityLimitationDurations,
+	PsnrSum,
+	CodecStats,
+	DataChannelStats,
+	MediaSourceStats,
+	MediaPlayoutStats,
+	PeerConnectionTransportStats,
+	IceTransportStats,
+	IceCandidateStats,
+	IceCandidatePairStats,
+	CertificateStats,
+} from './schema/ClientSample';
 export { ScoreCalculator } from './scores/ScoreCalculator';
 export type { Detector } from './detectors/Detector';
 export { Detectors } from './detectors/Detectors';
@@ -272,6 +307,11 @@ export type {
 	JsonlFileSinkFactoryOptions,
 } from './sinks';
 export { Middleware } from './common/Middleware';
+// `Observer.acceptMiddlewares` is a public field of this type, so the type has to be nameable.
+export { MiddlewareProcessor } from './common/Middleware';
+// `kind` on every track/RTP/media entity, and the `calculatedScore` every scored entity carries.
+export type { MediaKind } from './common/types';
+export type { CalculatedScore } from './scores/CalculatedScore';
 // Remote track correlation: the generic resolver + built-in strategy factories.
 export { RemoteTrackResolver } from './resolvers/RemoteTrackResolver';
 export type { RemoteTrackResolvers, RemoteTrackResolverFactory } from './resolvers/RemoteTrackResolver';

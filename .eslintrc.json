@@ -7,6 +7,9 @@
 	},
 	"extends": ["plugin:@typescript-eslint/recommended"],
 	"env": { "node": true },
+	"ignorePatterns": [
+		"src/schema/ClientSample.ts"
+	],
 	"rules": {
 		"array-bracket-spacing": [ 2, "always", {
 			"objectsInArrays": true,
