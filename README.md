@@ -1,4 +1,4 @@
-# ObserverTC — `@observertc/observer-js`
+# ObserveRTC — `@observertc/observer-js`
 
 [![NPM version](https://img.shields.io/npm/v/@observertc/observer-js.svg)](https://www.npmjs.com/package/@observertc/observer-js)
 [![License](https://img.shields.io/npm/l/@observertc/observer-js.svg)](https://github.com/observertc/observer-js/blob/main/LICENSE)
@@ -2041,16 +2041,24 @@ above to `console` (verbose — install your own sink for production). Funnel ev
 logger:
 
 ```ts
+import { format } from 'node:util';
 import { setObserverLogger, type ObserverLogger } from '@observertc/observer-js';
 
+// (module, ...args) — the module name is a separate leading argument, never part
+// of the message. `args` is a printf-style format string plus its values.
 setObserverLogger({
-  trace: (m, ...a) => myLogger.trace(`[${m}]`, ...a),
-  debug: (m, ...a) => myLogger.debug(`[${m}]`, ...a),
-  info:  (m, ...a) => myLogger.info(`[${m}]`, ...a),
-  warn:  (m, ...a) => myLogger.warn(`[${m}]`, ...a),
-  error: (m, ...a) => myLogger.error(`[${m}]`, ...a),
+  trace: (m, ...a) => myLogger.trace(`[${m}] ${format(...a)}`),
+  debug: (m, ...a) => myLogger.debug(`[${m}] ${format(...a)}`),
+  info:  (m, ...a) => myLogger.info(`[${m}] ${format(...a)}`),
+  warn:  (m, ...a) => myLogger.warn(`[${m}] ${format(...a)}`),
+  error: (m, ...a) => myLogger.error(`[${m}] ${format(...a)}`),
 });
 ```
+
+Spreading the arguments directly (`myLogger.warn(prefix, ...a)`) works with `console`, but
+**not** with loggers whose first parameter is the message — pino, bunyan, roarr. There the
+module name becomes the whole message and the rest is silently dropped; pass the module as
+structured metadata (`log.warn({ module }, ...a)`) or collapse it with `util.format` as above.
 
 `createLogger(moduleName)` is also exported for your own modules. See
 **[`docs/logging.md`](./docs/logging.md)** for pino / winston / console recipes, level
@@ -2138,4 +2146,4 @@ event map + scope types), `detectors/` (`Detector`, `Detectors`, and one file pe
 
 ## License
 
-Apache-2.0. Part of the [ObserverTC](https://github.com/observertc) ecosystem.
+Apache-2.0. Part of the [ObserveRTC](https://github.com/ObserveRTC) ecosystem.

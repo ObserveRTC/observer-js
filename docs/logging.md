@@ -10,17 +10,27 @@ or nothing at all.
 ## TL;DR
 
 ```ts
+import { format } from 'node:util';
 import { setObserverLogger } from '@observertc/observer-js';
 
 // Funnel every observer-js log line into your own logger.
+// Argument order: the module name comes FIRST, then a printf-style format string
+// and its substitution values.
 setObserverLogger({
-  trace: (module, ...args) => myLogger.trace(`[${module}]`, ...args),
-  debug: (module, ...args) => myLogger.debug(`[${module}]`, ...args),
-  info:  (module, ...args) => myLogger.info(`[${module}]`, ...args),
-  warn:  (module, ...args) => myLogger.warn(`[${module}]`, ...args),
-  error: (module, ...args) => myLogger.error(`[${module}]`, ...args),
+  trace: (module, ...args) => myLogger.trace(`[${module}] ${format(...args)}`),
+  debug: (module, ...args) => myLogger.debug(`[${module}] ${format(...args)}`),
+  info:  (module, ...args) => myLogger.info(`[${module}] ${format(...args)}`),
+  warn:  (module, ...args) => myLogger.warn(`[${module}] ${format(...args)}`),
+  error: (module, ...args) => myLogger.error(`[${module}] ${format(...args)}`),
 });
 ```
+
+> **Watch the argument order.** Do *not* spread the arguments straight into a logger whose
+> first parameter is the message, such as pino — passing the module name there makes it the
+> entire message and silently drops everything after it. Either collapse the arguments
+> yourself (`util.format`, above) or pass the module as structured metadata; see
+> [pino](#3-pino-recommended-for-servers). `console` is the exception: it accepts a leading
+> non-format argument, so spreading works there.
 
 That's the whole integration surface. The rest of this document is detail.
 
@@ -93,9 +103,23 @@ logger.warn('Observed Call with id %s already exists; returning the existing ins
 logger.warn('Received sample without clientId %o', sample);
 ```
 
-Your `ObserverLogger` receives these as `(module, formatString, ...values)`. A logger that
-understands printf placeholders (`console`, `pino`) can pass them straight through; for
-others, format them yourself with `util.format` (recipe below).
+Your `ObserverLogger` receives these as `(module, formatString, ...values)` — **the module
+name is a separate leading argument, it is never part of the message.**
+
+That distinction matters more than it looks:
+
+- **`console`** accepts a leading non-format argument, so spreading the arguments after a
+  module prefix prints everything as expected.
+- **Structured loggers that take the message first** — pino, bunyan, roarr — do not. Calling
+  `log.warn(module, ...args)` makes the module name the message, and the real format string
+  and its values are then consumed as interpolation values for a string that contains no
+  placeholders. The result is a log line with only the module name in it: **the actual
+  message is silently dropped.**
+
+With those loggers, either pass the module as the merging object
+(`log.warn({ module }, ...args)`, see [pino](#3-pino-recommended-for-servers)) or collapse the
+arguments into a single string yourself with `util.format`
+(see [generic](#5-generic--any-logger-utilformat)).
 
 ## When can I call `setObserverLogger`?
 
@@ -257,6 +281,9 @@ logger.info('accepted %d samples in %dms', count, elapsedMs);
   keep inside your `ObserverLogger` (or, with pino/winston, via their `level`).
 - **No bundled transport.** `observer-js` never imports `pino`, `winston`, or any logging
   library — you wire in whichever you already use.
+- **Module name first.** The sink signature is `(module, formatString, ...values)`. Loggers
+  whose first parameter is the message (pino, bunyan, roarr) will keep only the module name
+  if you spread the arguments into them — see [Message format](#message-format).
 - **`trace`** is intended for very high-frequency, per-sample diagnostics; keep it dropped
   in production.
 
@@ -271,6 +298,7 @@ interface Logger {
   error(...args: any[]): void;
 }
 
+// Note the leading `module` argument — it is not part of the message.
 interface ObserverLogger {
   trace(module: string, ...args: any[]): void;
   debug(module: string, ...args: any[]): void;
