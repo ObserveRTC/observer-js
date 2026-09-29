@@ -31,9 +31,9 @@ and emits a single, unified stream of typed events the application can react to.
 - **Drop it in safely** — warn-don't-throw, a pluggable logger, dual **ESM + CommonJS**, and **no**
   media-stack dependency in the core.
 
-> **Status:** `1.0.0` — the first stable release. The API described here is current and intended to
-> be implemented against directly; it follows semver from here, so a breaking change means a 2.0.0.
-> [`CHANGELOG.md`](./CHANGELOG.md) is the full statement of what the 1.0.0 line contains. This document is written to be self-sufficient: an engineer (or an AI
+> **Status:** `1.1.0` — the 1.x stable line. The API described here is current and intended to
+> be implemented against directly; it follows semver, so a breaking change means a 2.0.0.
+> [`CHANGELOG.md`](./CHANGELOG.md) is the full statement of what the 1.x line contains. This document is written to be self-sufficient: an engineer (or an AI
 > agent) should be able to integrate the library, or develop it further, from this file alone.
 > A companion doc, [`docs/logging.md`](./docs/logging.md), covers logging integration in depth.
 
@@ -414,15 +414,18 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `client-issue-resolved` | `{ resolvedIssue: ResolvedActiveClientIssue }` | a stateful issue ended — the client sent its `<type>-resolved` companion, or the observer force-closed it. Carries the finished interval (`durationInMs`, `resolvedBy`) — see [client issues](#client-issues-the-lifecycle-and-the-division-of-labour) |
 | `client-metadata` | `{ metaData: ClientMetaData }` | a client meta item arrived |
 | `client-extension-stats` | `{ extensionStats: ExtensionStat }` | an app-defined extension stat arrived |
-| `client-event` | `{ event: ClientEvent }` | any client event was processed |
+| `client-event` | `{ event: ClientEvent }` | any client event was processed (once per event, also when it had to wait for its peer connection / track in the same sample) |
+| `client-public-address-changed` | `{ publicAddress: string, previousPublicAddress?: string }` | the client's public (internet-facing) IP was learned or changed — see [Public address](#public-address-of-a-client) |
 
 #### Peer-connection level — scope `{ observer, observedCall, observedClient, observedPeerConnection }`
 
 | Event | Extra | Notes |
 |-------|-------|-------|
-| `peer-connection-added` / `peer-connection-closed` | — | lifecycle of the PC |
+| `peer-connection-added` / `peer-connection-closed` | — | lifecycle of the PC. `-closed` fires when the client reports `PEER_CONNECTION_CLOSED` (after that sample is applied; later stats for that id are ignored) or when the client closes |
 | `peer-connection-updated` | `{ context?: AcceptContext }` | the PC processed a sample |
 | `ice-connection-state-changed` / `ice-gathering-state-changed` / `connection-state-changed` | `{ state: string }` | driven by client events |
+| `selected-candidate-pair-changed` | `{ observedIceTransport, observedIceCandidatePair?, previousCandidatePairId? }` | an ICE transport's `selectedCandidatePairId` changed: first selection, switch, or deselection (`observedIceCandidatePair` undefined). Fires after the whole PC sample is applied. Needs `transport` stats with `selectedCandidatePairId` (not reported by Firefox) |
+| `peer-connection-public-address-changed` | `{ publicAddress: string, previousPublicAddress?: string }` | the PC's public IP was learned or changed — see [Public address](#public-address-of-a-client) |
 | `inbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedInboundTrack }` | |
 | `outbound-track-added` / `-updated` / `-removed` / `-muted` / `-unmuted` | `{ observedOutboundTrack }` | |
 | `inbound-rtp-added` / `-updated` / `-removed` | `{ observedInboundRtp }` | `-updated` fires every tick |
@@ -437,7 +440,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | `media-source-added` / `-updated` / `-removed` | `{ observedMediaSource }` | |
 | `media-playout-added` / `-updated` / `-removed` | `{ observedMediaPlayout }` | |
 | `peer-connection-transport-added` / `-updated` / `-removed` | `{ observedPeerConnectionTransport }` | |
-| `certificate-added` / `-updated` / `-removed` | `{ observedCertificate }` | |
+| `certificate-added` / `-updated` / `-removed` | `{ observedCertificate }` | `-updated` fires every tick the certificate is reported (the first included) |
 
 > **Volume note.** The `*-updated` sub-stat events fire on every peer-connection `accept()`
 > (i.e. per sample, per stream). For high-throughput servers, subscribe only to what you need,
@@ -597,6 +600,7 @@ Key members:
 - Metrics (current/derived): `currentAvgRttInMs?`, `currentMinRttInMs?`, `currentMaxRttInMs?`,
   `receivingAudioBitrate`, `receivingVideoBitrate`, `sendingAudioBitrate`, `sendingVideoBitrate`,
   `usingTURN`, `usingTCP`, `availableIncomingBitrate`, `availableOutgoingBitrate`
+- Network: `publicAddress?` (last known public IP, sticky), `publicAddresses` (distinct addresses of the open PCs) — see [Public address](#public-address-of-a-client)
 - Counts: `numberOfInboundRtpStreams`, `numberOfOutboundRtpStreams`, `numberOfInbundTracks`,
   `numberOfOutboundTracks`, `numberOfDataChannels`, `numberOfPeerConnections`
 - Per-tick deltas: `deltaReceivedAudioBytes`, `deltaSentAudioBytes`, … (see source for the full set)
@@ -615,6 +619,7 @@ Key members:
   `iceCandidates`, `iceCandidatePairs`, `certificates`, `selectedIceCandidatePairs`,
   `selectedIceCandiadtePairForTurn`
 - State: `connectionState?`, `iceConnectionState?`, `iceGatheringState?`, `usingTURN`, `usingTCP`
+- Network: `publicAddress?`, `publicAddressUpdatedAt?` — see [Public address](#public-address-of-a-client)
 - Metrics: `currentRttInMs?`, `iceRttInMs?`, `rtcpRttInMs?`, `sfuHopRttInMs?`, `currentJitter?`,
   `availableIncomingBitrate`, `availableOutgoingBitrate`, sending/receiving bitrates, packet rates,
   and `total*` / `delta*` byte/packet counters
@@ -644,6 +649,37 @@ to the local streams by `remoteId` (fallback SSRC) and surfaced as fields:
 - on `ObservedInboundRtp`: `remoteRttInMs?`, `remoteBytesSent?`, `remotePacketsSent?`, `remoteTimestamp?`
 
 These are reset each tick and only set when the matching remote report is present.
+
+### Public address of a client
+
+The address a client is seen from on the internet is already in the samples: it is carried by the
+**local** ICE candidates. `ObservedPeerConnection.publicAddress` is derived every tick as:
+
+1. the local candidate of the **selected pair**: `address` for `srflx` / `prflx` (or `host`, when
+   the host address itself is public); for `relay`, `relatedAddress` — the mapped address the
+   TURN server saw the client from (`address` is the relay's own address, never the client's);
+2. failing that, the same rule over the local candidates of **every reported pair** (for example a
+   gathered `srflx` candidate while the selected pair is a LAN `host` pair).
+
+Only public IP literals count: private (RFC 1918 / ULA), carrier-grade NAT, loopback, link-local,
+multicast, mDNS `.local` names and the `0.0.0.0` browsers use to redact `relatedAddress` are
+skipped (`isPublicIpAddress()` is exported). Remote candidates are never used.
+
+The value is **sticky** — it changes only when a *different* public address is found, never back to
+`undefined` — and every change emits `peer-connection-public-address-changed`.
+`ObservedClient.publicAddress` follows whichever of its peer connections changed most recently,
+survives that peer connection closing, and emits `client-public-address-changed`;
+`ObservedClient.publicAddresses` lists the distinct addresses of the currently open ones.
+
+```ts
+observer.on('client-public-address-changed', ({ observedClient, publicAddress, previousPublicAddress }) => {
+  log.info('client %s seen from %s (was %s)', observedClient.clientId, publicAddress, previousPublicAddress);
+});
+```
+
+> Browsers may redact `relatedAddress`, so a client whose only working path is a TURN relay and
+> that gathered no `srflx` candidate can stay without a `publicAddress`. For that case, the address
+> your signalling server sees is the authoritative fallback.
 
 ---
 

@@ -92,3 +92,69 @@ export function normalizeScoreReasons(value?: unknown): Record<string, number> |
 
 	return Object.keys(result).length === 0 ? undefined : result;
 }
+
+function isPublicIpv4Address(address: string): boolean {
+	const parts = address.split('.');
+
+	if (parts.length !== 4) return false;
+
+	const octets: number[] = [];
+
+	for (const part of parts) {
+		if (!/^\d{1,3}$/.test(part)) return false;
+
+		const octet = Number(part);
+
+		if (255 < octet) return false;
+		octets.push(octet);
+	}
+
+	const [ a, b, c ] = octets;
+
+	if (a === 0) return false; // "this" network (incl. 0.0.0.0, the browsers' redacted address)
+	if (a === 10) return false; // RFC 1918
+	if (a === 100 && 64 <= b && b <= 127) return false; // RFC 6598 carrier-grade NAT
+	if (a === 127) return false; // loopback
+	if (a === 169 && b === 254) return false; // link-local
+	if (a === 172 && 16 <= b && b <= 31) return false; // RFC 1918
+	if (a === 192 && b === 0 && c === 0) return false; // IETF protocol assignments
+	if (a === 192 && b === 168) return false; // RFC 1918
+	if (a === 198 && (b === 18 || b === 19)) return false; // benchmarking
+	if (224 <= a) return false; // multicast + reserved + broadcast
+
+	return true;
+}
+
+function isPublicIpv6Address(address: string): boolean {
+	const lower = address.toLowerCase().replace(/^\[|\]$/g, '')
+		.split('%')[0];
+
+	if (!lower.includes(':')) return false;
+
+	const mappedV4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(lower);
+
+	if (mappedV4) return isPublicIpv4Address(mappedV4[1]);
+	if (lower === '::' || lower === '::1') return false; // unspecified / loopback
+	if (/^fe[89ab]/.test(lower)) return false; // fe80::/10 link-local
+	if (/^f[cd]/.test(lower)) return false; // fc00::/7 unique local
+	if (lower.startsWith('ff')) return false; // multicast
+	if (lower.startsWith('2001:db8')) return false; // documentation
+
+	return true;
+}
+
+/**
+ * `true` when `address` is an IP literal that is reachable on the public internet — i.e. not
+ * private (RFC 1918 / ULA), loopback, link-local, carrier-grade NAT, multicast, unspecified, an mDNS
+ * `.local` hostname (how browsers obfuscate host candidates) or empty.
+ */
+export function isPublicIpAddress(address?: string | null): boolean {
+	if (!address) return false;
+
+	const trimmed = address.trim();
+
+	if (!trimmed || trimmed.endsWith('.local')) return false;
+	if (trimmed.includes(':')) return isPublicIpv6Address(trimmed);
+
+	return isPublicIpv4Address(trimmed);
+}

@@ -327,7 +327,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.observedClients.delete(settings.clientId);
 			this.clientsUsedTurn.delete(settings.clientId);
 
-			if (this.observedClients.size === 0) {
+			// Not while the call itself is closing: that close is what removed the clients, the call is
+			// not "empty and waiting", and arming the empty-call timer here would leave a live handle
+			// on a closed call (`close()` disarms the timer *before* it closes the clients).
+			if (this.observedClients.size === 0 && !this.closed) {
 				this.emit('empty');
 				this._notify('call-empty', { ...this.eventScope });
 

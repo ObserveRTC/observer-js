@@ -31,7 +31,7 @@ Key facts an LLM should rely on when answering questions or generating integrati
 ## Documentation
 
 - [README](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/README.md): the complete, self-sufficient integration guide — install, mental model, quick start, data flow, the event bus, API reference, schema, and every extension point with examples.
-- [CHANGELOG](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/CHANGELOG.md): the full statement of features and concepts in the 1.0.0 line.
+- [CHANGELOG](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/CHANGELOG.md): the full statement of features and concepts in the 1.x line.
 - [AGENTS.md](https://raw.githubusercontent.com/ObserveRTC/observer-js/master/AGENTS.md): for agents/humans modifying the library itself — build/test/lint commands, architecture, conventions, and extension recipes.
 
 ## Concepts & API (README sections)

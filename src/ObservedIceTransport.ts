@@ -28,6 +28,15 @@ export class ObservedIceTransport implements IceTransportStats {
 	public deltaBytesReceived = 0;
 	public deltaBytesSent = 0;
 
+	/**
+	 * `true` when the last `update()` changed `selectedCandidatePairId` (including the first
+	 * selection, and a selection being dropped). Per tick: reset by every `update()`.
+	 */
+	public selectedCandidatePairChanged = false;
+
+	/** The `selectedCandidatePairId` before the last change, if there was one. */
+	public previousSelectedCandidatePairId?: string;
+
 	public constructor(
 		public timestamp: number,
 		public id: string,
@@ -75,6 +84,11 @@ export class ObservedIceTransport implements IceTransportStats {
 			this.deltaPacketsSent = stats.packetsSent - this.packetsSent;
 		} else {
 			this.deltaPacketsSent = 0;
+		}
+
+		this.selectedCandidatePairChanged = this.selectedCandidatePairId !== stats.selectedCandidatePairId;
+		if (this.selectedCandidatePairChanged) {
+			this.previousSelectedCandidatePairId = this.selectedCandidatePairId;
 		}
 
 		this.timestamp = stats.timestamp;

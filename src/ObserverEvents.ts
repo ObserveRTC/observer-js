@@ -116,6 +116,7 @@ export type ObserverEvents = {
 	'client-metadata': [ObservedClientScope & { metaData: ClientMetaData }];
 	'client-extension-stats': [ObservedClientScope & { extensionStats: ExtensionStat }];
 	'client-event': [ObservedClientScope & { event: ClientEvent }];
+	'client-public-address-changed': [ObservedClientScope & { publicAddress: string, previousPublicAddress?: string }];
 
 	// peer connection level
 	'peer-connection-added': [ObservedPeerConnectionScope];
@@ -124,7 +125,12 @@ export type ObserverEvents = {
 	'ice-connection-state-changed': [ObservedPeerConnectionScope & { state: string }];
 	'ice-gathering-state-changed': [ObservedPeerConnectionScope & { state: string }];
 	'connection-state-changed': [ObservedPeerConnectionScope & { state: string }];
-	'selected-candidate-pair-changed': [ObservedPeerConnectionScope];
+	'selected-candidate-pair-changed': [ObservedPeerConnectionScope & {
+		observedIceTransport: ObservedIceTransport,
+		observedIceCandidatePair?: ObservedIceCandidatePair,
+		previousCandidatePairId?: string,
+	}];
+	'peer-connection-public-address-changed': [ObservedPeerConnectionScope & { publicAddress: string, previousPublicAddress?: string }];
 
 	// peer-connection sub-entities
 	'certificate-added': [ObservedPeerConnectionScope & { observedCertificate: ObservedCertificate }];

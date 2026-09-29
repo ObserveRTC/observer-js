@@ -21,6 +21,7 @@ import { ObservedOutboundTrack } from './ObservedOutboundTrack';
 import { CalculatedScore } from './scores/CalculatedScore';
 import { ObservedTurnServer } from './ObservedTurnServer';
 import { percentileOfSorted } from './utils/stats';
+import { isPublicIpAddress } from './common/utils';
 
 /** Sorting in place is deliberate: these arrays are local per-tick scratch, so a copy is pure waste. */
 const ascending = (a: number, b: number) => a - b;
@@ -29,6 +30,19 @@ import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedPeerConnectionScope } from './ObserverEvents';
 
 const logger = createLogger('ObservedPeerConnection');
+
+/**
+ * The public address a *local* ICE candidate reveals, if any. For a `relay` candidate `address` is
+ * the TURN server's relay address, so only `relatedAddress` (the client's mapped address as the TURN
+ * server saw it) can be the client's.
+ */
+function publicAddressOfLocalCandidate(candidate?: ObservedIceCandidate): string | undefined {
+	if (!candidate) return undefined;
+	if (candidate.candidateType !== 'relay' && isPublicIpAddress(candidate.address)) return candidate.address;
+	if (isPublicIpAddress(candidate.relatedAddress)) return candidate.relatedAddress;
+
+	return undefined;
+}
 
 // Local lifecycle/coordination events only. All consumer-facing events are
 // emitted on the Observer bus (see ObserverEvents). `close` and the two track
@@ -158,6 +172,8 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	public usingTCP = false;
 	public usingTURN = false;
+	public publicAddress?: string;
+	public publicAddressUpdatedAt?: number;
 
 	public observedTurnServer?: ObservedTurnServer;
 	public readonly observedCertificates = new Map<string, ObservedCertificate>();
@@ -327,6 +343,8 @@ export class ObservedPeerConnection extends EventEmitter {
 		this.deltaOutboundPacketsSent = 0;
 		this.deltaDataChannelBytesSent = 0;
 		this.deltaDataChannelBytesReceived = 0;
+		this.deltaDataChannelMessagesSent = 0;
+		this.deltaDataChannelMessagesReceived = 0;
 		this.deltaInboundReceivedBytes = 0;
 		this.deltaOutboundSentBytes = 0;
 		this.deltaReceivedAudioBytes = 0;
@@ -398,11 +416,17 @@ export class ObservedPeerConnection extends EventEmitter {
 				}
 			}
 		}
+		const iceTransportsWithChangedSelection: ObservedIceTransport[] = [];
+
 		if (sample.iceTransports) {
 			for (const iceTransport of sample.iceTransports) {
 				const observedIceTransport = this._updateIceTransportStats(iceTransport);
 
 				if (!observedIceTransport) continue;
+
+				if (observedIceTransport.selectedCandidatePairChanged) {
+					iceTransportsWithChangedSelection.push(observedIceTransport);
+				}
 			}
 		}
 		if (sample.inboundRtps) {
@@ -617,6 +641,30 @@ export class ObservedPeerConnection extends EventEmitter {
 				this.client.call.observer.observedTURN.removePeerConnection(this);
 			}
 		}
+
+		// Announced after the whole sample is applied, so a listener can resolve the new pair's
+		// candidates (candidates and pairs are processed before transports, but a handler may also
+		// want e.g. `publicAddress` or `usingTURN`, which are derived just above/below).
+		const publicAddress = this._resolvePublicAddress(selectedIceCandidatePairs);
+		const previousPublicAddress = this.publicAddress;
+
+		if (publicAddress !== undefined && publicAddress !== previousPublicAddress) {
+			this.publicAddress = publicAddress;
+			this.publicAddressUpdatedAt = now;
+		}
+
+		for (const observedIceTransport of iceTransportsWithChangedSelection) {
+			this._notify('selected-candidate-pair-changed', {
+				...this.eventScope,
+				observedIceTransport,
+				observedIceCandidatePair: observedIceTransport.getSelectedCandidatePair(),
+				previousCandidatePairId: observedIceTransport.previousSelectedCandidatePairId,
+			});
+		}
+		if (publicAddress !== undefined && publicAddress !== previousPublicAddress) {
+			this._notify('peer-connection-public-address-changed', { ...this.eventScope, publicAddress, previousPublicAddress });
+		}
+
 		this.calculatedScore.value = sample.score;
 		this.updated = now;
 		this._checkVisited();
@@ -629,6 +677,7 @@ export class ObservedPeerConnection extends EventEmitter {
 			if (certificate.visited) continue;
 
 			this.observedCertificates.delete(certificate.id);
+			this._notify('certificate-removed', { ...this.eventScope, observedCertificate: certificate });
 		}
 		for (const observedCodec of [ ...this.observedCodecs.values() ]) {
 			if (observedCodec.visited) continue;
@@ -737,8 +786,8 @@ export class ObservedPeerConnection extends EventEmitter {
 			this._notify('certificate-added', { ...this.eventScope, observedCertificate });
 		} else {
 			observedCertificate.update(stats);
-			this._notify('certificate-updated', { ...this.eventScope, observedCertificate });
 		}
+		this._notify('certificate-updated', { ...this.eventScope, observedCertificate });
 
 		return observedCertificate;
 	}
@@ -1147,6 +1196,22 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._notify('remote-outbound-rtp-updated', { ...this.eventScope, observedRemoteOutboundRtp });
 
 		return observedRemoteOutboundRtp;
+	}
+
+	/** See `publicAddress`. Cheap on the common path: the fallback scan runs only when the selected pairs yield nothing. */
+	private _resolvePublicAddress(selectedIceCandidatePairs: ObservedIceCandidatePair[]): string | undefined {
+		for (const pair of selectedIceCandidatePairs) {
+			const address = publicAddressOfLocalCandidate(pair.getLocalCandidate());
+
+			if (address) return address;
+		}
+		for (const pair of this.observedIceCandidatesPair.values()) {
+			const address = publicAddressOfLocalCandidate(pair.getLocalCandidate());
+
+			if (address) return address;
+		}
+
+		return undefined;
 	}
 
 	/** Emit an Observer-bus event scoped to this peer connection. */

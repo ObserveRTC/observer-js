@@ -77,6 +77,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public usingTURN = false;
 	public usingTCP = false;
+
+	public publicAddress?: string;
 	public availableOutgoingBitrate = 0;
 	public availableIncomingBitrate = 0;
 
@@ -135,6 +137,12 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	private _pendingInjections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
 	private _activeSample?: ClientSample;
 
+	/** Peer connections the client reported closed (`PEER_CONNECTION_CLOSED`), closed once the current sample is applied. */
+	private readonly _peerConnectionsToClose = new Set<ObservedPeerConnection>();
+
+	/** Ids of peer connections closed by the client; late stats for them are ignored rather than resurrecting them. */
+	private readonly _closedPeerConnectionIds = new Set<string>();
+
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -161,6 +169,17 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.sink.on('error', onError);
 		}
 		this.activeIssues = activeIssues;
+	}
+
+	/** The distinct `publicAddress`es currently known by this client's open peer connections. */
+	public get publicAddresses(): string[] {
+		const result = new Set<string>();
+
+		for (const observedPeerConnection of this.observedPeerConnections.values()) {
+			if (observedPeerConnection.publicAddress) result.add(observedPeerConnection.publicAddress);
+		}
+
+		return [ ...result ];
 	}
 
 	public get numberOfPeerConnections() {
@@ -302,10 +321,20 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this.addExtensionStats(extensionStat);
 		}
 
+		// The most recently changed peer-connection public address wins (a network switch shows up on
+		// the PC that restarted ICE first).
+		let latestPublicAddress: string | undefined;
+		let latestPublicAddressUpdatedAt = -1;
+
 		for (const pcSample of sample.peerConnections ?? []) {
 			const observedPeerConnection = this._updatePeerConnection(pcSample, context);
 
 			if (!observedPeerConnection) continue;
+
+			if (observedPeerConnection.publicAddress && latestPublicAddressUpdatedAt < (observedPeerConnection.publicAddressUpdatedAt ?? 0)) {
+				latestPublicAddress = observedPeerConnection.publicAddress;
+				latestPublicAddressUpdatedAt = observedPeerConnection.publicAddressUpdatedAt ?? 0;
+			}
 
 			this.deltaDataChannelBytesReceived += observedPeerConnection.deltaDataChannelBytesReceived;
 			this.deltaDataChannelBytesSent += observedPeerConnection.deltaDataChannelBytesSent;
@@ -363,6 +392,15 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			this._processClientEvent(clientEvent);
 		}
 
+		this._closeReportedPeerConnections();
+
+		if (latestPublicAddress !== undefined && latestPublicAddress !== this.publicAddress) {
+			const previousPublicAddress = this.publicAddress;
+
+			this.publicAddress = latestPublicAddress;
+			this._notify('client-public-address-changed', { ...this.eventScope, publicAddress: latestPublicAddress, previousPublicAddress });
+		}
+
 		// emit new attachments?
 		this.attachments = sample.attachments;
 
@@ -411,6 +449,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		// Done processing this sample. Stop directing injections at it, then persist the FINAL,
 		// injection-merged sample to the sink (this is why the sink write is here, not at the top).
 		this._activeSample = undefined;
+		// A `PEER_CONNECTION_CLOSED` injected from a `client-updated` handler.
+		this._closeReportedPeerConnections();
 		try {
 			this.sink?.write(sample);
 		} catch (err) {
@@ -568,6 +608,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	}
 
 	public addExtensionStats(stats: ExtensionStat) {
+		if (this.closed) return;
+
 		this._notify('client-extension-stats', { ...this.eventScope, extensionStats: stats });
 	}
 
@@ -612,8 +654,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	}
 
 	private _processClientEvent(event: ClientEvent, postBuffer?: ClientEvent[]) {
-		// eslint-disable-next-line no-console
-		// console.warn('ClientEvent', event);
+		// An event deferred to `postBuffer` is processed again once the sample's peer connections are
+		// applied; `client-event` is announced then, exactly once, rather than on both passes.
+		const deferredBefore = postBuffer?.length ?? 0;
+
 		switch (event.type) {
 			case ClientEventTypes.CLIENT_JOINED: {
 				if (event.timestamp) {
@@ -670,6 +714,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 					if (observedPeerConnection) {
 						observedPeerConnection.closedAt = event.timestamp;
+						this._closedPeerConnectionIds.add(observedPeerConnection.peerConnectionId);
+						this._peerConnectionsToClose.add(observedPeerConnection);
+						// Outside of `accept()` there is no sample left to apply to it: close now.
+						if (!this._activeSample) this._closeReportedPeerConnections();
 					} else if (postBuffer) {
 						postBuffer.push(event);
 					} else {
@@ -754,15 +802,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId);
 					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
 
-					if (observedPeerConnection) {
-						if (observedInboundTrack) {
-							observedInboundTrack.muted = true;
-							this._notify('inbound-track-muted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
-						} else if (observedOutboundTrack) {
-							observedOutboundTrack.muted = true;
-							this._notify('outbound-track-muted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
-						}
+					if (observedPeerConnection && observedInboundTrack) {
+						observedInboundTrack.muted = true;
+						this._notify('inbound-track-muted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
+					} else if (observedPeerConnection && observedOutboundTrack) {
+						observedOutboundTrack.muted = true;
+						this._notify('outbound-track-muted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
 					} else if (postBuffer) {
+						// The track (or its peer connection) arrives in this same sample; retry once it is applied.
 						postBuffer.push(event);
 					} else {
 						logger.warn('Received MEDIA_TRACK_MUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
@@ -779,15 +826,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 					const observedInboundTrack = observedPeerConnection?.observedInboundTracks.get(payload.trackId);
 					const observedOutboundTrack = observedPeerConnection?.observedOutboundTracks.get(payload.trackId);
 
-					if (observedPeerConnection) {
-						if (observedInboundTrack) {
-							observedInboundTrack.muted = false;
-							this._notify('inbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
-						} else if (observedOutboundTrack) {
-							observedOutboundTrack.muted = false;
-							this._notify('outbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
-						}
+					if (observedPeerConnection && observedInboundTrack) {
+						observedInboundTrack.muted = false;
+						this._notify('inbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedInboundTrack });
+					} else if (observedPeerConnection && observedOutboundTrack) {
+						observedOutboundTrack.muted = false;
+						this._notify('outbound-track-unmuted', { ...this.eventScope, observedPeerConnection, observedOutboundTrack });
 					} else if (postBuffer) {
+						// The track (or its peer connection) arrives in this same sample; retry once it is applied.
 						postBuffer.push(event);
 					} else {
 						logger.warn('Received MEDIA_TRACK_UNMUTED event without a corresponding observedPeerConnection or observedTrack: %o', event);
@@ -848,13 +894,30 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 		}
 
+		if (postBuffer && deferredBefore < postBuffer.length) return;
+
 		this._notify('client-event', { ...this.eventScope, event });
+	}
+
+	private _closeReportedPeerConnections() {
+		if (this._peerConnectionsToClose.size === 0) return;
+
+		const peerConnections = [ ...this._peerConnectionsToClose ];
+
+		this._peerConnectionsToClose.clear();
+		for (const observedPeerConnection of peerConnections) observedPeerConnection.close();
 	}
 
 	private _updatePeerConnection(sample: PeerConnectionSample, context?: AcceptContext): ObservedPeerConnection | undefined {
 		let observedPeerConnection = this.observedPeerConnections.get(sample.peerConnectionId);
 
 		if (!observedPeerConnection) {
+			if (this._closedPeerConnectionIds.has(sample.peerConnectionId)) {
+				logger.debug('Ignoring stats of peer connection %s, already closed by client %s', sample.peerConnectionId, this.clientId);
+
+				return undefined;
+			}
+
 			if (!sample.peerConnectionId) {
 				return (logger.warn(
 					`ObservedClient received an invalid PeerConnectionSample (missing peerConnectionId field). ClientId: ${this.clientId}, CallId: ${this.call.callId}`,
