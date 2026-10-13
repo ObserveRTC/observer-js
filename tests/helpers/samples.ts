@@ -89,6 +89,8 @@ export type RemoteOutboundSpec = {
 export type IceSpec = {
 	localProtocol?: string,
 	localCandidateType?: string,
+	/** Client-to-TURN transport of a relay local candidate (`udp`, `tcp` or `tls`). */
+	localRelayProtocol?: string,
 	/** The ICE server url — per W3C webrtc-stats this is only exposed on **local** candidates. */
 	localUrl?: string,
 	remoteUrl?: string,
@@ -204,7 +206,7 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 		const remoteId = `${spec.peerConnectionId}-remote`;
 		const pairId = `${spec.peerConnectionId}-pair`;
 
-		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host', url: spec.ice.localUrl });
+		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host', url: spec.ice.localUrl, relayProtocol: spec.ice.localRelayProtocol });
 		iceCandidates.push({ timestamp, id: remoteId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: 'host', url: spec.ice.remoteUrl });
 		iceCandidatePairs.push({
 			timestamp,

@@ -420,3 +420,41 @@ function erf(x: number): number {
 
 	return sign * y;
 }
+
+/**
+ * Estimates the p-th percentile (0..1) of the values counted in `histogram`, whose bucket `i`
+ * holds the values in `[i * bucketWidth, (i + 1) * bucketWidth)`. Interpolates linearly inside
+ * the bucket the rank falls in, so the error is at most one bucket width. With `openEnded`, the
+ * last bucket holds every value above its lower bound, and a percentile falling in it is reported
+ * as `max`. The estimate is clamped to `[min, max]` when given. `undefined` for an empty histogram.
+ */
+export function percentileOfHistogram(
+	histogram: readonly number[],
+	bucketWidth: number,
+	p: number,
+	options: { min?: number, max?: number, openEnded?: boolean } = {},
+): number | undefined {
+	let total = 0;
+
+	for (const count of histogram) total += count;
+	if (total < 1) return undefined;
+
+	const rank = Math.min(Math.max(p, 0), 1) * total;
+	let cumulative = 0;
+
+	for (let index = 0; index < histogram.length; ++index) {
+		const count = histogram[index];
+
+		if (count < 1 || cumulative + count < rank) {
+			cumulative += count;
+			continue;
+		}
+		if (options.openEnded && index === histogram.length - 1 && options.max !== undefined) return options.max;
+
+		const estimate = (index * bucketWidth) + (((rank - cumulative) / count) * bucketWidth);
+
+		return Math.min(Math.max(estimate, options.min ?? estimate), options.max ?? estimate);
+	}
+
+	return options.max;
+}

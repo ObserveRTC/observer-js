@@ -36,9 +36,9 @@ export { ObservedCall } from './ObservedCall';
 export type { ObservedCallSettings } from './ObservedCall';
 export { ObservedInboundTrack } from './ObservedInboundTrack';
 export { ObservedOutboundTrack } from './ObservedOutboundTrack';
-export { ObservedClient } from './ObservedClient';
+export { ObservedClient, RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS, RTT_HISTOGRAM_NUMBER_OF_BUCKETS, SCORE_HISTOGRAM_BUCKET_WIDTH, SCORE_HISTOGRAM_NUMBER_OF_BUCKETS } from './ObservedClient';
 // The settings object `createObservedClient` / `getOrCreateObservedClient` take.
-export type { ObservedClientSettings } from './ObservedClient';
+export type { ObservedClientSettings, RttSummary, ScoreSummary } from './ObservedClient';
 export { ObservedPeerConnection } from './ObservedPeerConnection';
 export { ObservedMediaSource } from './ObservedMediaSource';
 export { ObservedMediaPlayout } from './ObservedMediaPlayout';
@@ -286,6 +286,7 @@ export {
 	pageHinkley,
 	mannKendall,
 	mannKendallVerdict,
+	percentileOfHistogram,
 } from './utils/stats';
 export type { StatsSummary, PageHinkleyResult, MannKendallResult } from './utils/stats';
 export { SlidingWindow } from './utils/SlidingWindow';

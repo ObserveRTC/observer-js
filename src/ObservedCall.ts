@@ -97,11 +97,6 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	public maxNumberOfClients = 0;
 	public deltaNumberOfIssues = 0;
 
-	// public deltaRttLt50Measurements = 0;
-	// public deltaRttLt150Measurements = 0;
-	// public deltaRttLt300Measurements = 0;
-	// public deltaRttGtOrEq300Measurements = 0;
-
 	public appData: AppData;
 	public closed = false;
 	public startedAt?: number;

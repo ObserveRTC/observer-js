@@ -12,11 +12,43 @@ import { CalculatedScore } from './scores/CalculatedScore';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
 import type { ClientSampleSink } from './sinks/ClientSampleSink';
+import { percentileOfHistogram } from './utils/stats';
 import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
 import { ActiveClientIssue, RESOLVED_ISSUE_SUFFIX, baseIssueType, isClientIssueResolutionEntry } from './issues/ActiveClientIssue';
 import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 
 const logger = createLogger('ObservedClient');
+
+/** Width of one `rttHistogram` bucket. */
+export const RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS = 20;
+
+/** Number of `rttHistogram` buckets: 0–960 ms in 20 ms steps, plus one bucket for 980 ms and above. */
+export const RTT_HISTOGRAM_NUMBER_OF_BUCKETS = 50;
+
+/** Width of one `scoreHistogram` bucket. Scores are 0..5. */
+export const SCORE_HISTOGRAM_BUCKET_WIDTH = 1;
+
+/** Number of `scoreHistogram` buckets: [0, 1), [1, 2), [2, 3), [3, 4) and [4, 5]. */
+export const SCORE_HISTOGRAM_NUMBER_OF_BUCKETS = 5;
+
+/** Session RTT distribution of a client, in milliseconds, estimated from `rttHistogram`. */
+export type RttSummary = {
+	p50: number | undefined;
+	p75: number | undefined;
+	p95: number | undefined;
+	p99: number | undefined;
+	avg: number | undefined;
+};
+
+/** Session score distribution of a client, estimated from `scoreHistogram`. */
+export type ScoreSummary = {
+	p5: number | undefined;
+	p25: number | undefined;
+	p50: number | undefined;
+	p75: number | undefined;
+	p95: number | undefined;
+	avg: number | undefined;
+};
 
 export type ObservedClientSettings<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 	clientId: string;
@@ -95,10 +127,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	public deltaOutboundPacketsSent = 0;
 	public deltaTransportSentBytes = 0;
 	public deltaTransportReceivedBytes = 0;
-	public deltaRttLt50Measurements = 0;
-	public deltaRttLt150Measurements = 0;
-	public deltaRttLt300Measurements = 0;
-	public deltaRttGtOrEq300Measurements = 0;
 
 	public currentMaxRttInMs?: number;
 	public currentMinRttInMs?: number;
@@ -119,7 +147,75 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public totalScoreSum = 0;
 	public numberOfScoreMeasurements = 0;
-	// public totalNumberOfIssues = 0;
+	public minScore?: number;
+	public maxScore?: number;
+
+	/**
+	 * Score measurements (one per accepted sample with a score) counted into
+	 * `SCORE_HISTOGRAM_NUMBER_OF_BUCKETS` buckets of `SCORE_HISTOGRAM_BUCKET_WIDTH`. Histograms of
+	 * several clients can be added bucket by bucket to get the distribution of a call.
+	 */
+	public readonly scoreHistogram: number[] = new Array(SCORE_HISTOGRAM_NUMBER_OF_BUCKETS).fill(0);
+
+	/** Issues raised over the session, counted as in `issueHistogram`. */
+	public totalNumberOfIssues = 0;
+
+	/**
+	 * Number of times each issue type was raised over the session, keyed by the base type (without
+	 * the `-resolved` suffix): `client.issueHistogram['loopback-audio-input']`. A resolution entry is
+	 * not counted, and neither is a re-raise of a keyed issue that is still open, so a stateful issue
+	 * reported on every tick counts once per open interval. A type never raised is `undefined`.
+	 */
+	public readonly issueHistogram: Record<string, number> = Object.create(null);
+
+	// Session totals. Unlike the `delta*` and `current*` fields they are never reset, and unlike the
+	// `total*` fields of `ObservedPeerConnection` they survive a peer connection being closed.
+	// Every RTT measurement is one peer connection's `currentRttInMs` in one accepted sample.
+	public totalRttSumInMs = 0;
+	public numberOfRttMeasurements = 0;
+	public maxRttInMs?: number;
+	public minRttInMs?: number;
+
+	/**
+	 * RTT measurements counted into fixed buckets of `RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS`; the last bucket
+	 * holds every measurement of 980 ms and above. Constant memory, so percentiles can be estimated
+	 * over the whole session (see `rttSummary`) without keeping every measurement. Histograms
+	 * of several clients can be added bucket by bucket to get the distribution of a call.
+	 */
+	public readonly rttHistogram: number[] = new Array(RTT_HISTOGRAM_NUMBER_OF_BUCKETS).fill(0);
+
+	private _rttSummary?: Readonly<RttSummary>;
+	private _scoreSummary?: Readonly<ScoreSummary>;
+
+	public totalInboundPacketsLost = 0;
+	public totalInboundPacketsReceived = 0;
+	public totalOutboundPacketsSent = 0;
+	public totalReceivedAudioBytes = 0;
+	public totalReceivedVideoBytes = 0;
+	public totalSentAudioBytes = 0;
+	public totalSentVideoBytes = 0;
+	public totalTransportReceivedBytes = 0;
+	public totalTransportSentBytes = 0;
+	public totalDataChannelBytesReceived = 0;
+	public totalDataChannelBytesSent = 0;
+	public totalDataChannelMessagesReceived = 0;
+	public totalDataChannelMessagesSent = 0;
+
+	/** Highest `sendingAudioBitrate + sendingVideoBitrate` of any sample, in bits per second. */
+	public peakSendingBitrate = 0;
+
+	/** Highest `receivingAudioBitrate + receivingVideoBitrate` of any sample, in bits per second. */
+	public peakReceivingBitrate = 0;
+
+	// Samples by the transport path of the selected ICE candidate pairs. A sample whose peer
+	// connections use different paths is counted under each of them, so more than one non-zero
+	// counter means the path changed or was mixed. A sample with no selected pair counts as unknown.
+	public numberOfSamplesOverUdp = 0;
+	public numberOfSamplesOverTcp = 0;
+	public numberOfSamplesOverTurnUdp = 0;
+	public numberOfSamplesOverTurnTcp = 0;
+	public numberOfSamplesWithUnknownPath = 0;
+	public numberOfPublicAddressChanges = 0;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
 
@@ -144,13 +240,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	private _pendingInjections: Pick<ClientSample, 'clientEvents' | 'clientIssues' | 'extensionStats' | 'attachments' | 'clientMetaItems'> = {};
 	private _activeSample?: ClientSample;
-
-	/** Peer connections the client reported closed (`PEER_CONNECTION_CLOSED`), closed once the current sample is applied. */
 	private readonly _peerConnectionsToClose = new Set<ObservedPeerConnection>();
-
-	/** Ids of peer connections closed by the client; late stats for them are ignored rather than resurrecting them. */
 	private readonly _closedPeerConnectionIds = new Set<string>();
-
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -196,6 +287,73 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 	public get score() {
 		return this.calculatedScore.value;
+	}
+
+	/**
+	 * Percentiles (error at most one 20 ms bucket; a percentile in the overflow bucket is reported as
+	 * `maxRttInMs`) and mean of every RTT measurement of the session. Cached until the next measurement.
+	 */
+	public get rttSummary(): Readonly<RttSummary> {
+		if (!this._rttSummary) {
+			const bounds = { min: this.minRttInMs, max: this.maxRttInMs, openEnded: true };
+			const percentile = (p: number) => percentileOfHistogram(this.rttHistogram, RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS, p, bounds);
+
+			this._rttSummary = Object.freeze({
+				p50: percentile(0.5),
+				p75: percentile(0.75),
+				p95: percentile(0.95),
+				p99: percentile(0.99),
+				avg: 0 < this.numberOfRttMeasurements ? this.totalRttSumInMs / this.numberOfRttMeasurements : undefined,
+			});
+		}
+
+		return this._rttSummary;
+	}
+
+	/**
+	 * Percentiles (error at most one score point) and mean of every score of the session. Cached until
+	 * the next score.
+	 */
+	public get scoreSummary(): Readonly<ScoreSummary> {
+		if (!this._scoreSummary) {
+			const bounds = { min: this.minScore, max: this.maxScore };
+			const percentile = (p: number) => percentileOfHistogram(this.scoreHistogram, SCORE_HISTOGRAM_BUCKET_WIDTH, p, bounds);
+
+			this._scoreSummary = Object.freeze({
+				p5: percentile(0.05),
+				p25: percentile(0.25),
+				p50: percentile(0.5),
+				p75: percentile(0.75),
+				p95: percentile(0.95),
+				avg: 0 < this.numberOfScoreMeasurements ? this.totalScoreSum / this.numberOfScoreMeasurements : undefined,
+			});
+		}
+
+		return this._scoreSummary;
+	}
+
+	private _addScoreMeasurement(score: number) {
+		this._scoreSummary = undefined;
+		this.totalScoreSum += score;
+		++this.numberOfScoreMeasurements;
+		if (this.maxScore === undefined || this.maxScore < score) this.maxScore = score;
+		if (this.minScore === undefined || score < this.minScore) this.minScore = score;
+
+		const bucket = Math.min(Math.max(Math.floor(score / SCORE_HISTOGRAM_BUCKET_WIDTH), 0), SCORE_HISTOGRAM_NUMBER_OF_BUCKETS - 1);
+
+		++this.scoreHistogram[bucket];
+	}
+
+	private _addRttMeasurement(rttInMs: number) {
+		this._rttSummary = undefined;
+		this.totalRttSumInMs += rttInMs;
+		++this.numberOfRttMeasurements;
+		if (this.maxRttInMs === undefined || this.maxRttInMs < rttInMs) this.maxRttInMs = rttInMs;
+		if (this.minRttInMs === undefined || rttInMs < this.minRttInMs) this.minRttInMs = rttInMs;
+
+		const bucket = Math.min(Math.max(Math.floor(rttInMs / RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS), 0), RTT_HISTOGRAM_NUMBER_OF_BUCKETS - 1);
+
+		++this.rttHistogram[bucket];
 	}
 
 	public close() {
@@ -258,6 +416,10 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		const elapsedInSeconds = elapsedInMs / 1000;
 		let sumOfRtts = 0;
 		let numberOfRttMeasurements = 0;
+		let overUdp = false;
+		let overTcp = false;
+		let overTurnUdp = false;
+		let overTurnTcp = false;
 
 		++this.acceptedSamples;
 
@@ -276,10 +438,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.deltaSentVideoBytes = 0;
 		this.deltaTransportReceivedBytes = 0;
 		this.deltaTransportSentBytes = 0;
-		this.deltaRttLt50Measurements = 0;
-		this.deltaRttLt150Measurements = 0;
-		this.deltaRttLt300Measurements = 0;
-		this.deltaRttGtOrEq300Measurements = 0;
 		this.deltaNumberOfIssues = 0;
 
 		this.numberOfDataChannels = 0;
@@ -374,6 +532,21 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				this.usingTCP = true;
 			}
 
+			for (const selectedPair of observedPeerConnection.selectedIceCandidatePairs) {
+				const localCandidate = selectedPair.getLocalCandidate();
+
+				if (!localCandidate) continue;
+				if (localCandidate.candidateType === 'relay') {
+					// For a relay candidate `protocol` is the TURN server's side; the client-to-TURN leg is `relayProtocol`.
+					if (localCandidate.relayProtocol === 'tcp' || localCandidate.relayProtocol === 'tls') overTurnTcp = true;
+					else overTurnUdp = true;
+				} else if (localCandidate.protocol === 'tcp') {
+					overTcp = true;
+				} else {
+					overUdp = true;
+				}
+			}
+
 			if (observedPeerConnection.currentRttInMs) {
 				if (this.currentMinRttInMs === undefined || observedPeerConnection.currentRttInMs < this.currentMinRttInMs) {
 					this.currentMinRttInMs = observedPeerConnection.currentRttInMs;
@@ -381,18 +554,9 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 				if (this.currentMaxRttInMs === undefined || observedPeerConnection.currentRttInMs > this.currentMaxRttInMs) {
 					this.currentMaxRttInMs = observedPeerConnection.currentRttInMs;
 				}
-				if (observedPeerConnection.currentRttInMs < 50) {
-					this.deltaRttLt50Measurements += 1;
-				} else if (observedPeerConnection.currentRttInMs < 150) {
-					this.deltaRttLt150Measurements += 1;
-				} else if (observedPeerConnection.currentRttInMs < 300) {
-					this.deltaRttLt300Measurements += 1;
-				} else if (300 <= observedPeerConnection.currentRttInMs) {
-					this.deltaRttGtOrEq300Measurements += 1;
-				}
-
 				sumOfRtts += observedPeerConnection.currentRttInMs;
 				++numberOfRttMeasurements;
+				this._addRttMeasurement(observedPeerConnection.currentRttInMs);
 			}
 		}
 
@@ -406,6 +570,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			const previousPublicAddress = this.publicAddress;
 
 			this.publicAddress = latestPublicAddress;
+			if (previousPublicAddress !== undefined) ++this.numberOfPublicAddressChanges;
 			this._notify('client-public-address-changed', { ...this.eventScope, publicAddress: latestPublicAddress, previousPublicAddress });
 		}
 
@@ -427,6 +592,29 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		}
 		this.currentAvgRttInMs = 0 < numberOfRttMeasurements ? sumOfRtts / numberOfRttMeasurements : undefined;
 
+		this.peakSendingBitrate = Math.max(this.peakSendingBitrate, this.sendingAudioBitrate + this.sendingVideoBitrate);
+		this.peakReceivingBitrate = Math.max(this.peakReceivingBitrate, this.receivingAudioBitrate + this.receivingVideoBitrate);
+
+		this.totalInboundPacketsLost += this.deltaInboundPacketsLost;
+		this.totalInboundPacketsReceived += this.deltaInboundPacketsReceived;
+		this.totalOutboundPacketsSent += this.deltaOutboundPacketsSent;
+		this.totalReceivedAudioBytes += this.deltaReceivedAudioBytes;
+		this.totalReceivedVideoBytes += this.deltaReceivedVideoBytes;
+		this.totalSentAudioBytes += this.deltaSentAudioBytes;
+		this.totalSentVideoBytes += this.deltaSentVideoBytes;
+		this.totalTransportReceivedBytes += this.deltaTransportReceivedBytes;
+		this.totalTransportSentBytes += this.deltaTransportSentBytes;
+		this.totalDataChannelBytesReceived += this.deltaDataChannelBytesReceived;
+		this.totalDataChannelBytesSent += this.deltaDataChannelBytesSent;
+		this.totalDataChannelMessagesReceived += this.deltaDataChannelMessagesReceived;
+		this.totalDataChannelMessagesSent += this.deltaDataChannelMessagesSent;
+
+		if (overUdp) ++this.numberOfSamplesOverUdp;
+		if (overTcp) ++this.numberOfSamplesOverTcp;
+		if (overTurnUdp) ++this.numberOfSamplesOverTurnUdp;
+		if (overTurnTcp) ++this.numberOfSamplesOverTurnTcp;
+		if (!overUdp && !overTcp && !overTurnUdp && !overTurnTcp) ++this.numberOfSamplesWithUnknownPath;
+
 		this.calculatedScore.value = sample.score;
 
 		this.lastSampleTimestamp = sample.timestamp;
@@ -438,9 +626,8 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.updated = now;
 
 		// if result changed after update
-		if (this.calculatedScore.value) {
-			this.totalScoreSum += this.calculatedScore.value;
-			++this.numberOfScoreMeasurements;
+		if (typeof this.calculatedScore.value === 'number' && Number.isFinite(this.calculatedScore.value)) {
+			this._addScoreMeasurement(this.calculatedScore.value);
 		}
 
 		if (this.settings.closeClientIfIdleForMs !== undefined) {
@@ -592,6 +779,13 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 
 		if (isClientIssueResolutionEntry(issue)) {
 			return this._resolveIssue(issue);
+		}
+
+		if (!issue.key || !this.activeIssues.get(issue.key)) {
+			const type = baseIssueType(issue.type);
+
+			this.issueHistogram[type] = (this.issueHistogram[type] ?? 0) + 1;
+			++this.totalNumberOfIssues;
 		}
 
 		const now = Date.now();
