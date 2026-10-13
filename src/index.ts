@@ -61,6 +61,7 @@ export type { ObservedTURNEventMap } from './ObservedTURN';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
 export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
+export type { AudioInputDevice } from './schema/ClientMetaTypes';
 export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
 // The rest of the sample schema. These appear in public signatures (`ObservedInboundRtp.stats`,
 // `injectExtensionStat`, the `client-extension-stats` payload, …), so a consumer writing a typed
@@ -200,6 +201,8 @@ export {
 	TrackDeliveryMismatchTypes,
 } from './detectors/TrackDeliveryMismatchDetector';
 export type { TrackDeliveryMismatchDetectorConfig } from './detectors/TrackDeliveryMismatchDetector';
+export { AudioEchoDetector, AudioEchoTypes } from './detectors/AudioEchoDetector';
+export type { AudioEchoDetectorConfig } from './detectors/AudioEchoDetector';
 export {
 	UnconsumedTrackDetector,
 	UnconsumedTrackTypes,

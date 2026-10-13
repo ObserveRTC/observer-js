@@ -3,6 +3,7 @@
 	"compilerOptions":
 	{
 		"lib": [ "ES2022" ],
+		"types": [ "node", "jest" ],
 		"target": "ESNext",
 		"module": "CommonJS",
 		"moduleResolution": "node",
@@ -15,6 +16,6 @@
 		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true
 	},
-	"include": [ "src" ]
+	"include": [ "src", "tests", "examples", "bench" ]
 }
 

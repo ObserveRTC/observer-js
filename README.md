@@ -1126,6 +1126,7 @@ counters** — that is the rule the whole design hangs on:
 | `PublisherFaultCorroborationDetector` | 🔗 | call | `CORROBORATED_PUBLISHER_FAULT` |
 | `TrackDeliveryMismatchDetector` | 🔗 | call | `PUBLISHED_TRACK_NOT_DELIVERED`, `RECEIVER_TRACK_NOT_DELIVERED`, `PUBLISHER_TRACK_DRY` |
 | `UnconsumedTrackDetector` | 🔗 | call | `UNCONSUMED_PUBLISHED_TRACK` |
+| `AudioEchoDetector` | 🔗¹ | call | `AUDIO_ECHO_SUSPECTED` |
 | `ClientPopulationIssueDetector` | | **observer** | `CLIENT_POPULATION_ISSUE` |
 | `SfuCongestionDetector` | | **observer** | `sfu-congestion` |
 | `TurnServerHealthDetector` | | **observer** | `TURN_SERVER_DEGRADED` |
@@ -1168,6 +1169,16 @@ What each adds that no endpoint can know:
   from the **same SFU** — the finding's meaning is "these clients share only that server".
 - **`TrackDeliveryMismatchDetector`** — *are the two ends of a track disagreeing?*
 - **`UnconsumedTrackDetector`** — *is anyone actually subscribed?* (reads the resolver's silence)
+- **`AudioEchoDetector`** — *is someone sending the others' voices back into the call?* Compares
+  each outbound audio track's per-tick level (`ObservedOutboundTrack.rmsAudioLevel`) with the
+  loudest other participant's, bucket by bucket. An echo is active whenever the source speaks, and
+  louder when the source is louder; turn-taking fails the first test and cross-talk the second.
+  When both tracks of a pair pass, it reports the one with the client's `loopback-audio-input`
+  issue open, else the one that follows more reliably, else the quieter one (`ambiguousDirection`).
+  Works at the clients' sampling granularity, so it catches sustained echo (a `Monitor of …`
+  loopback device, speakers into an open mic) rather than faint echo.
+  ¹ The resolver is needed only for publishers whose browser reports no media-source audio level
+  (Firefox): their level is then read from what their receivers heard.
 - **`TurnServerHealthDetector`** — *does trouble cluster on one relay?*
 - **`TurnServerOutageDetector`** — covers the case the health detector structurally cannot. The
   health detector groups clients by the server relaying them and asks how many report issues — it

@@ -10,6 +10,7 @@ import { TrackDeliveryMismatchDetector, TrackDeliveryMismatchDetectorConfig } fr
 import { TurnServerHealthDetector, TurnServerHealthDetectorConfig } from './TurnServerHealthDetector';
 import { TurnServerOutageDetector, TurnServerOutageDetectorConfig } from './TurnServerOutageDetector';
 import { UnconsumedTrackDetector, UnconsumedTrackDetectorConfig } from './UnconsumedTrackDetector';
+import { AudioEchoDetector, AudioEchoDetectorConfig } from './AudioEchoDetector';
 
 const logger = createLogger('Detectors');
 
@@ -42,6 +43,7 @@ export type AvailableCallScopeDetectorsConfigs = {
 	[CallConcurrentIssueDetector.NAME]: CallConcurrentIssueDetectorConfig;
 	[IssueFanOutDetector.NAME]: IssueFanOutDetectorConfig;
 	[PublisherFaultCorroborationDetector.NAME]: PublisherFaultCorroborationDetectorConfig;
+	[AudioEchoDetector.NAME]: AudioEchoDetectorConfig;
 };
 
 export type AvailableDetectorsConfigs =
