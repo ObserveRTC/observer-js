@@ -1,7 +1,7 @@
 import { MediaKind } from './common/types';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { InboundRtpStats } from './schema/ClientSample';
-import { counterDelta } from './utils/stats';
+import { counterDelta, rmsAudioLevel } from './utils/stats';
 
 export class ObservedInboundRtp implements InboundRtpStats {
 	public appData?: Record<string, unknown>;
@@ -69,7 +69,7 @@ export class ObservedInboundRtp implements InboundRtpStats {
 	corruptionMeasurements?: number | undefined;
 	attachments?: Record<string, unknown> | undefined;
 	jitter?: number | undefined;
-	
+
 	public bitrate = 0;
 	public fractionLost?: number;
 	public bitPerPixel = 0;
@@ -102,6 +102,16 @@ export class ObservedInboundRtp implements InboundRtpStats {
 	public deltaFecPacketsReceived = 0;
 	public deltaFecPacketsDiscarded = 0;
 	public deltaPausesDuration = 0;
+	public deltaTotalAudioEnergy = 0;
+	public deltaTotalSamplesDuration = 0;
+
+	/**
+	 * RMS level (0..1) of the audio played out from this stream over the tick, from the two deltas
+	 * above. This is the far end's outgoing level **as this receiver heard it**, which is the only
+	 * send-side level available for publishers on browsers that do not report `media-source` audio
+	 * levels (Firefox). `undefined` for video and for a tick with no audio accounted for.
+	 */
+	public rmsAudioLevel?: number;
 
 	/**
 	 * Mean jitter-buffer delay for the frames/samples emitted in this tick (seconds), derived from
@@ -212,6 +222,9 @@ export class ObservedInboundRtp implements InboundRtpStats {
 		this.jitterBufferDelayInMs = undefined;
 		this.concealmentRatio = undefined;
 		this.framesDroppedRatio = undefined;
+		this.deltaTotalAudioEnergy = 0;
+		this.deltaTotalSamplesDuration = 0;
+		this.rmsAudioLevel = undefined;
 
 		const elapsedTimeInMs = stats.timestamp - this.timestamp;
 
@@ -252,6 +265,9 @@ export class ObservedInboundRtp implements InboundRtpStats {
 			this.deltaRetransmittedPacketsReceived = counterDelta(this.retransmittedPacketsReceived, stats.retransmittedPacketsReceived);
 			this.deltaFecPacketsReceived = counterDelta(this.fecPacketsReceived, stats.fecPacketsReceived);
 			this.deltaFecPacketsDiscarded = counterDelta(this.fecPacketsDiscarded, stats.fecPacketsDiscarded);
+			this.deltaTotalAudioEnergy = counterDelta(this.totalAudioEnergy, stats.totalAudioEnergy);
+			this.deltaTotalSamplesDuration = counterDelta(this.totalSamplesDuration, stats.totalSamplesDuration);
+			this.rmsAudioLevel = rmsAudioLevel(this.deltaTotalAudioEnergy, this.deltaTotalSamplesDuration);
 
 			// bits per second (matches ObservedOutboundRtp.bitrate and the client-level bitrates).
 			this.bitrate = (this.deltaBytesReceived * 8) / elapsedInSeconds;
@@ -318,6 +334,11 @@ export class ObservedInboundRtp implements InboundRtpStats {
 		this.jitterBufferEmittedCount = stats.jitterBufferEmittedCount;
 		this.jitterBufferMinimumDelay = stats.jitterBufferMinimumDelay;
 		this.totalSamplesReceived = stats.totalSamplesReceived;
+		// Declared since the start but never assigned, so every audio level read off an inbound RTP
+		// was `undefined`.
+		this.audioLevel = stats.audioLevel;
+		this.totalAudioEnergy = stats.totalAudioEnergy;
+		this.totalSamplesDuration = stats.totalSamplesDuration;
 		this.concealedSamples = stats.concealedSamples;
 		this.silentConcealedSamples = stats.silentConcealedSamples;
 		this.concealmentEvents = stats.concealmentEvents;

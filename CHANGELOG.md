@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.2.0 — 2026-10-13
+
+### `ObservedClient` session totals
+
+New public fields that accumulate over the whole session, are never reset per sample, and survive
+a peer connection being closed, so a per-client summary can be read directly off the client:
+
+- RTT: `totalRttSumInMs`, `numberOfRttMeasurements`, `minRttInMs`, `maxRttInMs`, and
+  `rttHistogram` (50 buckets of 20 ms; the last holds 980 ms and above). `rttSummary`
+  returns a frozen, cached `{ p50, p75, p95, p99, avg }`.
+- Score: `scoreHistogram` (5 buckets of 1 point over 0..5), `minScore`, `maxScore`.
+  `scoreSummary` returns a frozen, cached `{ p5, p25, p50, p75, p95, avg }`. A score of `0` is
+  now counted in `totalScoreSum` / `numberOfScoreMeasurements` (it was skipped before).
+- Issues: `issueHistogram['<type>']` counts raises per base type (resolutions and re-raises of an
+  open keyed issue are not counted); `totalNumberOfIssues` is its sum.
+- Traffic: `totalInboundPacketsLost`, `totalInboundPacketsReceived`, `totalOutboundPacketsSent`,
+  `totalReceived/SentAudio/VideoBytes`, `totalTransportReceived/SentBytes`, `totalDataChannel*`.
+- Path: `numberOfSamplesOverUdp`, `numberOfSamplesOverTcp`, `numberOfSamplesOverTurnUdp`,
+  `numberOfSamplesOverTurnTcp`, `numberOfSamplesWithUnknownPath`. TURN over TCP/TLS is taken from
+  the relay candidate's `relayProtocol`.
+- Other: `numberOfPublicAddressChanges`, `peakSendingBitrate`, `peakReceivingBitrate`.
+- `percentileOfHistogram(histogram, bucketWidth, p, options)` in `utils/stats`, for percentiles of
+  histograms combined across clients. Exported types `RttSummary`, `ScoreSummary` and
+  constants `RTT_HISTOGRAM_*`, `SCORE_HISTOGRAM_*`.
+
+**Breaking:** removed `ObservedClient.deltaRttLt50Measurements`, `deltaRttLt150Measurements`,
+`deltaRttLt300Measurements` and `deltaRttGtOrEq300Measurements`; use `rttHistogram`.
+
+### `AudioEchoDetector` (new, call scope)
+
+`call.addDetector('audio-echo-detector')` / `observer.addCallDetector('audio-echo-detector')`.
+Raises `AUDIO_ECHO_SUSPECTED` when a participant's outgoing audio follows another participant's
+voice: active in at least `minFollowRatio` of the buckets where the loudest other participant
+spoke, with a dB level correlation of at least `minCorrelation`. The payload names the echoing and
+the source track and client, the evidence, the capture device label (from `AUDIO_INPUT_DEVICE`
+metadata) and whether the client's `loopback-audio-input` issue is open on the track.
+
+### Audio level fields
+
+- `ObservedInboundRtp`: `audioLevel`, `totalAudioEnergy` and `totalSamplesDuration` are now
+  assigned (they were declared but always `undefined`), plus the per-tick `deltaTotalAudioEnergy`,
+  `deltaTotalSamplesDuration` and `rmsAudioLevel`.
+- `ObservedMediaSource`: `deltaTotalAudioEnergy`, `deltaTotalSamplesDuration`, `rmsAudioLevel`.
+- `ObservedOutboundTrack`: `rmsAudioLevel` (media-source level, else the receivers' median),
+  `rmsAudioLevelSource`, `receivedRmsAudioLevel`, and `audioInputDevice`.
+- `rmsAudioLevel(deltaEnergy, deltaDuration)` in `utils/stats`.
+
+### `AUDIO_INPUT_DEVICE` client metadata
+
+`ClientMetaTypes.AUDIO_INPUT_DEVICE` (client-monitor-js next) is parsed into
+`ObservedClient.audioInputDevices`, keyed by track id. `AudioInputDevice` is exported.
+
+### Dependencies and tooling
+
+- The `events` runtime dependency is removed. It is the browser polyfill of `EventEmitter`; the
+  library requires Node >= 22, so `EventEmitter` is now imported from the built-in `node:events`.
+  This also fixes the editor error `Could not find a declaration file for module 'events'`.
+- `tsconfig.json` now covers `tests/`, `examples/` and `bench/` (with `types: ["node", "jest"]`),
+  so `yarn typecheck` and the editor check them against the project config. The build output is
+  unchanged.
+- `scripts/next-version.sh`: run from an up-to-date `master` after a release; bumps the minor
+  version, commits it on a branch named after the version, pushes it and opens a PR titled with
+  the version.
+
 ## 1.1.0 — 2026-09-29
 
 ### Public address of clients and peer connections (new)

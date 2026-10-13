@@ -36,9 +36,9 @@ export { ObservedCall } from './ObservedCall';
 export type { ObservedCallSettings } from './ObservedCall';
 export { ObservedInboundTrack } from './ObservedInboundTrack';
 export { ObservedOutboundTrack } from './ObservedOutboundTrack';
-export { ObservedClient } from './ObservedClient';
+export { ObservedClient, RTT_HISTOGRAM_BUCKET_WIDTH_IN_MS, RTT_HISTOGRAM_NUMBER_OF_BUCKETS, SCORE_HISTOGRAM_BUCKET_WIDTH, SCORE_HISTOGRAM_NUMBER_OF_BUCKETS } from './ObservedClient';
 // The settings object `createObservedClient` / `getOrCreateObservedClient` take.
-export type { ObservedClientSettings } from './ObservedClient';
+export type { ObservedClientSettings, RttSummary, ScoreSummary } from './ObservedClient';
 export { ObservedPeerConnection } from './ObservedPeerConnection';
 export { ObservedMediaSource } from './ObservedMediaSource';
 export { ObservedMediaPlayout } from './ObservedMediaPlayout';
@@ -61,6 +61,7 @@ export type { ObservedTURNEventMap } from './ObservedTURN';
 export { ObservedPeerConnectionTransport } from './ObservedPeerConnectionTransport';
 export { ClientEventTypes } from './schema/ClientEventTypes';
 export { ClientMetaTypes } from './schema/ClientMetaTypes';
+export type { AudioInputDevice } from './schema/ClientMetaTypes';
 export { ClientSample, ClientIssue, ClientEvent, ClientMetaData } from './schema/ClientSample';
 // The rest of the sample schema. These appear in public signatures (`ObservedInboundRtp.stats`,
 // `injectExtensionStat`, the `client-extension-stats` payload, …), so a consumer writing a typed
@@ -200,6 +201,8 @@ export {
 	TrackDeliveryMismatchTypes,
 } from './detectors/TrackDeliveryMismatchDetector';
 export type { TrackDeliveryMismatchDetectorConfig } from './detectors/TrackDeliveryMismatchDetector';
+export { AudioEchoDetector, AudioEchoTypes } from './detectors/AudioEchoDetector';
+export type { AudioEchoDetectorConfig } from './detectors/AudioEchoDetector';
 export {
 	UnconsumedTrackDetector,
 	UnconsumedTrackTypes,
@@ -283,6 +286,7 @@ export {
 	pageHinkley,
 	mannKendall,
 	mannKendallVerdict,
+	percentileOfHistogram,
 } from './utils/stats';
 export type { StatsSummary, PageHinkleyResult, MannKendallResult } from './utils/stats';
 export { SlidingWindow } from './utils/SlidingWindow';

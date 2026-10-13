@@ -170,6 +170,19 @@ export function counterDelta(previous: number | undefined, current: number | und
 }
 
 /**
+ * RMS audio level (0..1) over one tick, from the deltas of the cumulative `totalAudioEnergy` and
+ * `totalSamplesDuration` pair — the webrtc-stats way to read them: energy is the integral of the
+ * squared level over time, so `sqrt(ΔE / Δt)` is the level averaged over the tick, pauses included.
+ * `audioLevel` is a point sample and reads zero between words. `undefined` when no audio was
+ * accounted for in the tick.
+ */
+export function rmsAudioLevel(deltaTotalAudioEnergy: number, deltaTotalSamplesDuration: number): number | undefined {
+	if (!(0 < deltaTotalSamplesDuration)) return undefined;
+
+	return Math.sqrt(Math.max(0, deltaTotalAudioEnergy) / deltaTotalSamplesDuration);
+}
+
+/**
  * Pearson correlation of two equal-length series, clamped to `0..1`.
  *
  * Negative or undefined relationships read as `0`, because every caller here asks "does A follow B?"
@@ -406,4 +419,42 @@ function erf(x: number): number {
 	const y = 1 - (((((((((a5 * t) + a4) * t) + a3) * t) + a2) * t) + a1) * t * Math.exp(-(ax * ax)));
 
 	return sign * y;
+}
+
+/**
+ * Estimates the p-th percentile (0..1) of the values counted in `histogram`, whose bucket `i`
+ * holds the values in `[i * bucketWidth, (i + 1) * bucketWidth)`. Interpolates linearly inside
+ * the bucket the rank falls in, so the error is at most one bucket width. With `openEnded`, the
+ * last bucket holds every value above its lower bound, and a percentile falling in it is reported
+ * as `max`. The estimate is clamped to `[min, max]` when given. `undefined` for an empty histogram.
+ */
+export function percentileOfHistogram(
+	histogram: readonly number[],
+	bucketWidth: number,
+	p: number,
+	options: { min?: number, max?: number, openEnded?: boolean } = {},
+): number | undefined {
+	let total = 0;
+
+	for (const count of histogram) total += count;
+	if (total < 1) return undefined;
+
+	const rank = Math.min(Math.max(p, 0), 1) * total;
+	let cumulative = 0;
+
+	for (let index = 0; index < histogram.length; ++index) {
+		const count = histogram[index];
+
+		if (count < 1 || cumulative + count < rank) {
+			cumulative += count;
+			continue;
+		}
+		if (options.openEnded && index === histogram.length - 1 && options.max !== undefined) return options.max;
+
+		const estimate = (index * bucketWidth) + (((rank - cumulative) / count) * bucketWidth);
+
+		return Math.min(Math.max(estimate, options.min ?? estimate), options.max ?? estimate);
+	}
+
+	return options.max;
 }

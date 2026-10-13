@@ -6,7 +6,7 @@ export enum ClientMetaTypes {
 	MEDIA_DEVICES_SUPPORTED_CONSTRAINTS = 'MEDIA_DEVICES_SUPPORTED_CONSTRAINTS',
 	USER_MEDIA_ERROR = 'USER_MEDIA_ERROR',
 	LOCAL_SDP = 'LOCAL_SDP',
-
+	AUDIO_INPUT_DEVICE = 'AUDIO_INPUT_DEVICE',
 	OPERATION_SYSTEM = 'OPERATION_SYSTEM',
 	ENGINE = 'ENGINE',
 	PLATFORM = 'PLATFORM',
@@ -18,6 +18,20 @@ export type MediaDeviceInfo = {
 	label: string;
 	kind: string;
 	groupId: string;
+}
+
+/**
+ * Payload of `AUDIO_INPUT_DEVICE`: which device an outbound audio track captures from. Sent by the
+ * client once per track, when it is first monitored.
+ */
+export type AudioInputDevice = {
+	peerConnectionId: string;
+	trackId: string;
+
+	/** `MediaStreamTrack.label`; empty when capture permission was not yet granted. */
+	label: string;
+	deviceId?: string;
+	groupId?: string;
 }
 
 export type Browser = {

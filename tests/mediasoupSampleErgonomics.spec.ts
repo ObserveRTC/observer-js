@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { ObservedMediasoupRouter } from '../src/ObservedMediasoupRouter';
 
 /* eslint is not run on tests; these fakes stand in for the mediasoup `types.*` objects. */

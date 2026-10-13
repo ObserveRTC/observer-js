@@ -45,6 +45,9 @@ export type InboundSpec = {
 	jitterBufferEmittedCount?: number,
 	frameWidth?: number,
 	frameHeight?: number,
+	/** cumulative audio energy / samples duration, as played out (audio) */
+	totalAudioEnergy?: number,
+	totalSamplesDuration?: number,
 	/** track attachments (e.g. { producerId, consumerId }) */
 	attachments?: Record<string, unknown>,
 };
@@ -55,6 +58,9 @@ export type OutboundSpec = {
 	ssrc?: number,
 	bytesSent?: number,
 	packetsSent?: number,
+	/** cumulative audio energy / samples duration of the media source (audio) */
+	totalAudioEnergy?: number,
+	totalSamplesDuration?: number,
 	/** track attachments (e.g. { producerId }) */
 	attachments?: Record<string, unknown>,
 };
@@ -83,6 +89,8 @@ export type RemoteOutboundSpec = {
 export type IceSpec = {
 	localProtocol?: string,
 	localCandidateType?: string,
+	/** Client-to-TURN transport of a relay local candidate (`udp`, `tcp` or `tls`). */
+	localRelayProtocol?: string,
 	/** The ICE server url — per W3C webrtc-stats this is only exposed on **local** candidates. */
 	localUrl?: string,
 	remoteUrl?: string,
@@ -139,6 +147,8 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 			jitterBufferEmittedCount: inb.jitterBufferEmittedCount,
 			frameWidth: inb.frameWidth,
 			frameHeight: inb.frameHeight,
+			totalAudioEnergy: inb.totalAudioEnergy,
+			totalSamplesDuration: inb.totalSamplesDuration,
 		} as InboundRtpStats);
 		inboundTracks.push({ timestamp, id: inb.trackId, kind, attachments: inb.attachments });
 	}
@@ -148,7 +158,10 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 		const mediaSourceId = `ms-${out.trackId}`;
 
 		// A media source is required for the outbound track to resolve its RTPs (getOutboundRtps()).
-		mediaSources.push({ timestamp, id: mediaSourceId, kind, trackIdentifier: out.trackId });
+		mediaSources.push({
+			timestamp, id: mediaSourceId, kind, trackIdentifier: out.trackId,
+			totalAudioEnergy: out.totalAudioEnergy, totalSamplesDuration: out.totalSamplesDuration,
+		});
 		outboundRtps.push({
 			timestamp,
 			id: `${out.trackId}-rtp`,
@@ -193,7 +206,7 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 		const remoteId = `${spec.peerConnectionId}-remote`;
 		const pairId = `${spec.peerConnectionId}-pair`;
 
-		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host', url: spec.ice.localUrl });
+		iceCandidates.push({ timestamp, id: localId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: spec.ice.localCandidateType ?? 'host', url: spec.ice.localUrl, relayProtocol: spec.ice.localRelayProtocol });
 		iceCandidates.push({ timestamp, id: remoteId, protocol: spec.ice.localProtocol ?? 'udp', candidateType: 'host', url: spec.ice.remoteUrl });
 		iceCandidatePairs.push({
 			timestamp,

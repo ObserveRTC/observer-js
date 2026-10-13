@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { ObservedClient } from './ObservedClient';
 import { CertificateStats, CodecStats, DataChannelStats, IceCandidateStats, InboundRtpStats, InboundTrackSample, MediaPlayoutStats, MediaSourceStats, OutboundRtpStats, OutboundTrackSample, PeerConnectionSample, PeerConnectionTransportStats, RemoteInboundRtpStats, RemoteOutboundRtpStats } from './schema/ClientSample';
 import { ObservedInboundRtp } from './ObservedInboundRtp';

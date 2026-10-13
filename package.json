@@ -1,6 +1,6 @@
 {
   "name": "@observertc/observer-js",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Server-side Node.js library for processing ObserveRTC Samples",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -46,7 +46,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@bufbuild/protobuf": "1.1.1",
-    "events": "^3.3.0",
     "uuid": "^11.1.1"
   },
   "devDependencies": {
