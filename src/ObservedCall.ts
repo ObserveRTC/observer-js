@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
 import { Observer } from './Observer';
@@ -20,6 +20,7 @@ import { TrackDeliveryMismatchDetector } from './detectors/TrackDeliveryMismatch
 import { CallConcurrentIssueDetector } from './detectors/CallConcurrentIssueDetector';
 import { IssueFanOutDetector } from './detectors/IssueFanOutDetector';
 import { PublisherFaultCorroborationDetector } from './detectors/PublisherFaultCorroborationDetector';
+import { AudioEchoDetector } from './detectors/AudioEchoDetector';
 
 const logger = createLogger('ObservedCall');
 
@@ -171,6 +172,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			}
 			case PublisherFaultCorroborationDetector.NAME: {
 				detector = new PublisherFaultCorroborationDetector(this, config);
+				break;
+			}
+			case AudioEchoDetector.NAME: {
+				detector = new AudioEchoDetector(this, config);
 				break;
 			}
 			default: {

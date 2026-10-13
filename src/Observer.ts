@@ -1,6 +1,6 @@
 import { createLogger } from './common/logger';
 import { ObservedCall, ObservedCallSettings } from './ObservedCall';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { ClientSample } from './schema/ClientSample';
 import { ObservedTURN } from './ObservedTURN';
 import type { RemoteTrackResolverFactory } from './resolvers/RemoteTrackResolver';

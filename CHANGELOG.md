@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### `AudioEchoDetector` (new, call scope)
+
+`call.addDetector('audio-echo-detector')` / `observer.addCallDetector('audio-echo-detector')`.
+Raises `AUDIO_ECHO_SUSPECTED` when a participant's outgoing audio follows another participant's
+voice: active in at least `minFollowRatio` of the buckets where the loudest other participant
+spoke, with a dB level correlation of at least `minCorrelation`. The payload names the echoing and
+the source track and client, the evidence, the capture device label (from `AUDIO_INPUT_DEVICE`
+metadata) and whether the client's `loopback-audio-input` issue is open on the track.
+
+### Audio level fields
+
+- `ObservedInboundRtp`: `audioLevel`, `totalAudioEnergy` and `totalSamplesDuration` are now
+  assigned (they were declared but always `undefined`), plus the per-tick `deltaTotalAudioEnergy`,
+  `deltaTotalSamplesDuration` and `rmsAudioLevel`.
+- `ObservedMediaSource`: `deltaTotalAudioEnergy`, `deltaTotalSamplesDuration`, `rmsAudioLevel`.
+- `ObservedOutboundTrack`: `rmsAudioLevel` (media-source level, else the receivers' median),
+  `rmsAudioLevelSource`, `receivedRmsAudioLevel`, and `audioInputDevice`.
+- `rmsAudioLevel(deltaEnergy, deltaDuration)` in `utils/stats`.
+
+### `AUDIO_INPUT_DEVICE` client metadata
+
+`ClientMetaTypes.AUDIO_INPUT_DEVICE` (client-monitor-js next) is parsed into
+`ObservedClient.audioInputDevices`, keyed by track id. `AudioInputDevice` is exported.
+
 ## 1.1.0 — 2026-09-29
 
 ### Public address of clients and peer connections (new)

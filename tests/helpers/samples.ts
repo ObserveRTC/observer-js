@@ -45,6 +45,9 @@ export type InboundSpec = {
 	jitterBufferEmittedCount?: number,
 	frameWidth?: number,
 	frameHeight?: number,
+	/** cumulative audio energy / samples duration, as played out (audio) */
+	totalAudioEnergy?: number,
+	totalSamplesDuration?: number,
 	/** track attachments (e.g. { producerId, consumerId }) */
 	attachments?: Record<string, unknown>,
 };
@@ -55,6 +58,9 @@ export type OutboundSpec = {
 	ssrc?: number,
 	bytesSent?: number,
 	packetsSent?: number,
+	/** cumulative audio energy / samples duration of the media source (audio) */
+	totalAudioEnergy?: number,
+	totalSamplesDuration?: number,
 	/** track attachments (e.g. { producerId }) */
 	attachments?: Record<string, unknown>,
 };
@@ -139,6 +145,8 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 			jitterBufferEmittedCount: inb.jitterBufferEmittedCount,
 			frameWidth: inb.frameWidth,
 			frameHeight: inb.frameHeight,
+			totalAudioEnergy: inb.totalAudioEnergy,
+			totalSamplesDuration: inb.totalSamplesDuration,
 		} as InboundRtpStats);
 		inboundTracks.push({ timestamp, id: inb.trackId, kind, attachments: inb.attachments });
 	}
@@ -148,7 +156,10 @@ function buildPeerConnection(spec: PeerConnectionSpec, timestamp: number): PeerC
 		const mediaSourceId = `ms-${out.trackId}`;
 
 		// A media source is required for the outbound track to resolve its RTPs (getOutboundRtps()).
-		mediaSources.push({ timestamp, id: mediaSourceId, kind, trackIdentifier: out.trackId });
+		mediaSources.push({
+			timestamp, id: mediaSourceId, kind, trackIdentifier: out.trackId,
+			totalAudioEnergy: out.totalAudioEnergy, totalSamplesDuration: out.totalSamplesDuration,
+		});
 		outboundRtps.push({
 			timestamp,
 			id: `${out.trackId}-rtp`,

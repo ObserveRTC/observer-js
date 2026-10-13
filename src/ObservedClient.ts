@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { ObservedPeerConnection } from './ObservedPeerConnection';
 import { createLogger } from './common/logger';
 // eslint-disable-next-line camelcase
@@ -122,6 +122,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	// public totalNumberOfIssues = 0;
 
 	public readonly mediaDevices: MetaData.MediaDeviceInfo[] = [];
+
+	/**
+	 * The capture device behind each outbound audio track, keyed by track id, from the client's
+	 * `AUDIO_INPUT_DEVICE` metadata. Kept for the client's lifetime (a device switch is a new track
+	 * id), so a finding raised after a track ended can still name its device. Read it per track via
+	 * `ObservedOutboundTrack.audioInputDevice`.
+	 */
+	public readonly audioInputDevices = new Map<string, MetaData.AudioInputDevice>();
 
 	/**
 	 * The client's currently **open** stateful issues, keyed by `ClientIssue.key` — the server-side
@@ -552,6 +560,14 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			}
 			case ClientMetaTypes.OPERATION_SYSTEM: {
 				this.operationSystem = parseJsonAs(metadata.payload);
+				break;
+			}
+			case ClientMetaTypes.AUDIO_INPUT_DEVICE: {
+				const device = parseJsonAs<MetaData.AudioInputDevice>(metadata.payload);
+
+				if (typeof device?.trackId === 'string' && typeof device.label === 'string') {
+					this.audioInputDevices.set(device.trackId, device);
+				}
 				break;
 			}
 		}

@@ -6,7 +6,8 @@ import { ObservedOutboundRtp } from './ObservedOutboundRtp';
 import { ObservedMediaSource } from './ObservedMediaSource';
 import { ObservedInboundTrack } from './ObservedInboundTrack';
 import { pushFinite } from './common/utils';
-import { StatsSummary, summarize } from './utils/stats';
+import { median, StatsSummary, summarize } from './utils/stats';
+import type { AudioInputDevice } from './schema/ClientMetaTypes';
 import { Detectors } from '.';
 
 /** The per-receiver view the aggregator builds for one subscribed track. */
@@ -62,6 +63,22 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 	public remoteRttInMs?: number | undefined;
 	public qualityLimitationReason?: string | undefined;
 
+	/**
+	 * This audio track's RMS level (0..1) over the latest tick — how loud the publisher was sending.
+	 * Taken from the publisher's own `media-source` when it reports one (Chrome, Safari), otherwise
+	 * the median of what its receivers heard ({@link receivedRmsAudioLevel}), which is what makes it
+	 * available for Firefox publishers too. `undefined` for video, or when neither is known.
+	 * {@link rmsAudioLevelSource} says which one it is.
+	 */
+	public rmsAudioLevel?: number;
+	public rmsAudioLevelSource?: 'media-source' | 'receivers';
+
+	/**
+	 * Median RMS level (0..1) of this track across the receivers that played it out, each over its own
+	 * latest tick. Needs a `RemoteTrackResolver`: without links there are no receivers to ask.
+	 */
+	public receivedRmsAudioLevel?: number;
+
 	constructor(
 		public timestamp: number,
 		public readonly id: string,
@@ -99,6 +116,11 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 
 	public getMediaSource() {
 		return this._mediaSource;
+	}
+
+	/** The capture device behind this track, when the client sent `AUDIO_INPUT_DEVICE` metadata for it. */
+	public get audioInputDevice(): AudioInputDevice | undefined {
+		return this._peerConnection.client.audioInputDevices.get(this.id);
 	}
 
 	public update(stats: OutboundTrackSample): void {
@@ -141,8 +163,36 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		this.degradedReasons = reasons.length === 0 ? undefined : reasons;
 
 		this.receivingDistribution = this.createReceivingDistribution();
+		this._updateAudioLevel();
 
 		this.detectors.update();
+	}
+
+	private _updateAudioLevel(): void {
+		this.rmsAudioLevel = undefined;
+		this.rmsAudioLevelSource = undefined;
+		this.receivedRmsAudioLevel = undefined;
+
+		if (this.kind !== 'audio') return;
+
+		if (0 < this.remoteInboundTracks.size) {
+			const levels: number[] = [];
+
+			for (const inboundTrack of this.remoteInboundTracks) {
+				pushFinite(levels, inboundTrack.getInboundRtp()?.rmsAudioLevel);
+			}
+			this.receivedRmsAudioLevel = median(levels);
+		}
+
+		const sourceLevel = this._mediaSource?.rmsAudioLevel;
+
+		if (sourceLevel !== undefined) {
+			this.rmsAudioLevel = sourceLevel;
+			this.rmsAudioLevelSource = 'media-source';
+		} else if (this.receivedRmsAudioLevel !== undefined) {
+			this.rmsAudioLevel = this.receivedRmsAudioLevel;
+			this.rmsAudioLevelSource = 'receivers';
+		}
 	}
 
 	private createReceivingDistribution(): PublishedTrackReceivingDistributionEntry | undefined {

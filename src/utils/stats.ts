@@ -170,6 +170,19 @@ export function counterDelta(previous: number | undefined, current: number | und
 }
 
 /**
+ * RMS audio level (0..1) over one tick, from the deltas of the cumulative `totalAudioEnergy` and
+ * `totalSamplesDuration` pair — the webrtc-stats way to read them: energy is the integral of the
+ * squared level over time, so `sqrt(ΔE / Δt)` is the level averaged over the tick, pauses included.
+ * `audioLevel` is a point sample and reads zero between words. `undefined` when no audio was
+ * accounted for in the tick.
+ */
+export function rmsAudioLevel(deltaTotalAudioEnergy: number, deltaTotalSamplesDuration: number): number | undefined {
+	if (!(0 < deltaTotalSamplesDuration)) return undefined;
+
+	return Math.sqrt(Math.max(0, deltaTotalAudioEnergy) / deltaTotalSamplesDuration);
+}
+
+/**
  * Pearson correlation of two equal-length series, clamped to `0..1`.
  *
  * Negative or undefined relationships read as `0`, because every caller here asks "does A follow B?"
