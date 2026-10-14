@@ -1,58 +1,17 @@
-import { EventEmitter } from 'node:events';
+import type { Sink, SinkEvents } from './Sink';
 import type { ClientSample } from '../schema/ClientSample';
-import type { ObservedCall } from '../ObservedCall';
 
-/** The lifecycle events a sink may emit (a subset of Node's writable-stream events). */
-export type ClientSampleSinkEvents = {
-
-	/** The destination is fully written and closed (e.g. a file flushed and its fd closed). */
-	close: [];
-
-	/** The destination failed. */
-	error: [Error];
-
-	/** `end()` was processed and all queued data was flushed (before `close`). */
-	finish: [];
-
-	/** The buffer drained after backpressure; safe to write more. */
-	drain: [];
-};
-
-export declare interface ClientSampleSink {
-	on<E extends keyof ClientSampleSinkEvents>(event: E, listener: (...args: ClientSampleSinkEvents[E]) => void): this;
-	once<E extends keyof ClientSampleSinkEvents>(event: E, listener: (...args: ClientSampleSinkEvents[E]) => void): this;
-	off<E extends keyof ClientSampleSinkEvents>(event: E, listener: (...args: ClientSampleSinkEvents[E]) => void): this;
-	emit<E extends keyof ClientSampleSinkEvents>(event: E, ...args: ClientSampleSinkEvents[E]): boolean;
-}
+/** The lifecycle events a client sample sink may emit. Same as {@link SinkEvents}. */
+export type ClientSampleSinkEvents = SinkEvents;
 
 /**
- * A per-client destination for accepted samples — a typed `EventEmitter` base class. One sink is
- * created per `ObservedClient` (via `ObserverConfig.createClientSink`). It is **object-mode**:
- * `write` receives the `ClientSample` itself, so each sink decides how to serialize it (JSON
- * line, protobuf, msgpack, a remote payload, …).
+ * A per-client destination for accepted samples. Create one under the client id with
+ * `observedCall.sinks.create(MySink, { id: clientId, ... })`, or let
+ * `ObserverConfig.createClientJsonlSink` create a `JsonlFileSink` there.
  *
- * The library calls `write(sample)` synchronously per accepted sample (not awaited), `end()`s the
- * sink when the client closes, and attaches an `error` listener so a failing sink can't crash the
- * process. The application — which created the sink — listens for `close` (destination ready,
- * e.g. a file flushed and its fd closed) and `error`.
- *
- * Subclass this and implement `write`/`end` (and `emit` your lifecycle events). Built-in sinks
- * (`JsonlFileSink`, `InMemorySink`) and their factories are exported from the package root.
+ * The library calls `write(sample)` synchronously per accepted sample (not awaited) and `end()`s
+ * the sink when the client closes; the registry attaches an `error` listener so a failing sink
+ * can't crash the process. Because `write` isn't awaited, backpressure and batching are the sink's
+ * concern.
  */
-export abstract class ClientSampleSink extends EventEmitter {
-	/** Accept one sample; the sink serializes it however it likes. `false` signals backpressure. */
-	public abstract write(sample: ClientSample): boolean;
-
-	/** Finish writing; the sink flushes and (if applicable) emits `close`. */
-	public abstract end(): void;
-}
-
-/**
- * Produces a sink for a newly-created client, or `undefined` for no sink. Receives the
- * client id and its (already-created) parent call, so the destination can be derived
- * from `callId` / `clientId`.
- */
-export type ClientSampleSinkFactory = (params: {
-	clientId: string,
-	observedCall: ObservedCall,
-}) => ClientSampleSink | undefined;
+export type ClientSampleSink = Sink<ClientSample>;

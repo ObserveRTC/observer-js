@@ -5,9 +5,9 @@ import { ClientSample } from './schema/ClientSample';
 import { ObservedTURN } from './ObservedTURN';
 import type { RemoteTrackResolverFactory } from './resolvers/RemoteTrackResolver';
 import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } from './ObserverEvents';
-import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
+import { SinkRegistry } from './sinks/SinkRegistry';
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
@@ -228,11 +228,35 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	createClientAppData?: ClientAppDataFactory,
 
 	/**
-	 * Optional factory invoked when a client is created, producing a per-client sink that
-	 * receives every sample the client accepts (or `undefined` for no sink). The destination
-	 * can be derived from `callId` / `clientId`.
+	 * Write every sample a client accepts to a JSONL file: return the file path for a newly-created
+	 * client, or `undefined` for no file. The directory must exist. The `JsonlFileSink` is added to
+	 * `observedCall.sinks` under the client id and is ended when the client closes; `client-sink-created`
+	 * announces it, so a `close` handler can upload or move the file once it is flushed.
+	 *
+	 * For any other destination, add your own sink under the client id instead, e.g. on
+	 * `client-added`: `observedCall.sinks.create(MySink, { id: observedClient.clientId, ... })`.
+	 *
+	 * Replaces `createClientSink` (removed in 1.3.0), and with it `createJsonlFileSinkFactory`.
+	 * To migrate:
+	 *
+	 * ```ts
+	 * // before (1.2): JSONL files
+	 * new Observer({ createClientSink: createJsonlFileSinkFactory({ directory: './stats' }) });
+	 * // after: return the path; `${callId}__${clientId}.jsonl` was the factory's default file name
+	 * new Observer({
+	 *   createClientJsonlSink: ({ observedCall, clientId }) => path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`),
+	 * });
+	 *
+	 * // before (1.2): any other sink
+	 * new Observer({ createClientSink: ({ clientId, observedCall }) => new HttpSink(url(observedCall, clientId)) });
+	 * // after: create it under the client id when the client is added (HttpSink implements
+	 * // `ClientSampleSink`, takes `SinkSettings & { ... }` and emits `ended` from `end()`)
+	 * observer.on('client-added', ({ observedCall, observedClient }) => {
+	 *   observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url: url(observedCall, observedClient.clientId) });
+	 * });
+	 * ```
 	 */
-	createClientSink?: ClientSampleSinkFactory,
+	createClientJsonlSink?: (params: { observedCall: ObservedCall, clientId: string }) => string | undefined,
 
 	/**
 	 * Optional factory invoked when a call is created, producing the call's `RemoteTrackResolver`
@@ -255,6 +279,8 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public readonly observedTURN = new ObservedTURN();
 	public readonly observedCalls = new Map<string, ObservedCall>();
 	public readonly observedMediasoupRouters = new Map<string, ObservedMediasoupRouter>();
+
+	public readonly sinks = new SinkRegistry();
 
 	/** Ancestry base shared by all Observer-bus events originating at the observer. */
 	public readonly eventScope: ObserverEventBase = { observer: this };
@@ -646,7 +672,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return this.observedMediasoupRouters.get(settings.router.id);
 		}
 
-		const observedMediasoupRouter = new ObservedMediasoupRouter(settings);
+		const observedMediasoupRouter = new ObservedMediasoupRouter(settings, this.sinks);
 		const observedMediasoupRouterScope: ObservedMediasoupRouterScope = {
 			observedMediasoupRouter,
 			observer: this,
@@ -703,6 +729,9 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.callSummaryCollector?.close();
 		// Each call cleared its own issues on close; this covers anything raised after that.
 		this.activeIssuesRegistry.clear();
+		// After the calls (each ended its own); this ends the observer's own and the routers' sinks —
+		// routers are mediasoup's to close, so they may still be open.
+		this.sinks.clear();
 
 		this._notify('observer-closed', { ...this.eventScope });
 	}

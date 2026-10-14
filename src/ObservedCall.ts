@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { SinkRegistry } from './sinks/SinkRegistry';
+import { JsonlFileSink } from './sinks/JsonlFileSink';
+import type { ClientSample } from './schema/ClientSample';
 import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
 import { Observer } from './Observer';
@@ -107,6 +110,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	/** Ancestry base shared by all Observer-bus events originating at this call. */
 	public readonly eventScope: ObservedCallScope;
+	public readonly sinks: SinkRegistry;
+
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -119,6 +124,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
+		this.sinks = new SinkRegistry(this.observer.sinks);
 		this.appData = (settings.appData ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		this.detectors = new Detectors();
@@ -261,6 +267,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			if (client.leftAt) maxSampleTimestamps = Math.max(maxSampleTimestamps ?? client.leftAt, client.leftAt);
 		}
 
+		// After the clients, which removed their own sample sinks.
+		this.sinks.clear();
+
 		if (this.startedAt === undefined) this.startedAt = minSampleTimestamps;
 		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
@@ -359,11 +368,21 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.closeTimer = undefined;
 		}
 
+		const jsonlPath = this.observer.config.createClientJsonlSink?.({ observedCall: this, clientId: settings.clientId });
+		let jsonlSink: JsonlFileSink | undefined;
+
+		// Sink ids are unique per observer: checked before the file is opened, so a clash leaves no empty file.
+		if (jsonlPath !== undefined && this.observer.sinks.get(settings.clientId)) {
+			logger.warn('No sample file for client %s in call %s: sink id %s is already in use', settings.clientId, this.callId, settings.clientId);
+		} else if (jsonlPath !== undefined) {
+			jsonlSink = this.sinks.create(JsonlFileSink<ClientSample>, { id: settings.clientId, path: jsonlPath });
+		}
+
 		this.emit('newclient', result);
 		this._notify('client-added', { ...this.eventScope, observedClient: result });
 
-		if (result.sink) {
-			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: result.sink });
+		if (jsonlSink) {
+			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: jsonlSink });
 		}
 
 		if (wasEmpty) {

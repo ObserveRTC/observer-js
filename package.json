@@ -34,6 +34,7 @@
     "test:coverage": "jest --config jest.config.js --coverage",
     "example": "ts-node --compiler-options '{\"module\":\"commonjs\"}' examples/sfu-observer.ts",
     "example:detectors": "ts-node --compiler-options '{\"module\":\"commonjs\"}' examples/detectors.ts",
+    "example:summaries": "ts-node --compiler-options '{\"module\":\"commonjs\"}' examples/client-summaries.ts",
     "bench": "ts-node --compiler-options '{\"module\":\"commonjs\"}' bench/detectors.bench.ts"
   },
   "keywords": [

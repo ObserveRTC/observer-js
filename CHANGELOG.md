@@ -1,5 +1,142 @@
 # Changelog
 
+## Unreleased
+
+### Sinks and `SinkRegistry` (new)
+
+Every observed object that has a lifecycle now owns a `sinks` registry, so any number of sinks can
+be attached to it and are ended with it. The sinks are agnostic about what passes through them;
+the library never polls — what is written, and when, is the application's.
+
+```ts
+const sink = observedRouter.sinks.create(JsonlFileSink<PipeTransportStats[]>, { id: transport.id, path });
+observedRouter.sinks.write(transport.id, await transport.getStats());   // or sink.write(...)
+// Ended when the router closes; call sink.end() to end it earlier.
+```
+
+- `Sink<T>`: an interface — `id`, `write(record)`, `end()`, and the events `ended` / `close` /
+  `error` / `finish` / `drain`. `end()` must emit `ended` synchronously (that removes the sink from
+  its registry) and later writes must be refused. `JsonlFileSink<T = ClientSample>` and
+  `InMemorySink` are the built-in implementations; `ClientSampleSink` is now the type
+  `Sink<ClientSample>`. `SinkSettings` (`{ id }`) is what `create` passes to a sink's constructor.
+- `SinkRegistry`: `create(SinkClass, settings)` constructs `new SinkClass({ ...settings, id })`
+  and registers it (settings typed from the constructor; id generated when omitted), `get(id)`, `write(id, record)`, `clear()`, `size`, `keys()`, `values()`. There is no
+  `remove`: `sink.end()` removes a sink from its registry. The registry attaches an `error`
+  listener, so a failing sink is logged, not thrown.
+- `observer.sinks` is the parent of every `observedCall.sinks` and `observedMediasoupRouter.sinks`.
+  **Sink ids are unique per observer**: `create` returns `undefined` for an id held by any registry
+  of the observer, before constructing anything (so no file is opened). A registry sees its own and
+  its descendants' sinks, so a parent's `get` / `write` / `clear` reach a child's sinks.
+- Lifecycle: a router's sinks are ended when it closes, a call's when it closes, and
+  `observer.close()` ends every sink that is left, including those of routers that are still open
+  (the observer does not close routers).
+- A client writes its samples to the sink under its client id in `observedCall.sinks`
+  (`observedClient.sink` is now a getter for it) and ends it when the client closes. Client ids
+  are therefore sink ids and must be unique across the observer's open calls.
+- `createClientJsonlSink: ({ observedCall, clientId }) => string | undefined` (new `ObserverConfig`
+  option): return a path to write that client's samples to a `JsonlFileSink`. `client-sink-created`
+  announces the file (`sink: JsonlFileSink`).
+- `JsonlFileSink<T = ClientSample>` and `createJsonlFileSink<T>` take any record type.
+
+**Breaking** (see *Migrating from 1.2* below):
+
+- `ObserverConfig.createClientSink` is removed. Use `createClientJsonlSink` for JSONL files, or
+  create your own sink under the client id on `client-added`.
+- `ClientSampleSink` is no longer a class to extend: implement `Sink<ClientSample>` (e.g.
+  `extends EventEmitter implements ClientSampleSink`), take `SinkSettings` in the constructor, and
+  emit `ended` from `end()`. `JsonlFileSink` and `InMemorySink` implement the interface instead of
+  extending a base class. `JsonlFileSinkOptions` gained `id`; `new InMemorySink(samples)` is now
+  `new InMemorySink({ id?, samples? })`.
+- `createJsonlFileSinkFactory`, `JsonlFileSinkFactoryOptions` and `ClientSampleSinkFactory` are
+  removed (`createClientJsonlSink` replaces the factory).
+- `client-sink-created` now carries a `JsonlFileSink` and fires only for `createClientJsonlSink`
+  files.
+- `ObservedClient.sink` is a getter (read-only, as before).
+
+#### Migrating from 1.2
+
+**JSONL files per client** — `createClientSink: createJsonlFileSinkFactory(...)` becomes
+`createClientJsonlSink`, which returns the path. The factory's default file name was
+`${callId}__${clientId}.jsonl`; a `getFileName` option becomes the body of the callback.
+
+```ts
+// 1.2
+new Observer({ createClientSink: createJsonlFileSinkFactory({ directory: './stats' }) });
+
+// 1.3
+new Observer({
+  createClientJsonlSink: ({ observedCall, clientId }) => path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`),
+});
+```
+
+A `serializeSample` option has no equivalent in `createClientJsonlSink`; create the sink yourself
+as below, with `sinks.create(JsonlFileSink<ClientSample>, { id, path, serializeSample })`.
+
+**Any other client sink** — return it no longer from `createClientSink`; create it under the client
+id when the client is added. The client writes its samples to it and ends it on close, as before.
+
+```ts
+// 1.2
+new Observer({ createClientSink: ({ clientId, observedCall }) => new HttpSink(urlOf(observedCall.callId, clientId)) });
+
+// 1.3
+observer.on('client-added', ({ observedCall, observedClient }) => {
+  observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url: urlOf(observedCall.callId, observedClient.clientId) });
+});
+```
+
+**Custom sink classes** — `class HttpSink extends ClientSampleSink` becomes an implementation of
+the interface. The constructor receives the settings object passed to `create`, including `id`:
+
+```ts
+// 1.2
+class HttpSink extends ClientSampleSink {
+  constructor(private readonly url: string) { super(); }
+  write(sample: ClientSample) { /* ... */ return true; }
+  end() { /* flush, then */ this.emit('close'); }
+}
+
+// 1.3
+class HttpSink extends EventEmitter implements ClientSampleSink {
+  readonly id: string;
+  private readonly url: string;
+  private ended = false;
+
+  constructor(settings: SinkSettings & { url: string }) {
+    super();
+    this.id = settings.id;
+    this.url = settings.url;
+  }
+  write(sample: ClientSample) {
+    if (this.ended) return false;   // refuse writes after end()
+    /* ... */
+    return true;
+  }
+  end() {
+    if (this.ended) return;
+    this.ended = true;
+    this.emit('ended');             // required: removes it from its registry
+    /* flush, then */ this.emit('close');
+  }
+}
+```
+
+**`client-sink-created`** — still fires right after `client-added`, but only for the
+`createClientJsonlSink` file, and its `sink` is a `JsonlFileSink` (no `instanceof` narrowing needed
+to read `sink.path`). For a sink you create yourself, you already hold it.
+
+**Unchanged:** `observedClient.sink` still returns the client's sink, and the client still ends it
+when it closes.
+
+### Other
+
+- `percentileOfHistogram` narrows the bucket holding the observed `min` / `max` to the observed
+  range before interpolating, so a distribution inside one bucket (40–49 ms in [40, 60)) is no
+  longer reported as its maximum.
+- `examples/client-summaries.ts` (`yarn example:summaries`): a per-client record read off
+  `ObservedClient`, folded into the `CallSummary` with enrichers, including a call-level RTT p95 from
+  the clients' combined `rttHistogram`.
+
 ## 1.2.0 — 2026-10-13
 
 ### `ObservedClient` session totals

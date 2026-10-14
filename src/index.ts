@@ -295,21 +295,22 @@ export { TrendTester } from './utils/TrendTester';
 export type { TrendTesterConfig } from './utils/TrendTester';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
-// Per-client sample sinks. `ClientSampleSink` is the base class to subclass for a custom
-// destination; `JsonlFileSink` / `InMemorySink` are the built-ins.
+// Sinks. `Sink<T>` (and `ClientSampleSink = Sink<ClientSample>`) is the interface to implement for a custom destination;
+// `JsonlFileSink` / `InMemorySink` are the built-ins; `SinkRegistry` owns their lifecycle.
 export {
-	ClientSampleSink,
+	SinkRegistry,
 	JsonlFileSink,
 	createJsonlFileSink,
-	createJsonlFileSinkFactory,
 	InMemorySink,
 	createInMemorySink,
 } from './sinks';
 export type {
+	Sink,
+	SinkEvents,
+	SinkSettings,
+	ClientSampleSink,
 	ClientSampleSinkEvents,
-	ClientSampleSinkFactory,
 	JsonlFileSinkOptions,
-	JsonlFileSinkFactoryOptions,
 } from './sinks';
 export { Middleware } from './common/Middleware';
 // `Observer.acceptMiddlewares` is a public field of this type, so the type has to be nameable.

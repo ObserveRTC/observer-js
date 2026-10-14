@@ -12,6 +12,7 @@ import {
 	MediasoupPipeTransportSampleEventMap,
 } from './schema/MediasoupRouter';
 import { createLogger } from './common/logger';
+import { SinkRegistry } from './sinks/SinkRegistry';
 
 const logger = createLogger('ObservedMediasoupRouter');
 
@@ -94,6 +95,13 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public readonly webrtcTransportIds = new Set<string>();
 	public closed = false;
 
+	/**
+	 * The router's sinks, e.g. one per pipe transport for its `getStats()`. They are ended when the
+	 * router closes, which is usually the lifetime wanted; `sink.end()` ends one earlier. Writing to
+	 * them, and polling what is written, is the application's. Its parent is `observer.sinks`.
+	 */
+	public readonly sinks: SinkRegistry;
+
 	// Id -> sample indexes over the arrays in `this.sample`, so an entity can be reached in O(1)
 	// instead of scanning (`sample.producers.find(...)`). They hold the *same* objects as the arrays.
 	private readonly _transportSamples = new Map<string, MediasoupTransportSample>();
@@ -103,14 +111,20 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	private readonly _dataConsumerSamples = new Map<string, MediasoupDataConsumerSample>();
 	private readonly _enrich?: MediasoupSampleEnricher;
 
+	/**
+	 * @param parentSinks the parent of `sinks`: `observer.sinks`, passed by
+	 * `Observer.createObservedMediasoupRouter`. Internal; a router constructed directly has none.
+	 */
 	public constructor(
 		settings: ObservedMediasoupRouterSettings<AppData>,
+		parentSinks?: SinkRegistry,
 	) {
 		super();
 
 		this.router = settings.router;
 		this.appData = (settings.appData ?? {}) as AppData;
 		this._enrich = settings.enrich;
+		this.sinks = new SinkRegistry(parentSinks);
 		this.sample = {
 			routerId: this.router.id,
 			attachments: settings.attachments ?? {},
@@ -204,6 +218,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		this.closed = true;
 		if (this.sample.closedAt === undefined) this.sample.closedAt = Date.now();
 
+		this.sinks.clear();
 		this.emit('close');
 	}
 

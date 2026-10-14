@@ -23,7 +23,7 @@ import type { CallSummary } from './summaries/CallSummary';
 import type { ValidationReport } from './validators/Validator';
 import type { ResolvedActiveClientIssue } from './issues/ActiveClientIssue';
 // ClientIssue doubles as the generic issue shape ({ type, payload?, timestamp? }) for call-level issues too.
-import type { ClientSampleSink } from './sinks/ClientSampleSink';
+import type { JsonlFileSink } from './sinks/JsonlFileSink';
 import { ObservedMediasoupRouter } from './ObservedMediasoupRouter';
 
 /**
@@ -99,7 +99,7 @@ export type ObserverEvents = {
 
 	// client level
 	'client-added': [ObservedClientScope];
-	'client-sink-created': [ObservedClientScope & { sink: ClientSampleSink }];
+	'client-sink-created': [ObservedClientScope & { sink: JsonlFileSink }];
 	'client-updated': [ObservedClientScope & { sample: ClientSample, elapsedTimeInMs: number }];
 	'client-closed': [ObservedClientScope];
 	'client-joined': [ObservedClientScope];

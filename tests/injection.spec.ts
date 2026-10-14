@@ -5,8 +5,10 @@ import { makeSample } from './helpers/samples';
 
 function setup() {
 	let sink: InMemorySink | undefined;
-	const observer = new Observer({
-		createClientSink: () => (sink = new InMemorySink()),
+	const observer = new Observer();
+
+	observer.on('client-added', ({ observedCall, observedClient }) => {
+		sink = observedCall.sinks.create(InMemorySink, { id: observedClient.clientId });
 	});
 
 	// First accept creates the call + client (and the sink) and persists the first sample.
