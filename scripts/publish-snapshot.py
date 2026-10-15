@@ -19,13 +19,20 @@ def next_version(base, versions):
     return f'{base}-rc.{max(numbers, default=0) + 1}'
 
 
-def registry_versions():
+def next_minor(latest):
+    match = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', latest)
+    if not match:
+        raise ValueError('npm latest must point to a stable SemVer version')
+    return f'{match[1]}.{int(match[2]) + 1}.0'
+
+
+def registry_metadata():
     request = Request(f'{REGISTRY}/@observertc%2fobserver-js', headers={
         'Accept': 'application/json', 'Cache-Control': 'no-cache',
     })
     # Registry/auth/network errors must fail rather than reset the counter.
     with urlopen(request, timeout=60) as response:
-        return json.load(response)['versions']
+        return json.load(response)
 
 
 def unpack(archive, destination):
@@ -62,9 +69,6 @@ def publish(artifact_dir):
         manifest = json.loads(manifest_path.read_text())
         if manifest['name'] != PACKAGE:
             raise ValueError(f'Expected package {PACKAGE}')
-        base = re.split(r'[-+]', manifest['version'], maxsplit=1)[0]
-        if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', base):
-            raise ValueError('Package version must have a valid SemVer base')
         manifest.pop('scripts', None)
         manifest.pop('publishConfig', None)
         manifest.pop('workspaces', None)
@@ -74,8 +78,12 @@ def publish(artifact_dir):
         manifest['observerSnapshotRun'] = run
         # Concurrent PRs may read the same next number. Retry only confirmed
         # collisions; authentication, network and other publish errors fail.
+        metadata = registry_metadata()
+        base = next_minor(metadata['dist-tags']['latest'])
         for attempt in range(10):
-            versions = registry_versions()
+            if attempt:
+                metadata = registry_metadata()
+            versions = metadata['versions']
             existing = next((v for v, data in versions.items()
                              if data.get('observerSnapshotRun') == run), None)
             if existing:
@@ -95,7 +103,7 @@ def publish(artifact_dir):
                     with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
                         summary.write(f'Published snapshot: `{install}`\n')
                 return
-            published = registry_versions().get(version)
+            published = registry_metadata()['versions'].get(version)
             if published is not None and published.get('observerSnapshotRun') == run:
                 print(f'Confirmed published {PACKAGE}@{version}', flush=True)
                 return
