@@ -12,7 +12,20 @@ snapshot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshot)
 
 
+def metadata(versions, latest='1.2.0'):
+    return {'dist-tags': {'latest': latest}, 'versions': versions}
+
+
 class SnapshotTests(unittest.TestCase):
+    def test_next_minor_uses_latest_stable_release(self):
+        self.assertEqual(snapshot.next_minor('1.2.0'), '1.3.0')
+        self.assertEqual(snapshot.next_minor('1.2.9'), '1.3.0')
+        self.assertEqual(snapshot.next_minor('1.3.0'), '1.4.0')
+        self.assertEqual(snapshot.next_minor('0.99.42'), '0.100.0')
+        for invalid in ['1.3.0-beta.1', 'v1.2.0', 'garbage', '01.2.0']:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                snapshot.next_minor(invalid)
+
     def test_counter_is_per_base_and_numeric(self):
         versions = ['1.3.0-rc.2', '1.3.0-rc.10', '1.4.0-rc.99', '1.3.0-beta.50', '1.3.0']
         self.assertEqual(snapshot.next_version('1.3.0', versions), '1.3.0-rc.11')
@@ -21,7 +34,7 @@ class SnapshotTests(unittest.TestCase):
     def archive(self, directory, name='@observertc/observer-js'):
         archive = Path(directory) / 'snapshot.tgz'
         manifest = {
-            'name': name, 'version': '1.3.0-beta.1',
+            'name': name, 'version': '1.2.0',
             'scripts': {'prepublishOnly': 'exit 1'},
             'publishConfig': {'registry': 'https://example.invalid'},
         }
@@ -50,8 +63,8 @@ class SnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             self.archive(temp)
             with patch.dict('os.environ', {'SNAPSHOT_RUN_ID': '123', 'SNAPSHOT_RUN_ATTEMPT': '1'}), \
-                    patch.object(snapshot, 'registry_versions', side_effect=[
-                        {}, {'1.3.0-rc.1': {}}, {'1.3.0-rc.1': {}},
+                    patch.object(snapshot, 'registry_metadata', side_effect=[
+                        metadata({}), metadata({'1.3.0-rc.1': {}}), metadata({'1.3.0-rc.1': {}}),
                     ]), patch.object(snapshot.subprocess, 'run', side_effect=npm), \
                     patch.object(snapshot.time, 'sleep'):
                 snapshot.publish(temp)
@@ -61,9 +74,9 @@ class SnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             self.archive(temp)
             with patch.dict('os.environ', {'SNAPSHOT_RUN_ID': '123', 'SNAPSHOT_RUN_ATTEMPT': '1'}), \
-                    patch.object(snapshot, 'registry_versions', return_value={
+                    patch.object(snapshot, 'registry_metadata', return_value=metadata({
                         '1.3.0-rc.7': {'observerSnapshotRun': '123/1'},
-                    }), patch.object(snapshot.subprocess, 'run') as npm:
+                    })), patch.object(snapshot.subprocess, 'run') as npm:
                 snapshot.publish(temp)
                 npm.assert_not_called()
 
@@ -71,7 +84,7 @@ class SnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             self.archive(temp)
             with patch.dict('os.environ', {'SNAPSHOT_RUN_ID': '123', 'SNAPSHOT_RUN_ATTEMPT': '1'}), \
-                    patch.object(snapshot, 'registry_versions', return_value={}), \
+                    patch.object(snapshot, 'registry_metadata', return_value=metadata({})), \
                     patch.object(snapshot.subprocess, 'run', return_value=type('Result', (), {'returncode': 1})()):
                 with self.assertRaisesRegex(RuntimeError, 'npm publish failed'):
                     snapshot.publish(temp)

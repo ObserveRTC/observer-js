@@ -28,9 +28,10 @@ Once you are ready with your changes:
 
 PRs targeting `master` build and test the package in Snapshot package. Publish then
 publishes that artifact to npm as `@observertc/observer-js@<version>-rc.<number>`,
-under the `snapshot` dist-tag. The base version comes from the PR's `package.json`
-(with any prerelease suffix removed). For example, a package version of `1.3.0`
-produces `1.3.0-rc.1`, then `1.3.0-rc.2`. The counter uses the highest existing rc
+under the `snapshot` dist-tag. The base version is the next minor after npm's
+`latest` release, regardless of the PR's package version. For example, `latest` at
+`1.2.0` (or `1.2.9`) produces `1.3.0-rc.1`, then `1.3.0-rc.2`. Once `1.3.0` is
+released as `latest`, snapshots target `1.4.0-rc.1`. The counter uses the highest existing rc
 number on npm for that base version; simultaneous runs retry version collisions.
 Install with `npm install @observertc/observer-js@snapshot` or the exact rc version.
 The snapshot version is never committed or tagged, and `latest` is untouched.
