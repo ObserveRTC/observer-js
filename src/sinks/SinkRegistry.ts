@@ -4,6 +4,13 @@ import { createLogger } from '../common/logger';
 
 const logger = createLogger('SinkRegistry');
 
+/** A sink class `SinkRegistry.create` can construct: its constructor takes one settings object (with `id`). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type SinkConstructor = new(settings: any) => Sink<any>;
+
+/** The settings `create` takes for `SinkClass`: its constructor's, with `id` optional. */
+export type SinkCreateSettings<C extends SinkConstructor> = Omit<ConstructorParameters<C>[0], 'id'> & { id?: string };
+
 /**
  * The sinks of one object, ended by that object's lifecycle. `create(SinkClass, settings)` builds a
  * sink and registers it; `sink.end()` closes it and removes it; the owner calls `clear()` when it
@@ -50,11 +57,7 @@ export class SinkRegistry {
 	 * omitted) is checked first, so nothing is constructed — no file is opened — when it is taken:
 	 * `undefined` is returned and a warning logged.
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	public create<C extends new(settings: any) => Sink<any>>(
-		SinkClass: C,
-		settings: Omit<ConstructorParameters<C>[0], 'id'> & { id?: string },
-	): InstanceType<C> | undefined {
+	public create<C extends SinkConstructor>(SinkClass: C, settings: SinkCreateSettings<C>): InstanceType<C> | undefined {
 		const lineage = this._lineage();
 		const id = settings.id ?? uuidv4();
 

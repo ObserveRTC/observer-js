@@ -2029,6 +2029,47 @@ warning is logged.
 The library calls `write(sample)` **synchronously** per accepted sample (it is not awaited), so
 **backpressure and batching are the sink's concern**.
 
+### Extension stats
+
+Stats the library does not collect itself can be kept as **extension stats** on the object they
+belong to — `observer` (e.g. a mediasoup worker's resource usage), `observedCall` (an SFU's view of
+the call) or `observedMediasoupRouter` (a pipe transport's `getStats()`): the last data per id, and
+optionally a sink that receives every data. The API is the same on all three; a call is shown.
+
+```ts
+// Register the id; with `createSink` (what `sinks.create` takes), a sink is created under the same id.
+call.createExtensionStats({ id: `${call.callId}:sfu`, createSink: [ JsonlFileSink<SfuStats>, { path: './stats/sfu.jsonl' } ] });
+
+// Your own polling: keep the last data, and write it to the sink with the same id, if any.
+call.acceptExtensionStats(`${call.callId}:sfu`, await collectSfuStats(call.callId));
+
+call.getExtensionStats<SfuStats>(`${call.callId}:sfu`);   // the last data
+call.extensionStats.values;                               // Map<id, last data>
+```
+
+| Method | Behaviour |
+|--------|-----------|
+| `createExtensionStats({ id, createSink? })` | Registers `id`. With `createSink` — what `sinks.create` takes, `[SinkClass, settings]` — it also creates a sink under `id` (an `id` in the sink settings is ignored), ending and replacing a sink the owner already holds under `id`. Returns the created sink, or `undefined`: without `createSink`, on a closed owner, when `id` is already in `extensionStats.values` (created or accepted before), or when another object of the observer holds a sink with this id |
+| `acceptExtensionStats(id, data)` | Keeps `data` as the last data of `id` and writes it to the owner's sink with the same id, if there is one (a sink that throws is logged). `id` does not have to be created first. Dropped once the owner is closed |
+| `getExtensionStats<T>(id)` | The last data accepted for `id`, or `undefined` |
+| `extensionStats` | The owner's `ExtensionStatsRegistry`: `values` (`Map<id, last data>`), `closed`, `close()`, and `create` / `accept` / `get`, which the three methods above delegate to |
+
+**Extension stats ids share the sink id namespace, so they must be unique per observer**: the sink
+of extension stats `x` is the sink with id `x`. Consequently:
+
+- With `createSink`, a sink the owner already holds under the id is ended and replaced. If another
+  object of the observer holds it, no sink is created and the data is only kept.
+- Without `createSink`, a sink you create later under the id (`sinks.create(SinkClass, { id, ... })`)
+  receives the data accepted from then on.
+- An id accepted before it was created can no longer be created with `createSink`; give it a sink
+  with `sinks.create` instead.
+
+**Lifecycle.** When the owner (the call, the router or the observer) closes, it closes its
+`extensionStats`: data accepted afterwards is dropped, `createExtensionStats` returns `undefined`,
+and the extension stats' sinks are ended. The owner's other sinks end with its `sinks.clear()` as
+usual. `extensionStats.close()` can also be called directly; it ends only the extension stats'
+sinks.
+
 ### Other records: e.g. mediasoup pipe transport stats
 
 ```ts

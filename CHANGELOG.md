@@ -128,6 +128,35 @@ to read `sink.path`). For a sink you create yourself, you already hold it.
 **Unchanged:** `observedClient.sink` still returns the client's sink, and the client still ends it
 when it closes.
 
+### Extension stats on `Observer`, `ObservedCall` and `ObservedMediasoupRouter` (new)
+
+The last data per id, for stats the library does not collect itself, written to the owner's sink
+with the same id when there is one. The same API on all three owners:
+
+```ts
+call.createExtensionStats({ id: 'call-1:sfu', createSink: [ JsonlFileSink<SfuStats>, { path } ] });
+call.acceptExtensionStats('call-1:sfu', await collectSfuStats());   // the application polls
+call.getExtensionStats<SfuStats>('call-1:sfu');                     // the last data
+call.extensionStats.values;                                         // Map<id, last data>
+```
+
+- `createExtensionStats({ id, createSink? })` registers the id. `createSink` is what
+  `sinks.create` takes (`[SinkClass, settings]`); the sink is created under `id`, ending and
+  replacing a sink the owner already holds under it. Returns the sink, or `undefined` (no
+  `createSink`, a closed owner, an id already in `extensionStats.values` — created or accepted
+  before —, or the id held as a sink by another object of the observer).
+- `acceptExtensionStats(id, data)` keeps `data` in `extensionStats.values` and writes it
+  to the sink with the same id, if any — also one created later with `sinks.create`. It does not
+  require `createExtensionStats` first; an id accepted first gets a sink through `sinks.create`.
+- `getExtensionStats<T>(id)` returns the last data.
+- Extension stats ids share the sink id namespace, so they must be unique per observer.
+- `extensionStats` on each owner is its `ExtensionStatsRegistry` (`create`, `accept`, `get`,
+  `values`, `closed`, `close()`), which the three methods above delegate to. The owner closes it when
+  it closes: data accepted afterwards is dropped, `create` is refused, and the extension stats'
+  sinks are ended (the owner's other sinks end with its `sinks.clear()`).
+- `ExtensionStatsRegistry`, `SinkConstructor`, `SinkCreateSettings<C>` and
+  `CreateExtensionStatsSettings<C>` are exported.
+
 ### Other
 
 - `percentileOfHistogram` narrows the bucket holding the observed `min` / `max` to the observed

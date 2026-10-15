@@ -13,6 +13,9 @@ import {
 } from './schema/MediasoupRouter';
 import { createLogger } from './common/logger';
 import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { SinkConstructor } from './sinks/SinkRegistry';
 
 const logger = createLogger('ObservedMediasoupRouter');
 
@@ -95,12 +98,8 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public readonly webrtcTransportIds = new Set<string>();
 	public closed = false;
 
-	/**
-	 * The router's sinks, e.g. one per pipe transport for its `getStats()`. They are ended when the
-	 * router closes, which is usually the lifetime wanted; `sink.end()` ends one earlier. Writing to
-	 * them, and polling what is written, is the application's. Its parent is `observer.sinks`.
-	 */
 	public readonly sinks: SinkRegistry;
+	public readonly extensionStats: ExtensionStatsRegistry;
 
 	// Id -> sample indexes over the arrays in `this.sample`, so an entity can be reached in O(1)
 	// instead of scanning (`sample.producers.find(...)`). They hold the *same* objects as the arrays.
@@ -125,6 +124,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		this.appData = (settings.appData ?? {}) as AppData;
 		this._enrich = settings.enrich;
 		this.sinks = new SinkRegistry(parentSinks);
+		this.extensionStats = new ExtensionStatsRegistry(this.router.id, this.sinks);
 		this.sample = {
 			routerId: this.router.id,
 			attachments: settings.attachments ?? {},
@@ -218,8 +218,21 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		this.closed = true;
 		if (this.sample.closedAt === undefined) this.sample.closedAt = Date.now();
 
+		this.extensionStats.close();
 		this.sinks.clear();
 		this.emit('close');
+	}
+
+	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public addTransport = (transport: types.Transport) => {

@@ -8,6 +8,9 @@ import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } 
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
 import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { SinkConstructor } from './sinks/SinkRegistry';
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
@@ -281,6 +284,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public readonly observedMediasoupRouters = new Map<string, ObservedMediasoupRouter>();
 
 	public readonly sinks = new SinkRegistry();
+	public readonly extensionStats = new ExtensionStatsRegistry('observer', this.sinks);
 
 	/** Ancestry base shared by all Observer-bus events originating at the observer. */
 	public readonly eventScope: ObserverEventBase = { observer: this };
@@ -731,9 +735,22 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.activeIssuesRegistry.clear();
 		// After the calls (each ended its own); this ends the observer's own and the routers' sinks —
 		// routers are mediasoup's to close, so they may still be open.
+		this.extensionStats.close();
 		this.sinks.clear();
 
 		this._notify('observer-closed', { ...this.eventScope });
+	}
+
+	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public accept(sample: ClientSample, context?: AcceptContext): void {

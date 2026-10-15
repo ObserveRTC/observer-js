@@ -1,5 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { SinkConstructor } from './sinks/SinkRegistry';
 import { JsonlFileSink } from './sinks/JsonlFileSink';
 import type { ClientSample } from './schema/ClientSample';
 import { createLogger } from './common/logger';
@@ -111,6 +114,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	/** Ancestry base shared by all Observer-bus events originating at this call. */
 	public readonly eventScope: ObservedCallScope;
 	public readonly sinks: SinkRegistry;
+	public readonly extensionStats: ExtensionStatsRegistry;
 
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
@@ -125,6 +129,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
 		this.sinks = new SinkRegistry(this.observer.sinks);
+		this.extensionStats = new ExtensionStatsRegistry(this.callId, this.sinks);
 		this.appData = (settings.appData ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		this.detectors = new Detectors();
@@ -267,7 +272,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			if (client.leftAt) maxSampleTimestamps = Math.max(maxSampleTimestamps ?? client.leftAt, client.leftAt);
 		}
 
-		// After the clients, which removed their own sample sinks.
+		// After the clients, which ended their own sample sinks.
+		this.extensionStats.close();
 		this.sinks.clear();
 
 		if (this.startedAt === undefined) this.startedAt = minSampleTimestamps;
@@ -286,6 +292,18 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.activeIssuesRegistry.clear();
 		this.emit('close');
 		this._notify('call-closed', { ...this.eventScope });
+	}
+
+	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public getObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(clientId: string): ObservedClient<ClientAppData> | undefined {

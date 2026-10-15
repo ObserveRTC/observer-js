@@ -299,6 +299,7 @@ export type { Logger, ObserverLogger } from './common/logger';
 // `JsonlFileSink` / `InMemorySink` are the built-ins; `SinkRegistry` owns their lifecycle.
 export {
 	SinkRegistry,
+	ExtensionStatsRegistry,
 	JsonlFileSink,
 	createJsonlFileSink,
 	InMemorySink,
@@ -308,6 +309,9 @@ export type {
 	Sink,
 	SinkEvents,
 	SinkSettings,
+	SinkConstructor,
+	SinkCreateSettings,
+	CreateExtensionStatsSettings,
 	ClientSampleSink,
 	ClientSampleSinkEvents,
 	JsonlFileSinkOptions,
