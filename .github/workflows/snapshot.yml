@@ -1,0 +1,32 @@
+name: Snapshot package
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn lint && yarn typecheck && yarn build && yarn test --ci
+      - name: Pack tested snapshot
+        run: |
+          mkdir -p "$RUNNER_TEMP/snapshot-package"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/snapshot-package"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: snapshot-package
+          path: ${{ runner.temp }}/snapshot-package/*.tgz
+          if-no-files-found: error
+          retention-days: 7
