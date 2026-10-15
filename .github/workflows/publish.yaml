@@ -1,8 +1,9 @@
 name: Publish
 
 on:
-  pull_request:
-    branches: [master]
+  workflow_run:
+    workflows: [Snapshot package]
+    types: [completed]
   workflow_call:
     inputs:
       release-ref:
@@ -14,21 +15,38 @@ permissions:
 
 jobs:
   snapshot:
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
+      # Use the trusted default-branch scripts, never execute code from the PR here.
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: yarn
-      - run: yarn install --frozen-lockfile
-      - run: yarn lint && yarn typecheck && yarn build && yarn test --ci
-      # Install the pkg.pr.new GitHub app on this repository first.
-      - name: Publish PR snapshot
-        run: npx --yes pkg-pr-new@0.0.54 publish --no-compact
+      - run: npm install -g npm@11
+      - name: Download tested PR package
+        uses: actions/download-artifact@v7
+        with:
+          name: snapshot-package
+          path: ${{ runner.temp }}/snapshot-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+      - name: Publish next npm snapshot
+        env:
+          SNAPSHOT_ARTIFACT: ${{ runner.temp }}/snapshot-artifact
+          SNAPSHOT_RUN_ID: ${{ github.event.workflow_run.id }}
+          SNAPSHOT_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/snapshot.npmrc
+        run: python3 scripts/publish-snapshot.py
 
   release:
     if: github.event_name == 'workflow_dispatch'

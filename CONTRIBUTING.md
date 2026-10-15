@@ -26,10 +26,20 @@ Once you are ready with your changes:
 
 ## Snapshots and releases
 
-PRs targeting `master` run Publish and upload an installable snapshot to pkg.pr.new.
-Install the [pkg.pr.new GitHub app](https://github.com/apps/pkg-pr-new) on this repository
-once; snapshot install URLs appear on the PR. These snapshots do not consume npm versions.
-Pushes and merges do not publish packages. The retired Pages workflow has been removed.
+PRs targeting `master` build and test the package in Snapshot package. Publish then
+publishes that artifact to npm as `@observertc/observer-js@<version>-rc.<number>`,
+under the `snapshot` dist-tag. The base version comes from the PR's `package.json`
+(with any prerelease suffix removed). For example, a package version of `1.3.0`
+produces `1.3.0-rc.1`, then `1.3.0-rc.2`. The counter uses the highest existing rc
+number on npm for that base version; simultaneous runs retry version collisions.
+Install with `npm install @observertc/observer-js@snapshot` or the exact rc version.
+The snapshot version is never committed or tagged, and `latest` is untouched.
+
+No external snapshot app or npm token is needed. The publisher runs separately on
+`workflow_run`, so fork PR builds never receive publishing credentials or execute
+scripts in the publishing job. Both workflows and the publisher script must be on
+the default branch before automatic snapshots can run. Pushes and merges do not
+publish packages. The retired Pages workflow has been removed.
 
 To release, merge the changes into `master`, then open Actions → Release → Run workflow,
 select `master`, and enter the exact version (for example `1.3.0` or `1.4.0-beta.1`).
@@ -38,8 +48,9 @@ version and notes, runs checks, commits the package version and dated changelog 
 creates `v<version>`, publishes to npm, and creates a GitHub release using those same notes.
 Stable versions use `latest`; prereleases use `beta`. A fresh Unreleased section is retained.
 
-npm Trusted Publishing must authorize `publish.yaml` in this repository (the reusable
-workflow that actually publishes). No npm token is needed. Repository rules must allow
+npm Trusted Publishing must authorize `publish.yaml` for snapshots and `release.yml`
+for manual releases in `ObserveRTC/observer-js`. npm checks the calling workflow
+for reusable workflows. Both publishers must allow direct `npm publish`. No npm token is needed. Repository rules must allow
 `github-actions[bot]` to push the release commit to master and create tags. Manual dispatch
 requires the workflow to exist on the default branch; releases run only from master.
 
