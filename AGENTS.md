@@ -38,8 +38,10 @@ yarn test:coverage      # jest --coverage (enforces the coverage thresholds in j
 `prepublishOnly` runs lint + typecheck; `prepare` runs the build.
 
 CI (`.github/workflows/ci.yml`) runs lint + typecheck + **build** + `test:coverage` on every push/PR.
-Publishing (`.github/workflows/publish.yaml`) uses npm **Trusted Publishing (OIDC) + provenance** on
-pushes to `master` (prerelease versions publish under the `beta` dist-tag).
+Publishing (`.github/workflows/publish.yaml`) creates pkg.pr.new snapshots for PRs targeting
+`master`. Manual `Release` on `master` takes an exact version, commits the finalized changelog
+and package version, tags it, publishes through npm Trusted Publishing, and creates a GitHub release.
+See `CONTRIBUTING.md` for setup and recovery.
 
 ---
 

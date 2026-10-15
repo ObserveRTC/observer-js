@@ -1,92 +1,57 @@
 name: Publish
 
 on:
-  push:
-    branches:
-      - master
-      - develop
+  pull_request:
+    branches: [master]
+  workflow_call:
+    inputs:
+      release-ref:
+        required: true
+        type: string
 
-# Required for npm Trusted Publishing (OIDC). `id-token: write` lets the job mint the
-# short-lived OIDC token npm exchanges for publish rights, and enables provenance attestations.
-# No NPM_TOKEN secret is used anymore.
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  publish:
+  snapshot:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      # NOTE deliberately no `registry-url`. That input makes setup-node write an `.npmrc` containing
-      #   //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-      # and yarn 1 resolves env placeholders when it *parses* config, so it throws
-      # "Failed to replace env in config: ${NODE_AUTH_TOKEN}" before installing anything — and
-      # `NODE_AUTH_TOKEN` no longer exists, because publishing moved to Trusted Publishing (OIDC).
-      # npm defaults to registry.npmjs.org anyway, and mints its own short-lived credential.
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn lint && yarn typecheck && yarn build && yarn test --ci
+      # Install the pkg.pr.new GitHub app on this repository first.
+      - name: Publish PR snapshot
+        run: npx --yes pkg-pr-new@0.0.54 publish --no-compact
 
-      # Trusted Publishing requires npm >= 11.5.1, which is newer than the npm bundled with Node 22.
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Install
-        run: yarn install --frozen-lockfile
-
-      - name: Build
-        run: yarn build
-
-      - name: Test
-        run: yarn test --ci
-
-      - name: Resolve context
-        id: ctx
-        shell: bash
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release-ref }}
+          persist-credentials: false
+      # No registry-url: Yarn 1 cannot resolve an unset NODE_AUTH_TOKEN.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: yarn
+      - run: npm install -g npm@11
+      - run: yarn install --frozen-lockfile
+      - run: yarn lint && yarn typecheck && yarn build && yarn test --ci
+      - name: Publish version to npm
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          echo "branch=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      # Skip (don't fail) if this exact version is already on npm — avoids a red build when a
-      # master push didn't bump the version. (develop publishes a unique snapshot, so it's exempt.)
-      - name: Check if version already published
-        id: published
-        if: steps.ctx.outputs.branch == 'master'
-        shell: bash
-        run: |
-          NAME="$(node -p "require('./package.json').name")"
-          if npm view "$NAME@${{ steps.ctx.outputs.version }}" version >/dev/null 2>&1; then
-            echo "Version $NAME@${{ steps.ctx.outputs.version }} already published — skipping publish."
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # master -> always "latest", whatever the version looks like.
-      #
-      # master is the release line: whatever is on it is what `npm install @observertc/observer-js`
-      # should give you. The dist-tag is therefore a property of the *branch*, not of the version
-      # string — a prerelease version on master is still the current release.
-      #
-      # Note npm permits a prerelease version under "latest"; it is a convention that stops it, not a
-      # rule. The consequence is deliberate and worth being clear about: while `package.json` reads
-      # e.g. 1.0.0-beta.20, a plain `npm install` resolves to that beta. Publish prereleases you do
-      # *not* want installed by default from a branch other than master.
-      #
-      # Auth is via OIDC (trusted publisher); provenance is attached automatically.
-      - name: Publish
-        if: steps.ctx.outputs.branch == 'master' && steps.published.outputs.exists == 'false'
-        run: npm publish --access public --ignore-scripts --tag latest
-
-      # develop -> publish a per-commit release candidate under a custom dist-tag.
-      - name: Make snapshot version
-        if: steps.ctx.outputs.branch != 'master'
-        run: npm version prerelease --preid=${{ steps.ctx.outputs.short_sha }} --git-tag-version false
-
-      - name: Publish (release candidate)
-        if: steps.ctx.outputs.branch != 'master'
-        run: npm publish --access public --ignore-scripts --tag "$(echo "develop-${{ steps.ctx.outputs.version }}-rc" | sed 's/[.]//g')"
+          TAG=latest
+          if [[ "$VERSION" == *-* ]]; then TAG=beta; fi
+          npm publish --access public --ignore-scripts --tag "$TAG"
