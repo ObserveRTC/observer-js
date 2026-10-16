@@ -743,9 +743,7 @@ export class ObservedPeerConnection extends EventEmitter {
 		for (const observedOutboundTrack of [ ...this.observedOutboundTracks.values() ]) {
 			if (observedOutboundTrack.visited) continue;
 
-			this.observedOutboundTracks.delete(observedOutboundTrack.id);
-			this.emit('removed-outbound-track', observedOutboundTrack);
-			this._notify('outbound-track-removed', { ...this.eventScope, observedOutboundTrack });
+			this._removeOutboundTrack(observedOutboundTrack);
 		}
 		for (const observedPeerConnectionTransport of [ ...this.observedPeerConnectionTransports.values() ]) {
 			if (observedPeerConnectionTransport.visited) continue;
@@ -1078,6 +1076,14 @@ export class ObservedPeerConnection extends EventEmitter {
 
 	private _updateOutboundTrackSample(stats: OutboundTrackSample) {
 		let observedOutboundTrack = this.observedOutboundTracks.get(stats.id);
+		// The newest media source of this track (Maps keep insertion order).
+		const mediaSource = [ ...this.observedMediaSources.values() ].filter((source) => source.trackIdentifier === stats.id).pop();
+
+		// A new media source for the same track id means a republication: replace the track object.
+		if (observedOutboundTrack && observedOutboundTrack.getMediaSource() !== mediaSource) {
+			this._removeOutboundTrack(observedOutboundTrack);
+			observedOutboundTrack = undefined;
+		}
 
 		if (!observedOutboundTrack) {
 			if (!stats.timestamp || !stats.id || !stats.kind) {
@@ -1086,17 +1092,13 @@ export class ObservedPeerConnection extends EventEmitter {
 					stats
 				);
 			}
-			const observedMediaSource = [ ...this.observedMediaSources.values() ].find((mediaSource) => mediaSource.trackIdentifier === stats.id);
-			const outboundRtps = observedMediaSource
-				? [ ...this.observedOutboundRtps.values() ].filter((outboundRtp) => outboundRtp.mediaSourceId === observedMediaSource?.id) : undefined;
 
 			observedOutboundTrack = new ObservedOutboundTrack(
 				stats.timestamp,
 				stats.id,
 				stats.kind as MediaKind,
 				this,
-				outboundRtps,
-				observedMediaSource,
+				mediaSource,
 			);
 
 			observedOutboundTrack.update(stats);
@@ -1109,6 +1111,12 @@ export class ObservedPeerConnection extends EventEmitter {
 		this._notify('outbound-track-updated', { ...this.eventScope, observedOutboundTrack });
 
 		return observedOutboundTrack;
+	}
+
+	private _removeOutboundTrack(observedOutboundTrack: ObservedOutboundTrack) {
+		this.observedOutboundTracks.delete(observedOutboundTrack.id);
+		this.emit('removed-outbound-track', observedOutboundTrack);
+		this._notify('outbound-track-removed', { ...this.eventScope, observedOutboundTrack });
 	}
 
 	private _updatePeerConnectionTransportStats(stats: PeerConnectionTransportStats) {

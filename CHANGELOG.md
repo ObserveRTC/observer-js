@@ -173,6 +173,16 @@ call.extensionStats.values;                                         // Map<id, l
 - `ExtensionStatsRegistry`, `SinkConstructor`, `SinkCreateSettings<C>` and
   `CreateExtensionStatsSettings<T>` are exported.
 
+### Fixed: outbound track republished on the same `MediaStreamTrack`
+
+A producer recreated on the same track (reconnection, toggling audio processing) left the
+`ObservedOutboundTrack` linked to the old media source and RTPs, so its stats, the detectors and
+the remote track resolver read stale data. Now a new media source for the same track id replaces
+the track object (`outbound-track-removed`, then `outbound-track-added`, same `id`), and
+`getOutboundRtps()` is looked up on every call.
+
+Thanks to Alessio Bazzica for reporting it.
+
 ### Other
 
 - `percentileOfHistogram` narrows the bucket holding the observed `min` / `max` to the observed
