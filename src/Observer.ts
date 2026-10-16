@@ -5,9 +5,12 @@ import { ClientSample } from './schema/ClientSample';
 import { ObservedTURN } from './ObservedTURN';
 import type { RemoteTrackResolverFactory } from './resolvers/RemoteTrackResolver';
 import type { ObserverEvents, ObserverEventBase, ObservedMediasoupRouterScope } from './ObserverEvents';
-import type { ClientSampleSinkFactory } from './sinks/ClientSampleSink';
 import { Middleware, MiddlewareProcessor } from './common/Middleware';
 import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './ObservedMediasoupRouter';
+import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { Sink, ClientSinkParams } from './sinks/Sink';
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
@@ -57,6 +60,11 @@ export type CallAppDataFactory = (params: { callId: string, observer: Observer, 
 
 /** Produces the initial `appData` for a client created without an explicit `appData`. */
 export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall, acceptCtx?: AcceptContext }) => Record<string, unknown>;
+
+/** `ObserverConfig.saveClientSamples`: exactly one of the two per-client callbacks. */
+export type SaveClientSamplesConfig =
+	| { jsonlPath: (params: ClientSinkParams<ObservedCall>) => string | undefined, sink?: never }
+	| { sink: (params: ClientSinkParams<ObservedCall>) => Sink<ClientSample> | undefined, jsonlPath?: never };
 
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 
@@ -228,11 +236,15 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	createClientAppData?: ClientAppDataFactory,
 
 	/**
-	 * Optional factory invoked when a client is created, producing a per-client sink that
-	 * receives every sample the client accepts (or `undefined` for no sink). The destination
-	 * can be derived from `callId` / `clientId`.
+	 * Where each client's samples are saved: exactly one of `jsonlPath` (return the path of the
+	 * client's JSONL file) and `sink` (return a sink whose `id` is `params.id`), each called per
+	 * client; `undefined` gives that client no sink. See the README's *Sinks* section.
+	 *
+	 * A client's sample sink id is its client id (`params.id`). Sink ids are unique per observer, so
+	 * client ids must be unique across the observer's open calls; a client whose id is already a sink
+	 * id gets no sink, and a warning is logged.
 	 */
-	createClientSink?: ClientSampleSinkFactory,
+	saveClientSamples?: SaveClientSamplesConfig,
 
 	/**
 	 * Optional factory invoked when a call is created, producing the call's `RemoteTrackResolver`
@@ -255,6 +267,9 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 	public readonly observedTURN = new ObservedTURN();
 	public readonly observedCalls = new Map<string, ObservedCall>();
 	public readonly observedMediasoupRouters = new Map<string, ObservedMediasoupRouter>();
+
+	public readonly sinks = new SinkRegistry();
+	public readonly extensionStats = new ExtensionStatsRegistry('observer', this.sinks);
 
 	/** Ancestry base shared by all Observer-bus events originating at the observer. */
 	public readonly eventScope: ObserverEventBase = { observer: this };
@@ -646,7 +661,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 			return this.observedMediasoupRouters.get(settings.router.id);
 		}
 
-		const observedMediasoupRouter = new ObservedMediasoupRouter(settings);
+		const observedMediasoupRouter = new ObservedMediasoupRouter(settings, this.sinks);
 		const observedMediasoupRouterScope: ObservedMediasoupRouterScope = {
 			observedMediasoupRouter,
 			observer: this,
@@ -703,8 +718,24 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this.callSummaryCollector?.close();
 		// Each call cleared its own issues on close; this covers anything raised after that.
 		this.activeIssuesRegistry.clear();
+		// After the calls (each ended its own); this ends the observer's own and the routers' sinks —
+		// routers are mediasoup's to close, so they may still be open.
+		this.extensionStats.close();
+		this.sinks.clear();
 
 		this._notify('observer-closed', { ...this.eventScope });
+	}
+
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public accept(sample: ClientSample, context?: AcceptContext): void {

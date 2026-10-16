@@ -206,20 +206,21 @@ describe('Observer', () => {
 	});
 
 	describe('per-client sinks', () => {
-		it('creates a sink via createClientSink and emits client-sink-created', () => {
-			const observer = new Observer({
-				createClientSink: () => createInMemorySink(),
-			});
-			let eventSink: unknown;
+		it('uses a sink added under the client id on client-added', () => {
+			const observer = new Observer();
 
-			observer.on('client-sink-created', ({ sink }) => { eventSink = sink; });
+			observer.on('client-added', ({ observedCall, observedClient }) => {
+				observedCall.sinks.create(InMemorySink, { id: observedClient.clientId });
+			});
 
 			observer.accept(makeSample({}));
 
-			const client = observer.getObservedCall('call-1')?.getObservedClient('client-1');
+			const call = observer.getObservedCall('call-1');
+			const client = call?.getObservedClient('client-1');
 
 			expect(client?.sink).toBeInstanceOf(InMemorySink);
-			expect(eventSink).toBe(client?.sink);
+			expect(client?.sink).toBe(call?.sinks.get('client-1'));
+			expect((client?.sink as InMemorySink).samples).toHaveLength(1);
 
 			observer.close();
 		});

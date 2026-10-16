@@ -84,7 +84,6 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		public readonly id: string,
 		public readonly kind: MediaKind,
 		private readonly _peerConnection: ObservedPeerConnection,
-		private readonly _outboundRtps?: ObservedOutboundRtp[],
 		private readonly _mediaSource?: ObservedMediaSource,
 	) {
 		// no-op
@@ -110,8 +109,13 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		return this._peerConnection;
 	}
 
-	public getOutboundRtps() {
-		return this._outboundRtps;
+	/** The outbound RTPs of this track's media source, looked up on every call. */
+	public getOutboundRtps(): ObservedOutboundRtp[] | undefined {
+		const mediaSource = this._mediaSource;
+
+		if (!mediaSource) return undefined;
+
+		return [ ...this._peerConnection.observedOutboundRtps.values() ].filter((rtp) => rtp.mediaSourceId === mediaSource.id);
 	}
 
 	public getMediaSource() {
@@ -137,7 +141,7 @@ export class ObservedOutboundTrack implements OutboundTrackSample {
 		this.remoteRttInMs = undefined;
 		this.qualityLimitationReason = undefined;
 
-		for (const rtp of this._outboundRtps ?? []) {
+		for (const rtp of this.getOutboundRtps() ?? []) {
 			this.bitrate = (this.bitrate ?? 0) + rtp.bitrate;
 			this.deltaPacketsSent = (this.deltaPacketsSent ?? 0) + rtp.deltaPacketsSent;
 

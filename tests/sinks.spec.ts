@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { InMemorySink, createInMemorySink } from '../src/sinks/InMemorySink';
-import { JsonlFileSink, createJsonlFileSink, createJsonlFileSinkFactory } from '../src/sinks/JsonlFileSink';
-import type { ObservedCall } from '../src/ObservedCall';
+import { JsonlFileSink, createJsonlFileSink } from '../src/sinks/JsonlFileSink';
+import { Observer } from '../src/Observer';
 import { makeSample } from './helpers/samples';
 
 describe('InMemorySink', () => {
@@ -72,12 +72,94 @@ describe('JsonlFileSink', () => {
 		expect(fs.readFileSync(filePath, 'utf8').trim()).toBe('id=zed');
 	});
 
-	it('factory derives the per-client file path from callId/clientId', async () => {
-		const factory = createJsonlFileSinkFactory({ directory: dir });
-		const sink = factory({ clientId: 'cl', observedCall: { callId: 'cid' } as ObservedCall }) as JsonlFileSink;
+	it('saveClientSamples.jsonlPath: each client writes its samples to the JSONL file at the returned path, announced by client-sink-created', async () => {
+		const observer = new Observer({
+			saveClientSamples: {
+				jsonlPath: ({ observedCall, clientId }) => (clientId === 'skip' ? undefined : path.join(dir, `${observedCall.callId}__${clientId}.jsonl`)),
+			},
+		});
+		const created: JsonlFileSink[] = [];
 
-		expect(sink.path).toBe(path.join(dir, 'cid__cl.jsonl'));
-		await flush(sink);
+		observer.on('client-sink-created', ({ sink }) => created.push(sink as JsonlFileSink));
+		observer.accept(makeSample({ callId: 'cid', clientId: 'cl' }));
+		observer.accept(makeSample({ callId: 'cid', clientId: 'skip' }));
+
+		const call = observer.getObservedCall('cid')!;
+
+		expect(created.map((s) => s.path)).toEqual([ path.join(dir, 'cid__cl.jsonl') ]);
+		expect(call.sinks.get('cl')).toBe(created[0]);
+		expect(call.getObservedClient('skip')?.sink).toBeUndefined();
+
+		const flushed = flush(created[0]);
+
+		observer.close();
+		await flushed;
+
+		const lines = fs.readFileSync(path.join(dir, 'cid__cl.jsonl'), 'utf8').trim().split('\n');
+
+		expect(lines).toHaveLength(1);
+		expect(JSON.parse(lines[0]).clientId).toBe('cl');
+	});
+
+	it('saveClientSamples.sink: uses the returned sink when its id is the given id (the client id), ends it otherwise', () => {
+		const sinks: InMemorySink[] = [];
+		const ids: string[] = [];
+		const observer = new Observer({
+			saveClientSamples: { sink: ({ id, clientId }) => {
+				ids.push(id);
+				const sink = new InMemorySink({ id: clientId === 'wrong' ? 'not-the-client-id' : id });
+
+				sinks.push(sink);
+
+				return sink;
+			} },
+		});
+
+		observer.accept(makeSample({ callId: 'c', clientId: 'ok' }));
+		observer.accept(makeSample({ callId: 'c', clientId: 'wrong' }));
+
+		const call = observer.getObservedCall('c')!;
+
+		expect(call.getObservedClient('ok')?.sink).toBe(sinks[0]);
+		expect(call.sinks.get('ok')).toBe(sinks[0]);
+		expect(ids).toEqual([ 'ok', 'wrong' ]);
+		expect(sinks[0].samples).toHaveLength(1);
+		expect(call.getObservedClient('wrong')?.sink).toBeUndefined();
+		expect(sinks[1].ended).toBe(true);
+		observer.close();
+	});
+
+	it('saveClientSamples with both jsonlPath and sink (from JavaScript) saves nothing', () => {
+		let called = 0;
+		const config = {
+			jsonlPath: () => { ++called; return path.join(dir, 'both.jsonl'); },
+			sink: ({ id }: { id: string }) => { ++called; return new InMemorySink({ id }); },
+		};
+		// Only reachable without the type check: the config type makes both a compile error.
+		const observer = new Observer({ saveClientSamples: config as unknown as { jsonlPath: () => string } });
+
+		observer.accept(makeSample({ callId: 'c', clientId: 'x' }));
+
+		expect(observer.getObservedCall('c')?.getObservedClient('x')?.sink).toBeUndefined();
+		expect(called).toBe(0);
+		expect(fs.existsSync(path.join(dir, 'both.jsonl'))).toBe(false);
+		observer.close();
+	});
+
+	it('saveClientSamples is not called for a client whose id is already a sink id in another call', () => {
+		const observer = new Observer({
+			saveClientSamples: {
+				jsonlPath: ({ observedCall, clientId }) => path.join(dir, `${observedCall.callId}__${clientId}.jsonl`),
+			},
+		});
+
+		observer.accept(makeSample({ callId: 'c1', clientId: 'dup' }));
+		observer.accept(makeSample({ callId: 'c2', clientId: 'dup' }));
+
+		expect(observer.getObservedCall('c1')?.getObservedClient('dup')?.sink).toBeDefined();
+		expect(observer.getObservedCall('c2')?.getObservedClient('dup')?.sink).toBeUndefined();
+		expect(fs.existsSync(path.join(dir, 'c2__dup.jsonl'))).toBe(false);
+		observer.close();
 	});
 
 	it('createJsonlFileSink builds a JsonlFileSink', async () => {

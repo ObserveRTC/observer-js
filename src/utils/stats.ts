@@ -426,7 +426,9 @@ function erf(x: number): number {
  * holds the values in `[i * bucketWidth, (i + 1) * bucketWidth)`. Interpolates linearly inside
  * the bucket the rank falls in, so the error is at most one bucket width. With `openEnded`, the
  * last bucket holds every value above its lower bound, and a percentile falling in it is reported
- * as `max`. The estimate is clamped to `[min, max]` when given. `undefined` for an empty histogram.
+ * as `max`. With `min`/`max` (the observed extremes), the bucket holding them is narrowed to the
+ * observed range before interpolating, so the estimate never leaves `[min, max]`. `undefined` for an
+ * empty histogram.
  */
 export function percentileOfHistogram(
 	histogram: readonly number[],
@@ -451,9 +453,12 @@ export function percentileOfHistogram(
 		}
 		if (options.openEnded && index === histogram.length - 1 && options.max !== undefined) return options.max;
 
-		const estimate = (index * bucketWidth) + (((rank - cumulative) / count) * bucketWidth);
+		// Narrow the bucket to the observed range, so a distribution inside one bucket (40–49 ms in
+		// [40, 60)) is interpolated over 40–49 rather than over the whole bucket and then clamped.
+		const lower = Math.max(index * bucketWidth, options.min ?? -Infinity);
+		const upper = Math.min((index + 1) * bucketWidth, options.max ?? Infinity);
 
-		return Math.min(Math.max(estimate, options.min ?? estimate), options.max ?? estimate);
+		return lower + (((rank - cumulative) / count) * Math.max(0, upper - lower));
 	}
 
 	return options.max;
