@@ -33,39 +33,45 @@ observedRouter.sinks.write(transport.id, await transport.getStats());   // or si
 - A client writes its samples to the sink under its client id in `observedCall.sinks`
   (`observedClient.sink` is now a getter for it) and ends it when the client closes. Client ids
   are therefore sink ids and must be unique across the observer's open calls.
-- `ObserverConfig.createClientSink: ({ id, observedCall, clientId }) => SinkDestination<ClientSample> | undefined`
-  decides the client's sample sink. A `SinkDestination` is exactly one of `{ jsonlPath }` — the
-  library creates a `JsonlFileSink` at that path under the client id — and `{ sink }` — your sink,
-  whose `id` must be `id` (the client id); `undefined` means none. Both is a compile error. It is called only when the id is free as a
-  sink id; a sink with a different id is ended and not used. `client-sink-created` announces it
-  (`sink: Sink<ClientSample>`).
+- `ObserverConfig.saveClientSamples` decides where each client's samples are saved — exactly one of
+  two per-client callbacks, called with `{ id, observedCall, clientId }` (the same `jsonlPath` /
+  `sink` pair as `createExtensionStats`):
+  - `{ jsonlPath: (p) => string | undefined }`: the library creates a `JsonlFileSink` at the
+    returned path under the client id;
+  - `{ sink: (p) => Sink<ClientSample> | undefined }`: your sink, whose `id` must be `p.id`.
+
+  **A client's sample sink id is its client id** (`p.id`); `jsonlPath` uses it for you. Sink ids
+  are unique per observer, so client ids must be unique across the observer's open calls (client
+  monitors generate uuids); a client whose id is already a sink id gets no sink, with a warning.
+  `undefined` gives that client no sink; both is a compile error. The callback is called only when
+  the id is free; a sink with a different id is ended and not used.
+  `client-sink-created` announces it (`sink: Sink<ClientSample>`).
 - `SinkRegistry.createFromDestination(id, destination)` registers what a `SinkDestination`
-  describes (`createClientSink` and `createExtensionStats` use it).
+  describes (`saveClientSamples` and `createExtensionStats` use it).
 - `SinkRegistry.add(sink)` registers a sink constructed elsewhere under its own id, and
   `owns(id)` tells whether an id was added to that registry itself rather than to a descendant.
 - `JsonlFileSink<T = ClientSample>` and `createJsonlFileSink<T>` take any record type.
 
 **Breaking** (see *Migrating from 1.2* below):
 
-- `ObserverConfig.createClientSink` now returns a `SinkDestination` — `{ jsonlPath }` or
-  `{ sink }` with the `id` it receives — instead of a sink; sinks implement the `Sink` interface
-  (below).
+- `ObserverConfig.createClientSink` is replaced by `saveClientSamples` (`{ jsonlPath }` or
+  `{ sink }`, each a per-client callback); sinks implement the `Sink` interface (below).
 - `ClientSampleSink` is no longer a class to extend: implement `Sink<ClientSample>` (e.g.
   `extends EventEmitter implements ClientSampleSink`), take `SinkSettings` in the constructor, and
   emit `ended` from `end()`. `JsonlFileSink` and `InMemorySink` implement the interface instead of
   extending a base class. `JsonlFileSinkOptions` gained `id`; `new InMemorySink(samples)` is now
   `new InMemorySink({ id?, samples? })`.
 - `createJsonlFileSinkFactory`, `JsonlFileSinkFactoryOptions` and `ClientSampleSinkFactory` are
-  removed: return `{ jsonlPath }` from `createClientSink`.
+  removed: use `saveClientSamples: { jsonlPath }`.
 - `client-sink-created` carries a `Sink<ClientSample>`.
 - `ObservedClient.sink` is a getter (read-only, as before).
 
 #### Migrating from 1.2
 
-**JSONL files per client** — `createClientSink: createJsonlFileSinkFactory(...)` becomes a
-`createClientSink` that returns `{ jsonlPath }`. The factory's default file name was
-`${callId}__${clientId}.jsonl`; a `getFileName` option becomes the body of the callback. For
-`serializeSample`, return `{ sink: new JsonlFileSink({ id, path, serializeSample }) }` instead.
+**JSONL files per client** — `createClientSink: createJsonlFileSinkFactory(...)` becomes
+`saveClientSamples: { jsonlPath }`, a callback returning the file path. The factory's default file
+name was `${callId}__${clientId}.jsonl`; a `getFileName` option becomes the body of the callback.
+For `serializeSample`, use `saveClientSamples: { sink: ({ id }) => new JsonlFileSink({ id, path, serializeSample }) }`.
 
 ```ts
 // 1.2
@@ -73,22 +79,26 @@ new Observer({ createClientSink: createJsonlFileSinkFactory({ directory: './stat
 
 // 1.3
 new Observer({
-  createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`) }),
+  saveClientSamples: {
+    jsonlPath: ({ observedCall, clientId }) => path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`),
+  },
 });
 ```
 
-**Any other client sink** — return it wrapped as `{ sink }`, and pass the `id` it receives to the sink.
+**Any other client sink** — `createClientSink` becomes `saveClientSamples: { sink }`; pass the `id` it receives (the client id) to the sink.
 
 ```ts
 // 1.2
 new Observer({ createClientSink: ({ clientId, observedCall }) => new HttpSink(urlOf(observedCall.callId, clientId)) });
 
 // 1.3
-new Observer({ createClientSink: ({ id, clientId, observedCall }) => ({ sink: new HttpSink({ id, url: urlOf(observedCall.callId, clientId) }) }) });
+new Observer({
+  saveClientSamples: { sink: ({ id, clientId, observedCall }) => new HttpSink({ id, url: urlOf(observedCall.callId, clientId) }) },
+});
 ```
 
 **Custom sink classes** — `class HttpSink extends ClientSampleSink` becomes an implementation of
-the interface. The constructor receives the settings object passed to `create`, including `id`:
+the interface. The constructor receives the settings object, including `id`:
 
 ```ts
 // 1.2
@@ -123,8 +133,8 @@ class HttpSink extends EventEmitter implements ClientSampleSink {
 }
 ```
 
-**`client-sink-created`** — still fires right after `client-added` for the sink `createClientSink`
-returned, typed `Sink<ClientSample>`; narrow (`sink instanceof JsonlFileSink`) to read `sink.path`.
+**`client-sink-created`** — still fires right after `client-added` for the sink created through
+`saveClientSamples`, typed `Sink<ClientSample>`; narrow (`sink instanceof JsonlFileSink`) to read `sink.path`.
 
 **Unchanged:** `observedClient.sink` still returns the client's sink, and the client still ends it
 when it closes.
@@ -149,7 +159,8 @@ call.extensionStats.values;                                         // Map<id, l
   or accepted before), or the id held as a sink by another object of the observer. A refused `sink`
   is ended.
 - `SinkDestination<T>` — `{ jsonlPath: string } | { sink: Sink<T> }`, exclusive — is exported; it
-  is what `createClientSink` returns and what `createExtensionStats` takes besides `id`.
+  is what `createExtensionStats` takes besides `id`. `SaveClientSamplesConfig` and
+  `ClientSinkParams` (the callbacks' parameter) are exported too.
 - `acceptExtensionStats(id, data)` keeps `data` in `extensionStats.values` and writes it
   to the sink with the same id, if any — also one created later with `sinks.create`. It does not
   require `createExtensionStats` first; an id accepted first gets a sink through `sinks.create`.

@@ -263,7 +263,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 	/** The distinct `publicAddress`es currently known by this client's open peer connections. */
 	/**
 	 * The sink this client's samples are written to: whatever is registered under its client id in
-	 * `call.sinks` (the one `createClientSink` returned, or a sink the application added), if any.
+	 * `call.sinks` (the one created through `saveClientSamples`, or a sink the application added), if any.
 	 */
 	public get sink(): Sink<ClientSample> | undefined {
 		return this.call.sinks.get<Sink<ClientSample>>(this.clientId);

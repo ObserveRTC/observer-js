@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { SinkRegistry } from './sinks/SinkRegistry';
 import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
 import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
-import type { Sink } from './sinks/Sink';
+import type { Sink, ClientSinkParams } from './sinks/Sink';
 import type { ClientSample } from './schema/ClientSample';
 import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
@@ -456,11 +456,18 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
 	}
 
-	/** Emit an Observer-bus event scoped to this call. */
 	private _createClientSink(clientId: string): Sink<ClientSample> | undefined {
-		const createClientSink = this.observer.config.createClientSink;
+		const config = this.observer.config.saveClientSamples as {
+			jsonlPath?: (params: ClientSinkParams<ObservedCall>) => string | undefined,
+			sink?: (params: ClientSinkParams<ObservedCall>) => Sink<ClientSample> | undefined,
+		} | undefined;
 
-		if (!createClientSink) return undefined;
+		if (!config || (!config.jsonlPath && !config.sink)) return undefined;
+		if (config.jsonlPath && config.sink) {
+			logger.warn('saveClientSamples: give either jsonlPath or sink, not both; no client samples are saved');
+
+			return undefined;
+		}
 
 		// Sink ids are unique per observer: checked before the factory runs, so a clash opens no file.
 		if (this.observer.sinks.get(clientId)) {
@@ -469,11 +476,20 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			return undefined;
 		}
 
-		const destination = createClientSink({ id: clientId, observedCall: this, clientId });
+		const params: ClientSinkParams<ObservedCall> = { id: clientId, observedCall: this, clientId };
 
-		return destination ? this.sinks.createFromDestination(clientId, destination) : undefined;
+		if (config.jsonlPath) {
+			const jsonlPath = config.jsonlPath(params);
+
+			return jsonlPath === undefined ? undefined : this.sinks.createFromDestination(clientId, { jsonlPath });
+		}
+
+		const sink = config.sink?.(params);
+
+		return sink ? this.sinks.createFromDestination(clientId, { sink }) : undefined;
 	}
 
+	/** Emit an Observer-bus event scoped to this call. */
 	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
 		this.observer.emit(type, ...args);
 	}

@@ -143,11 +143,11 @@ export class SinkRegistry {
 	/** End every sink of this registry and of its descendants. */
 	public clear(): void {
 		// Snapshot first: each `end()` removes its sink from the map.
-		for (const sink of [ ...this._sinks.values() ]) {
+		for (const [ id, sink ] of [ ...this._sinks.entries() ]) {
 			try {
 				sink.end();
 			} catch (err) {
-				logger.warn('Sink %s failed to end: %o', sink.id, err);
+				logger.warn('Sink %s failed to end: %o', id, err);
 			}
 		}
 	}
@@ -156,6 +156,7 @@ export class SinkRegistry {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	private _register(sink: Sink<any>, lineage: SinkRegistry[]): void {
 		const id = sink.id;
+
 		// An EventEmitter 'error' with no listener throws; a failing destination must not crash the process.
 		const onError = (err: Error) => logger.warn('Sink %s failed: %o', id, err);
 

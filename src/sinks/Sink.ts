@@ -68,3 +68,6 @@ export interface Sink<T = unknown> {
 export type SinkDestination<T = unknown> =
 	| { jsonlPath: string, sink?: never }
 	| { sink: Sink<T>, jsonlPath?: never };
+
+/** What the `saveClientSamples` callbacks receive: `id` is the client's sample sink id, the client id. */
+export type ClientSinkParams<Call = unknown> = { id: string, observedCall: Call, clientId: string };

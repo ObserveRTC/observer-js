@@ -5,7 +5,7 @@ import type { ClientSample } from '../schema/ClientSample';
 export type ClientSampleSinkEvents = SinkEvents;
 
 /**
- * A per-client destination for accepted samples. Return one from `ObserverConfig.createClientSink`
+ * A per-client destination for accepted samples. Return one from `ObserverConfig.saveClientSamples.sink`
  * (with the `id` it receives), or create one under the client id with
  * `observedCall.sinks.create(MySink, { id: clientId, ... })`.
  *

@@ -10,7 +10,7 @@ import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './Obse
 import { SinkRegistry } from './sinks/SinkRegistry';
 import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
 import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
-import type { Sink, SinkDestination } from './sinks/Sink';
+import type { Sink, ClientSinkParams } from './sinks/Sink';
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
@@ -60,6 +60,11 @@ export type CallAppDataFactory = (params: { callId: string, observer: Observer, 
 
 /** Produces the initial `appData` for a client created without an explicit `appData`. */
 export type ClientAppDataFactory = (params: { clientId: string, observedCall: ObservedCall, acceptCtx?: AcceptContext }) => Record<string, unknown>;
+
+/** `ObserverConfig.saveClientSamples`: exactly one of the two per-client callbacks. */
+export type SaveClientSamplesConfig =
+	| { jsonlPath: (params: ClientSinkParams<ObservedCall>) => string | undefined, sink?: never }
+	| { sink: (params: ClientSinkParams<ObservedCall>) => Sink<ClientSample> | undefined, jsonlPath?: never };
 
 export type ObserverConfig<AppData extends Record<string, unknown> = Record<string, unknown>> = {
 
@@ -231,18 +236,15 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	createClientAppData?: ClientAppDataFactory,
 
 	/**
-	 * The sink a newly-created client writes its samples to: `{ jsonlPath }` (a `JsonlFileSink` is
-	 * created at that path under the client id), `{ sink }` (a `Sink` whose `id` is `params.id`, the
-	 * client id), or `undefined` for none. The sink is added to `observedCall.sinks` and is ended
-	 * when the client closes; `client-sink-created` announces it.
+	 * Where each client's samples are saved: exactly one of `jsonlPath` (return the path of the
+	 * client's JSONL file) and `sink` (return a sink whose `id` is `params.id`), each called per
+	 * client; `undefined` gives that client no sink. See the README's *Sinks* section.
 	 *
-	 * ```ts
-	 * createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: `./stats/${observedCall.callId}__${clientId}.jsonl` }),
-	 * ```
-	 *
-	 * Called only when the client id is free as a sink id, so a clash opens no file.
+	 * A client's sample sink id is its client id (`params.id`). Sink ids are unique per observer, so
+	 * client ids must be unique across the observer's open calls; a client whose id is already a sink
+	 * id gets no sink, and a warning is logged.
 	 */
-	createClientSink?: (params: { id: string, observedCall: ObservedCall, clientId: string }) => SinkDestination<ClientSample> | undefined,
+	saveClientSamples?: SaveClientSamplesConfig,
 
 	/**
 	 * Optional factory invoked when a call is created, producing the call's `RemoteTrackResolver`

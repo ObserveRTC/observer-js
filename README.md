@@ -404,7 +404,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | Event | Extra | Fires when |
 |-------|-------|-----------|
 | `client-added` | — | a client is created |
-| `client-sink-created` | `{ sink: Sink<ClientSample> }` | the client's sample sink was created by `createClientSink`; fires right after `client-added` |
+| `client-sink-created` | `{ sink: Sink<ClientSample> }` | the client's sample sink was created through `saveClientSamples`; fires right after `client-added` |
 | `client-updated` | `{ sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext }` | the client processed a sample |
 | `client-closed` | — | the client closed |
 | `client-joined` | — | first `CLIENT_JOINED` event seen |
@@ -480,7 +480,10 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     createCallAppData?: (p: { callId: string; observer: Observer; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     createClientAppData?: (p: { clientId: string; observedCall: ObservedCall; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     // a JSONL file per client: return its path, or undefined for none (see Sinks).
-    createClientSink?: (p: { id: string; clientId: string; observedCall: ObservedCall }) => SinkDestination<ClientSample> | undefined;
+    // where each client's samples are saved: exactly one of jsonlPath / sink, each a per-client callback (see Sinks).
+    saveClientSamples?:
+      | { jsonlPath: (p: { id: string; clientId: string; observedCall: ObservedCall }) => string | undefined }
+      | { sink: (p: { id: string; clientId: string; observedCall: ObservedCall }) => Sink<ClientSample> | undefined };
     // remote-track-resolver factory — produces a call's RemoteTrackResolver (see Remote track resolution).
     createRemoteTrackResolver?: (observedCall: ObservedCall) => RemoteTrackResolver | undefined;
   };
@@ -1947,7 +1950,7 @@ and never crashes the process.
 import type { Sink, SinkSettings } from '@observertc/observer-js';
 
 interface Sink<T = unknown> {          // typically: class X extends EventEmitter implements Sink<T>
-  readonly id: string;
+  readonly id: string;                 // unique per observer
   write(record: T): boolean;           // `false` once ended (nothing written), or on backpressure
   end(): void;                         // idempotent; MUST emit `ended` synchronously, then flush and emit `close`
   on / once / off(event, listener);    // the events below
@@ -1977,18 +1980,20 @@ its id — refuse writes after it, and emit `close` / `error` for its destinatio
 ### Client samples
 
 A client writes every accepted sample to the sink registered under its **client id** in its call's
-registry (`observedClient.sink` returns it), and ends that sink when it closes. `createClientSink`
-decides it, per client, by returning a **`SinkDestination`** — exactly one of `jsonlPath` and `sink`:
+registry (`observedClient.sink` returns it), and ends that sink when it closes. The
+**`saveClientSamples`** config option decides it — exactly one of two per-client callbacks, the same
+`jsonlPath` / `sink` pair as `createExtensionStats` takes:
 
-| Returns | Sink |
-|---------|------|
-| `{ jsonlPath }` | a JSONL file at that path: a `JsonlFileSink` created by the library under the client id |
-| `{ sink }` | your `Sink<ClientSample>`; its `id` must be `params.id`, the client id |
-| `undefined` | none |
+| `saveClientSamples` | Called per client with `{ id, observedCall, clientId }`, returns | Sink |
+|---------------------|------------------------------------------------------------------|------|
+| `{ jsonlPath }` | the path of the client's file, or `undefined` | a `JsonlFileSink` at that path, created by the library under the client id |
+| `{ sink }` | your `Sink<ClientSample>`, or `undefined` | that sink; its `id` must be `id` |
 
 ```ts
 const observer = new Observer({
-  createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: `./stats/${observedCall.callId}__${clientId}.jsonl` }),
+  saveClientSamples: {
+    jsonlPath: ({ observedCall, clientId }) => `./stats/${observedCall.callId}__${clientId}.jsonl`,
+  },
 });
 
 observer.on('client-sink-created', ({ observedClient, sink }) => {
@@ -1996,10 +2001,15 @@ observer.on('client-sink-created', ({ observedClient, sink }) => {
 });
 ```
 
-`createClientSink` is called only when the client id is free as a sink id, so a clash opens no file.
-A returned sink with a different id is ended and not used. Giving both `jsonlPath` and `sink` is a
-compile error (and refused at runtime). For a JSONL file with a custom serializer, return
-`{ sink: new JsonlFileSink({ id, path, serializeSample }) }`.
+**A client's sample sink id is its client id.** The `id` the callbacks receive is that id, and
+with `jsonlPath` the library uses it for you. Sink ids are unique per observer, so **client ids
+must be unique across the observer's open calls** — client monitors generate uuids, so this
+normally holds. A client whose id is already a sink id gets no sink, and a warning is logged.
+
+The callback is called only when the id is free, so a clash opens no file; `undefined` gives that
+client no sink. A returned sink with a different id is ended and not used. Giving both `jsonlPath`
+and `sink` is a compile error (and refused at runtime). For a JSONL file with a custom serializer,
+use `sink: ({ id }) => new JsonlFileSink({ id, path, serializeSample })`.
 
 Any other destination works the same way — return your own implementation:
 
@@ -2031,7 +2041,9 @@ class HttpSink extends EventEmitter implements ClientSampleSink {
 }
 
 new Observer({
-  createClientSink: ({ id, clientId }) => ({ sink: new HttpSink({ id, url: `https://stats.example.com/${clientId}` }) }),
+  saveClientSamples: {
+    sink: ({ id, clientId }) => new HttpSink({ id, url: `https://stats.example.com/${clientId}` }),   // id: the client id
+  },
 });
 
 // Or later, on `client-added`, if the client has no sink yet:

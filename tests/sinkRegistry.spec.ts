@@ -127,6 +127,26 @@ describe('SinkRegistry', () => {
 	});
 });
 
+describe('SinkRegistry.add', () => {
+	it('registers a sink constructed elsewhere under its own id, and refuses a taken id', () => {
+		const root = new SinkRegistry();
+		const call = new SinkRegistry(root);
+		const first = new InMemorySink({ id: 'mine' });
+		const second = new InMemorySink({ id: 'mine' });
+
+		expect(call.add(first)).toBe(true);
+		expect(root.get('mine')).toBe(first);
+		expect(root.add(second)).toBe(false);
+		expect(second.ended).toBe(false);
+
+		first.end();
+		expect(call.get('mine')).toBeUndefined();
+		expect(root.add(second)).toBe(true);
+		root.clear();
+		expect(second.ended).toBe(true);
+	});
+});
+
 describe('sinks on the observed objects', () => {
 	let dir: string;
 

@@ -1,4 +1,4 @@
-export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory, AcceptMiddleware, AcceptMiddlewarePayload } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory, AcceptMiddleware, AcceptMiddlewarePayload, SaveClientSamplesConfig } from './Observer';
 export type {
 	ObserverEventBase,
 	ObservedCallScope,
@@ -310,6 +310,7 @@ export type {
 	SinkEvents,
 	SinkSettings,
 	SinkDestination,
+	ClientSinkParams,
 	SinkConstructor,
 	SinkCreateSettings,
 	CreateExtensionStatsSettings,
