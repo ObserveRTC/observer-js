@@ -33,31 +33,39 @@ observedRouter.sinks.write(transport.id, await transport.getStats());   // or si
 - A client writes its samples to the sink under its client id in `observedCall.sinks`
   (`observedClient.sink` is now a getter for it) and ends it when the client closes. Client ids
   are therefore sink ids and must be unique across the observer's open calls.
-- `createClientJsonlSink: ({ observedCall, clientId }) => string | undefined` (new `ObserverConfig`
-  option): return a path to write that client's samples to a `JsonlFileSink`. `client-sink-created`
-  announces the file (`sink: JsonlFileSink`).
+- `ObserverConfig.createClientSink: ({ id, observedCall, clientId }) => SinkDestination<ClientSample> | undefined`
+  decides the client's sample sink. A `SinkDestination` is exactly one of `{ jsonlPath }` — the
+  library creates a `JsonlFileSink` at that path under the client id — and `{ sink }` — your sink,
+  whose `id` must be `id` (the client id); `undefined` means none. Both is a compile error. It is called only when the id is free as a
+  sink id; a sink with a different id is ended and not used. `client-sink-created` announces it
+  (`sink: Sink<ClientSample>`).
+- `SinkRegistry.createFromDestination(id, destination)` registers what a `SinkDestination`
+  describes (`createClientSink` and `createExtensionStats` use it).
+- `SinkRegistry.add(sink)` registers a sink constructed elsewhere under its own id, and
+  `owns(id)` tells whether an id was added to that registry itself rather than to a descendant.
 - `JsonlFileSink<T = ClientSample>` and `createJsonlFileSink<T>` take any record type.
 
 **Breaking** (see *Migrating from 1.2* below):
 
-- `ObserverConfig.createClientSink` is removed. Use `createClientJsonlSink` for JSONL files, or
-  create your own sink under the client id on `client-added`.
+- `ObserverConfig.createClientSink` now returns a `SinkDestination` — `{ jsonlPath }` or
+  `{ sink }` with the `id` it receives — instead of a sink; sinks implement the `Sink` interface
+  (below).
 - `ClientSampleSink` is no longer a class to extend: implement `Sink<ClientSample>` (e.g.
   `extends EventEmitter implements ClientSampleSink`), take `SinkSettings` in the constructor, and
   emit `ended` from `end()`. `JsonlFileSink` and `InMemorySink` implement the interface instead of
   extending a base class. `JsonlFileSinkOptions` gained `id`; `new InMemorySink(samples)` is now
   `new InMemorySink({ id?, samples? })`.
 - `createJsonlFileSinkFactory`, `JsonlFileSinkFactoryOptions` and `ClientSampleSinkFactory` are
-  removed (`createClientJsonlSink` replaces the factory).
-- `client-sink-created` now carries a `JsonlFileSink` and fires only for `createClientJsonlSink`
-  files.
+  removed: return `{ jsonlPath }` from `createClientSink`.
+- `client-sink-created` carries a `Sink<ClientSample>`.
 - `ObservedClient.sink` is a getter (read-only, as before).
 
 #### Migrating from 1.2
 
-**JSONL files per client** — `createClientSink: createJsonlFileSinkFactory(...)` becomes
-`createClientJsonlSink`, which returns the path. The factory's default file name was
-`${callId}__${clientId}.jsonl`; a `getFileName` option becomes the body of the callback.
+**JSONL files per client** — `createClientSink: createJsonlFileSinkFactory(...)` becomes a
+`createClientSink` that returns `{ jsonlPath }`. The factory's default file name was
+`${callId}__${clientId}.jsonl`; a `getFileName` option becomes the body of the callback. For
+`serializeSample`, return `{ sink: new JsonlFileSink({ id, path, serializeSample }) }` instead.
 
 ```ts
 // 1.2
@@ -65,24 +73,18 @@ new Observer({ createClientSink: createJsonlFileSinkFactory({ directory: './stat
 
 // 1.3
 new Observer({
-  createClientJsonlSink: ({ observedCall, clientId }) => path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`),
+  createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`) }),
 });
 ```
 
-A `serializeSample` option has no equivalent in `createClientJsonlSink`; create the sink yourself
-as below, with `sinks.create(JsonlFileSink<ClientSample>, { id, path, serializeSample })`.
-
-**Any other client sink** — return it no longer from `createClientSink`; create it under the client
-id when the client is added. The client writes its samples to it and ends it on close, as before.
+**Any other client sink** — return it wrapped as `{ sink }`, and pass the `id` it receives to the sink.
 
 ```ts
 // 1.2
 new Observer({ createClientSink: ({ clientId, observedCall }) => new HttpSink(urlOf(observedCall.callId, clientId)) });
 
 // 1.3
-observer.on('client-added', ({ observedCall, observedClient }) => {
-  observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url: urlOf(observedCall.callId, observedClient.clientId) });
-});
+new Observer({ createClientSink: ({ id, clientId, observedCall }) => ({ sink: new HttpSink({ id, url: urlOf(observedCall.callId, clientId) }) }) });
 ```
 
 **Custom sink classes** — `class HttpSink extends ClientSampleSink` becomes an implementation of
@@ -121,9 +123,8 @@ class HttpSink extends EventEmitter implements ClientSampleSink {
 }
 ```
 
-**`client-sink-created`** — still fires right after `client-added`, but only for the
-`createClientJsonlSink` file, and its `sink` is a `JsonlFileSink` (no `instanceof` narrowing needed
-to read `sink.path`). For a sink you create yourself, you already hold it.
+**`client-sink-created`** — still fires right after `client-added` for the sink `createClientSink`
+returned, typed `Sink<ClientSample>`; narrow (`sink instanceof JsonlFileSink`) to read `sink.path`.
 
 **Unchanged:** `observedClient.sink` still returns the client's sink, and the client still ends it
 when it closes.
@@ -134,17 +135,21 @@ The last data per id, for stats the library does not collect itself, written to 
 with the same id when there is one. The same API on all three owners:
 
 ```ts
-call.createExtensionStats({ id: 'call-1:sfu', createSink: [ JsonlFileSink<SfuStats>, { path } ] });
+call.createExtensionStats({ id: 'call-1:sfu', jsonlPath: './stats/sfu.jsonl' });   // or sink: new MySink({ id: 'call-1:sfu' })
 call.acceptExtensionStats('call-1:sfu', await collectSfuStats());   // the application polls
 call.getExtensionStats<SfuStats>('call-1:sfu');                     // the last data
 call.extensionStats.values;                                         // Map<id, last data>
 ```
 
-- `createExtensionStats({ id, createSink? })` registers the id. `createSink` is what
-  `sinks.create` takes (`[SinkClass, settings]`); the sink is created under `id`, ending and
-  replacing a sink the owner already holds under it. Returns the sink, or `undefined` (no
-  `createSink`, a closed owner, an id already in `extensionStats.values` — created or accepted
-  before —, or the id held as a sink by another object of the observer).
+- `createExtensionStats({ id, jsonlPath? | sink? })` registers the id, optionally with a sink: at
+  most one of `jsonlPath` (a `JsonlFileSink` is created at that path under `id`) and `sink` (your
+  own `Sink`, whose `id` must be `id`); both is a compile error. Either ends and replaces a sink the
+  owner itself holds under `id` (never a descendant's). Returns the sink, or `undefined`: neither
+  given, a `sink` with another id, a closed owner, an id already in `extensionStats.values` (created
+  or accepted before), or the id held as a sink by another object of the observer. A refused `sink`
+  is ended.
+- `SinkDestination<T>` — `{ jsonlPath: string } | { sink: Sink<T> }`, exclusive — is exported; it
+  is what `createClientSink` returns and what `createExtensionStats` takes besides `id`.
 - `acceptExtensionStats(id, data)` keeps `data` in `extensionStats.values` and writes it
   to the sink with the same id, if any — also one created later with `sinks.create`. It does not
   require `createExtensionStats` first; an id accepted first gets a sink through `sinks.create`.
@@ -155,7 +160,7 @@ call.extensionStats.values;                                         // Map<id, l
   it closes: data accepted afterwards is dropped, `create` is refused, and the extension stats'
   sinks are ended (the owner's other sinks end with its `sinks.clear()`).
 - `ExtensionStatsRegistry`, `SinkConstructor`, `SinkCreateSettings<C>` and
-  `CreateExtensionStatsSettings<C>` are exported.
+  `CreateExtensionStatsSettings<T>` are exported.
 
 ### Other
 

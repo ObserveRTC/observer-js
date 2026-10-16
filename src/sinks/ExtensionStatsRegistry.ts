@@ -1,17 +1,18 @@
-import type { SinkConstructor, SinkCreateSettings, SinkRegistry } from './SinkRegistry';
+import type { SinkRegistry } from './SinkRegistry';
+import type { Sink, SinkDestination } from './Sink';
 import { createLogger } from '../common/logger';
 
 const logger = createLogger('ExtensionStats');
 
-/** The settings of `createExtensionStats` on an observer, a call or a mediasoup router. */
-export type CreateExtensionStatsSettings<C extends SinkConstructor> = {
+/**
+ * The settings of `createExtensionStats` on an observer, a call or a mediasoup router: the `id`,
+ * and at most one of `jsonlPath` and `sink` (a `SinkDestination`).
+ */
+export type CreateExtensionStatsSettings<T = unknown> = {
 
 	/** Unique per observer: it is also the id of the sink that receives the stats. */
 	id: string,
-
-	/** What `sinks.create` takes; the sink is created under `id` (an `id` in its settings is ignored). */
-	createSink?: [SinkClass: C, settings: Omit<SinkCreateSettings<C>, 'id'>],
-};
+} & (SinkDestination<T> | { jsonlPath?: never, sink?: never });
 
 /**
  * The extension stats of one object — `observer.extensionStats`, `observedCall.extensionStats`,
@@ -45,27 +46,29 @@ export class ExtensionStatsRegistry {
 		}
 	}
 
-	public create<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
-		if (this.closed) {
-			logger.warn('Attempted to create extension stats %s on closed %s', settings.id, this.id);
+	public create<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
+		const { id, jsonlPath, sink } = settings as { id: string, jsonlPath?: string, sink?: Sink<T> };
+		// A given sink is the owner's from here: refused, it is ended rather than left open.
+		const refuse = (reason: string) => {
+			logger.warn('Extension stats %s on %s: %s', id, this.id, reason);
+			sink?.end();
 
 			return undefined;
-		}
-		if (this.values.has(settings.id)) {
-			logger.warn('Extension stats with id %s already exists on %s', settings.id, this.id);
+		};
 
-			return undefined;
-		}
+		if (this.closed) return refuse('the owner is closed');
+		if (this.values.has(id)) return refuse('the id already exists');
+		if (jsonlPath !== undefined && sink) return refuse('give either jsonlPath or sink, not both');
+		if (sink && sink.id !== id) return refuse(`the sink id ${sink.id} differs from the extension stats id`);
 
-		this.values.set(settings.id, undefined);
+		this.values.set(id, undefined);
 
-		if (!settings.createSink) return undefined;
+		if (jsonlPath === undefined && !sink) return undefined;
 
-		const [ SinkClass, sinkSettings ] = settings.createSink;
+		// Replace a sink this owner holds under the id; never one of a descendant's.
+		if (this._sinks.owns(id)) this._sinks.get(id)?.end();
 
-		this._sinks.get(settings.id)?.end();
-
-		return this._sinks.create(SinkClass, { ...sinkSettings, id: settings.id } as SinkCreateSettings<C>);
+		return this._sinks.createFromDestination<T>(id, settings as SinkDestination<T>);
 	}
 
 	public accept(id: string, data: unknown): void {

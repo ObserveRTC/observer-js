@@ -404,7 +404,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | Event | Extra | Fires when |
 |-------|-------|-----------|
 | `client-added` | — | a client is created |
-| `client-sink-created` | `{ sink: JsonlFileSink }` | the client's JSONL sample file was created (only when `createClientJsonlSink` returns a path); fires right after `client-added` |
+| `client-sink-created` | `{ sink: Sink<ClientSample> }` | the client's sample sink was created by `createClientSink`; fires right after `client-added` |
 | `client-updated` | `{ sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext }` | the client processed a sample |
 | `client-closed` | — | the client closed |
 | `client-joined` | — | first `CLIENT_JOINED` event seen |
@@ -480,7 +480,7 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     createCallAppData?: (p: { callId: string; observer: Observer; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     createClientAppData?: (p: { clientId: string; observedCall: ObservedCall; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     // a JSONL file per client: return its path, or undefined for none (see Sinks).
-    createClientJsonlSink?: (p: { clientId: string; observedCall: ObservedCall }) => string | undefined;
+    createClientSink?: (p: { id: string; clientId: string; observedCall: ObservedCall }) => SinkDestination<ClientSample> | undefined;
     // remote-track-resolver factory — produces a call's RemoteTrackResolver (see Remote track resolution).
     createRemoteTrackResolver?: (observedCall: ObservedCall) => RemoteTrackResolver | undefined;
   };
@@ -1929,6 +1929,9 @@ that are still open, since the observer does not close mediasoup routers.
 | Method | Does |
 |--------|------|
 | `create(SinkClass, settings)` | constructs `new SinkClass(settings)` and registers it under `settings.id` (generated when omitted); `undefined` if the id is taken |
+| `add(sink): boolean` | registers a sink constructed elsewhere under its own `id`; `false` if the id is taken (the sink stays yours to end). Prefer `create` for sinks that open a resource on construction: it checks the id first |
+| `createFromDestination(id, destination)` | registers the sink a `SinkDestination` describes under `id`: `{ jsonlPath }` creates a `JsonlFileSink` (the id is checked first), `{ sink }` adds your sink (its `id` must be `id`). `undefined` if refused; a refused `sink` is ended |
+| `owns(id): boolean` | whether `id` was added to this registry itself, not to a descendant |
 | `get<T>(id)` | the sink, if any (own or a descendant's) |
 | `write(id, record): boolean` | writes to the sink; `false` if there is none, or on backpressure |
 | `clear()` | ends every sink of the registry and its descendants |
@@ -1974,21 +1977,31 @@ its id — refuse writes after it, and emit `close` / `error` for its destinatio
 ### Client samples
 
 A client writes every accepted sample to the sink registered under its **client id** in its call's
-registry (`observedClient.sink` returns it), and removes — ends — that sink when it closes. For the
-common case, a JSONL file per client, return a path from `createClientJsonlSink`:
+registry (`observedClient.sink` returns it), and ends that sink when it closes. `createClientSink`
+decides it, per client, by returning a **`SinkDestination`** — exactly one of `jsonlPath` and `sink`:
+
+| Returns | Sink |
+|---------|------|
+| `{ jsonlPath }` | a JSONL file at that path: a `JsonlFileSink` created by the library under the client id |
+| `{ sink }` | your `Sink<ClientSample>`; its `id` must be `params.id`, the client id |
+| `undefined` | none |
 
 ```ts
 const observer = new Observer({
-  // return undefined for no file
-  createClientJsonlSink: ({ observedCall, clientId }) => `./stats/${observedCall.callId}__${clientId}.jsonl`,
+  createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: `./stats/${observedCall.callId}__${clientId}.jsonl` }),
 });
 
 observer.on('client-sink-created', ({ observedClient, sink }) => {
-  sink.once('close', () => uploadFile(sink.path));   // flushed & fd closed → ready
+  if (sink instanceof JsonlFileSink) sink.once('close', () => uploadFile(sink.path));   // flushed & fd closed → ready
 });
 ```
 
-For any other destination, create your own sink under the client id when the client is created:
+`createClientSink` is called only when the client id is free as a sink id, so a clash opens no file.
+A returned sink with a different id is ended and not used. Giving both `jsonlPath` and `sink` is a
+compile error (and refused at runtime). For a JSONL file with a custom serializer, return
+`{ sink: new JsonlFileSink({ id, path, serializeSample }) }`.
+
+Any other destination works the same way — return your own implementation:
 
 ```ts
 class HttpSink extends EventEmitter implements ClientSampleSink {
@@ -2017,9 +2030,12 @@ class HttpSink extends EventEmitter implements ClientSampleSink {
   }
 }
 
-observer.on('client-added', ({ observedCall, observedClient }) => {
-  observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url: `https://stats.example.com/${observedClient.clientId}` });
+new Observer({
+  createClientSink: ({ id, clientId }) => ({ sink: new HttpSink({ id, url: `https://stats.example.com/${clientId}` }) }),
 });
+
+// Or later, on `client-added`, if the client has no sink yet:
+// observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url })
 ```
 
 Client ids double as sink ids, so they must be unique across the observer's open calls (client
@@ -2037,8 +2053,11 @@ the call) or `observedMediasoupRouter` (a pipe transport's `getStats()`): the la
 optionally a sink that receives every data. The API is the same on all three; a call is shown.
 
 ```ts
-// Register the id; with `createSink` (what `sinks.create` takes), a sink is created under the same id.
-call.createExtensionStats({ id: `${call.callId}:sfu`, createSink: [ JsonlFileSink<SfuStats>, { path: './stats/sfu.jsonl' } ] });
+// Register the id, with a JSONL file that receives every data accepted for it.
+call.createExtensionStats({ id: `${call.callId}:sfu`, jsonlPath: './stats/sfu.jsonl' });
+
+// Or with a sink of your own; its id must be the extension stats id.
+call.createExtensionStats({ id: `${call.callId}:metrics`, sink: new HttpSink({ id: `${call.callId}:metrics`, url }) });
 
 // Your own polling: keep the last data, and write it to the sink with the same id, if any.
 call.acceptExtensionStats(`${call.callId}:sfu`, await collectSfuStats(call.callId));
@@ -2049,7 +2068,7 @@ call.extensionStats.values;                               // Map<id, last data>
 
 | Method | Behaviour |
 |--------|-----------|
-| `createExtensionStats({ id, createSink? })` | Registers `id`. With `createSink` — what `sinks.create` takes, `[SinkClass, settings]` — it also creates a sink under `id` (an `id` in the sink settings is ignored), ending and replacing a sink the owner already holds under `id`. Returns the created sink, or `undefined`: without `createSink`, on a closed owner, when `id` is already in `extensionStats.values` (created or accepted before), or when another object of the observer holds a sink with this id |
+| `createExtensionStats({ id, jsonlPath? \| sink? })` | Registers `id`, optionally with a sink — at most one of: `jsonlPath`, the path of a JSONL file, for which a `JsonlFileSink` is created under `id`; or `sink`, a `Sink` of your own, whose `id` must be `id`. Either ends and replaces a sink the owner itself already holds under `id`. Returns the sink, or `undefined`: with neither, on a closed owner, when `id` is already in `extensionStats.values` (created or accepted before), with a `sink` whose id differs, or when another object of the observer holds a sink with this id. Giving both is a compile error (refused at runtime). A refused `sink` is ended; for `jsonlPath`, the id is checked before the file is opened |
 | `acceptExtensionStats(id, data)` | Keeps `data` as the last data of `id` and writes it to the owner's sink with the same id, if there is one (a sink that throws is logged). `id` does not have to be created first. Dropped once the owner is closed |
 | `getExtensionStats<T>(id)` | The last data accepted for `id`, or `undefined` |
 | `extensionStats` | The owner's `ExtensionStatsRegistry`: `values` (`Map<id, last data>`), `closed`, `close()`, and `create` / `accept` / `get`, which the three methods above delegate to |
@@ -2057,12 +2076,12 @@ call.extensionStats.values;                               // Map<id, last data>
 **Extension stats ids share the sink id namespace, so they must be unique per observer**: the sink
 of extension stats `x` is the sink with id `x`. Consequently:
 
-- With `createSink`, a sink the owner already holds under the id is ended and replaced. If another
-  object of the observer holds it, no sink is created and the data is only kept.
-- Without `createSink`, a sink you create later under the id (`sinks.create(SinkClass, { id, ... })`)
-  receives the data accepted from then on.
-- An id accepted before it was created can no longer be created with `createSink`; give it a sink
-  with `sinks.create` instead.
+- With `jsonlPath` or `sink`, a sink the owner itself already holds under the id is ended and replaced. A sink another object holds under it is never touched: no sink is created and the data
+  is only kept.
+- With neither, a sink you add later under the id (`sinks.create(SinkClass, { id, ... })` or
+  `sinks.add(sink)`) receives the data accepted from then on.
+- An id accepted before it was created can no longer be created with a sink; give it one with
+  `sinks.create` / `sinks.add` instead.
 
 **Lifecycle.** When the owner (the call, the router or the observer) closes, it closes its
 `extensionStats`: data accepted afterwards is dropped, `createExtensionStats` returns `undefined`,

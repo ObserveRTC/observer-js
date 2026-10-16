@@ -309,6 +309,7 @@ export type {
 	Sink,
 	SinkEvents,
 	SinkSettings,
+	SinkDestination,
 	SinkConstructor,
 	SinkCreateSettings,
 	CreateExtensionStatsSettings,

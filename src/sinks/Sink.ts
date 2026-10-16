@@ -60,3 +60,11 @@ export interface Sink<T = unknown> {
 	off(event: keyof SinkEvents, listener: (...args: any[]) => void): this;
 	/* eslint-enable @typescript-eslint/no-explicit-any */
 }
+
+/**
+ * Where records go, exactly one of: `jsonlPath`, the path of a JSONL file (a `JsonlFileSink` is
+ * created there), or `sink`, a sink of your own. Giving both is a compile error.
+ */
+export type SinkDestination<T = unknown> =
+	| { jsonlPath: string, sink?: never }
+	| { sink: Sink<T>, jsonlPath?: never };

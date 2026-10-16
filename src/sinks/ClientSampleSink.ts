@@ -5,9 +5,9 @@ import type { ClientSample } from '../schema/ClientSample';
 export type ClientSampleSinkEvents = SinkEvents;
 
 /**
- * A per-client destination for accepted samples. Create one under the client id with
- * `observedCall.sinks.create(MySink, { id: clientId, ... })`, or let
- * `ObserverConfig.createClientJsonlSink` create a `JsonlFileSink` there.
+ * A per-client destination for accepted samples. Return one from `ObserverConfig.createClientSink`
+ * (with the `id` it receives), or create one under the client id with
+ * `observedCall.sinks.create(MySink, { id: clientId, ... })`.
  *
  * The library calls `write(sample)` synchronously per accepted sample (not awaited) and `end()`s
  * the sink when the client closes; the registry attaches an `error` listener so a failing sink

@@ -15,7 +15,7 @@ import { createLogger } from './common/logger';
 import { SinkRegistry } from './sinks/SinkRegistry';
 import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
 import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
-import type { SinkConstructor } from './sinks/SinkRegistry';
+import type { Sink } from './sinks/Sink';
 
 const logger = createLogger('ObservedMediasoupRouter');
 
@@ -223,7 +223,7 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		this.emit('close');
 	}
 
-	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
 		return this.extensionStats.create(settings);
 	}
 

@@ -72,13 +72,13 @@ describe('JsonlFileSink', () => {
 		expect(fs.readFileSync(filePath, 'utf8').trim()).toBe('id=zed');
 	});
 
-	it('createClientJsonlSink writes each client\'s samples to the path it returns, announced by client-sink-created', async () => {
+	it('createClientSink returning { jsonlPath }: each client writes its samples to that JSONL file, announced by client-sink-created', async () => {
 		const observer = new Observer({
-			createClientJsonlSink: ({ observedCall, clientId }) => (clientId === 'skip' ? undefined : path.join(dir, `${observedCall.callId}__${clientId}.jsonl`)),
+			createClientSink: ({ observedCall, clientId }) => (clientId === 'skip' ? undefined : { jsonlPath: path.join(dir, `${observedCall.callId}__${clientId}.jsonl`) }),
 		});
 		const created: JsonlFileSink[] = [];
 
-		observer.on('client-sink-created', ({ sink }) => created.push(sink));
+		observer.on('client-sink-created', ({ sink }) => created.push(sink as JsonlFileSink));
 		observer.accept(makeSample({ callId: 'cid', clientId: 'cl' }));
 		observer.accept(makeSample({ callId: 'cid', clientId: 'skip' }));
 
@@ -99,9 +99,33 @@ describe('JsonlFileSink', () => {
 		expect(JSON.parse(lines[0]).clientId).toBe('cl');
 	});
 
-	it('createClientJsonlSink opens no file for a client whose id is already a sink id in another call', () => {
+	it('createClientSink returning { sink }: uses it when its id is the client id, ends it otherwise', () => {
+		const sinks: InMemorySink[] = [];
 		const observer = new Observer({
-			createClientJsonlSink: ({ observedCall, clientId }) => path.join(dir, `${observedCall.callId}__${clientId}.jsonl`),
+			createClientSink: ({ id, clientId }) => {
+				const sink = new InMemorySink({ id: clientId === 'wrong' ? 'not-the-client-id' : id });
+
+				sinks.push(sink);
+
+				return { sink };
+			},
+		});
+
+		observer.accept(makeSample({ callId: 'c', clientId: 'ok' }));
+		observer.accept(makeSample({ callId: 'c', clientId: 'wrong' }));
+
+		const call = observer.getObservedCall('c')!;
+
+		expect(call.getObservedClient('ok')?.sink).toBe(sinks[0]);
+		expect(sinks[0].samples).toHaveLength(1);
+		expect(call.getObservedClient('wrong')?.sink).toBeUndefined();
+		expect(sinks[1].ended).toBe(true);
+		observer.close();
+	});
+
+	it('createClientSink is not called for a client whose id is already a sink id in another call', () => {
+		const observer = new Observer({
+			createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: path.join(dir, `${observedCall.callId}__${clientId}.jsonl`) }),
 		});
 
 		observer.accept(makeSample({ callId: 'c1', clientId: 'dup' }));

@@ -2,8 +2,7 @@ import { EventEmitter } from 'node:events';
 import { SinkRegistry } from './sinks/SinkRegistry';
 import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
 import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
-import type { SinkConstructor } from './sinks/SinkRegistry';
-import { JsonlFileSink } from './sinks/JsonlFileSink';
+import type { Sink } from './sinks/Sink';
 import type { ClientSample } from './schema/ClientSample';
 import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
@@ -294,7 +293,7 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this._notify('call-closed', { ...this.eventScope });
 	}
 
-	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
 		return this.extensionStats.create(settings);
 	}
 
@@ -386,21 +385,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.closeTimer = undefined;
 		}
 
-		const jsonlPath = this.observer.config.createClientJsonlSink?.({ observedCall: this, clientId: settings.clientId });
-		let jsonlSink: JsonlFileSink | undefined;
-
-		// Sink ids are unique per observer: checked before the file is opened, so a clash leaves no empty file.
-		if (jsonlPath !== undefined && this.observer.sinks.get(settings.clientId)) {
-			logger.warn('No sample file for client %s in call %s: sink id %s is already in use', settings.clientId, this.callId, settings.clientId);
-		} else if (jsonlPath !== undefined) {
-			jsonlSink = this.sinks.create(JsonlFileSink<ClientSample>, { id: settings.clientId, path: jsonlPath });
-		}
+		const clientSink = this._createClientSink(settings.clientId);
 
 		this.emit('newclient', result);
 		this._notify('client-added', { ...this.eventScope, observedClient: result });
 
-		if (jsonlSink) {
-			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: jsonlSink });
+		if (clientSink) {
+			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: clientSink });
 		}
 
 		if (wasEmpty) {
@@ -466,6 +457,23 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 	}
 
 	/** Emit an Observer-bus event scoped to this call. */
+	private _createClientSink(clientId: string): Sink<ClientSample> | undefined {
+		const createClientSink = this.observer.config.createClientSink;
+
+		if (!createClientSink) return undefined;
+
+		// Sink ids are unique per observer: checked before the factory runs, so a clash opens no file.
+		if (this.observer.sinks.get(clientId)) {
+			logger.warn('No sample sink for client %s in call %s: sink id %s is already in use', clientId, this.callId, clientId);
+
+			return undefined;
+		}
+
+		const destination = createClientSink({ id: clientId, observedCall: this, clientId });
+
+		return destination ? this.sinks.createFromDestination(clientId, destination) : undefined;
+	}
+
 	private _notify<K extends keyof ObserverEvents>(type: K, ...args: ObserverEvents[K]): void {
 		this.observer.emit(type, ...args);
 	}

@@ -49,7 +49,7 @@ describe('ObservedCall extension stats', () => {
 	it('writes every accepted data to the sink created with it, which ends with the call', async () => {
 		const { observer, call } = setup();
 		const file = path.join(dir, 'sfu.jsonl');
-		const sink = call.createExtensionStats({ id: 'sfu', createSink: [ JsonlFileSink<SfuStats>, { path: file } ] })!;
+		const sink = call.createExtensionStats<SfuStats>({ id: 'sfu', jsonlPath: file })! as JsonlFileSink<SfuStats>;
 
 		expect(sink).toBeInstanceOf(JsonlFileSink);
 		expect(sink.id).toBe('sfu');
@@ -71,7 +71,7 @@ describe('ObservedCall extension stats', () => {
 	it('replaces a sink the call already holds under the id when created with createSink', () => {
 		const { observer, call } = setup();
 		const existing = call.sinks.create(InMemorySink, { id: 'sfu' })!;
-		const created = call.createExtensionStats({ id: 'sfu', createSink: [ InMemorySink, {} ] })!;
+		const created = call.createExtensionStats({ id: 'sfu', sink: new InMemorySink({ id: 'sfu' }) })! as InMemorySink;
 
 		expect(existing.ended).toBe(true);
 		expect(call.sinks.get('sfu')).toBe(created);
@@ -100,7 +100,7 @@ describe('ObservedCall extension stats', () => {
 		const other = observer.createObservedCall({ callId: 'call-2' })!;
 		const held = other.sinks.create(InMemorySink, { id: 'sfu' })!;
 
-		expect(call.createExtensionStats({ id: 'sfu', createSink: [ InMemorySink, {} ] })).toBeUndefined();
+		expect(call.createExtensionStats({ id: 'sfu', sink: new InMemorySink({ id: 'sfu' }) })).toBeUndefined();
 		expect(held.ended).toBe(false);
 
 		// The data is still kept on the call; it just has no sink here.
@@ -109,7 +109,7 @@ describe('ObservedCall extension stats', () => {
 		expect(records(held)).toEqual([]);
 
 		call.close();
-		expect(call.createExtensionStats({ id: 'late', createSink: [ InMemorySink, {} ] })).toBeUndefined();
+		expect(call.createExtensionStats({ id: 'late', sink: new InMemorySink({ id: 'late' }) })).toBeUndefined();
 		call.acceptExtensionStats('sfu', { bitrate: 2 });
 		expect(call.getExtensionStats<SfuStats>('sfu')).toEqual({ bitrate: 1 });
 		observer.close();
@@ -118,7 +118,7 @@ describe('ObservedCall extension stats', () => {
 	it('keeps a client sample sink apart from extension stats with a different id', () => {
 		const { observer, call } = setup();
 
-		call.createExtensionStats({ id: 'sfu', createSink: [ InMemorySink, {} ] });
+		call.createExtensionStats({ id: 'sfu', sink: new InMemorySink({ id: 'sfu' }) });
 		observer.on('client-added', ({ observedCall, observedClient }) => {
 			observedCall.sinks.create(InMemorySink, { id: observedClient.clientId });
 		});
@@ -136,11 +136,11 @@ describe('extension stats ids', () => {
 		const { observer, call } = setup();
 
 		call.createExtensionStats({ id: 'sfu' });
-		expect(call.createExtensionStats({ id: 'sfu', createSink: [ InMemorySink, {} ] })).toBeUndefined();
+		expect(call.createExtensionStats({ id: 'sfu', sink: new InMemorySink({ id: 'sfu' }) })).toBeUndefined();
 		expect(call.sinks.get('sfu')).toBeUndefined();
 
 		call.acceptExtensionStats('accepted-first', { bitrate: 1 });
-		expect(call.createExtensionStats({ id: 'accepted-first', createSink: [ InMemorySink, {} ] })).toBeUndefined();
+		expect(call.createExtensionStats({ id: 'accepted-first', sink: new InMemorySink({ id: 'accepted-first' }) })).toBeUndefined();
 
 		// The way to give it a sink afterwards.
 		const sink = call.sinks.create(InMemorySink, { id: 'accepted-first' })!;
@@ -158,7 +158,7 @@ describe('ObservedMediasoupRouter extension stats', () => {
 		const observer = new Observer();
 		const router = fakeRouter();
 		const observedRouter = observer.createObservedMediasoupRouter({ router })!;
-		const sink = observedRouter.createExtensionStats({ id: 'pipe-1', createSink: [ InMemorySink, {} ] })!;
+		const sink = observedRouter.createExtensionStats({ id: 'pipe-1', sink: new InMemorySink({ id: 'pipe-1' }) })! as InMemorySink;
 
 		observedRouter.acceptExtensionStats('pipe-1', [ { bytesSent: 1 } ]);
 		observedRouter.acceptExtensionStats('pipe-1', [ { bytesSent: 2 } ]);
@@ -170,7 +170,7 @@ describe('ObservedMediasoupRouter extension stats', () => {
 		// Unique per observer: the call cannot take the router's id.
 		const call = observer.createObservedCall({ callId: 'call-1' })!;
 
-		expect(call.createExtensionStats({ id: 'pipe-1', createSink: [ InMemorySink, {} ] })).toBeUndefined();
+		expect(call.createExtensionStats({ id: 'pipe-1', sink: new InMemorySink({ id: 'pipe-1' }) })).toBeUndefined();
 		expect(sink.ended).toBe(false);
 
 		router.observer.emit('close');
@@ -185,7 +185,7 @@ describe('ObservedMediasoupRouter extension stats', () => {
 describe('Observer extension stats', () => {
 	it('keeps the last data, writes it to its sink, and ends the sink when the observer closes', () => {
 		const observer = new Observer();
-		const sink = observer.createExtensionStats({ id: 'worker-1', createSink: [ InMemorySink, {} ] })!;
+		const sink = observer.createExtensionStats({ id: 'worker-1', sink: new InMemorySink({ id: 'worker-1' }) })! as InMemorySink;
 
 		observer.acceptExtensionStats('worker-1', { cpu: 12 });
 
@@ -204,9 +204,9 @@ describe('ExtensionStatsRegistry.close', () => {
 	it('ends only the extension stats sinks of its owner', () => {
 		const observer = new Observer({ closeCallIfEmptyForMs: undefined });
 		const call = observer.createObservedCall({ callId: 'call-1' })!;
-		const statsSink = observer.createExtensionStats({ id: 'worker-1', createSink: [ InMemorySink, {} ] })!;
+		const statsSink = observer.createExtensionStats({ id: 'worker-1', sink: new InMemorySink({ id: 'worker-1' }) })! as InMemorySink;
 		const otherSink = observer.sinks.create(InMemorySink, { id: 'other' })!;
-		const callSink = call.createExtensionStats({ id: 'sfu', createSink: [ InMemorySink, {} ] })!;
+		const callSink = call.createExtensionStats({ id: 'sfu', sink: new InMemorySink({ id: 'sfu' }) })! as InMemorySink;
 
 		observer.extensionStats.close();
 
@@ -215,5 +215,51 @@ describe('ExtensionStatsRegistry.close', () => {
 		expect(observer.createExtensionStats({ id: 'late' })).toBeUndefined();
 		observer.close();
 		expect([ otherSink.ended, callSink.ended ]).toEqual([ true, true ]);
+	});
+});
+
+describe('createExtensionStats settings', () => {
+	it('refuses a sink whose id differs, ending it, and opens no file for a path whose id is taken', () => {
+		const { observer, call } = setup();
+		const mismatched = new InMemorySink({ id: 'not-b' });
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extension-stats-'));
+		const other = observer.createObservedCall({ callId: 'call-2' })!;
+
+		other.sinks.create(InMemorySink, { id: 'taken' });
+		expect(call.createExtensionStats({ id: 'taken', jsonlPath: path.join(dir, 'taken.jsonl') })).toBeUndefined();
+		expect(fs.existsSync(path.join(dir, 'taken.jsonl'))).toBe(false);
+		fs.rmSync(dir, { recursive: true, force: true });
+
+		expect(call.createExtensionStats({ id: 'b', sink: mismatched })).toBeUndefined();
+		expect(mismatched.ended).toBe(true);
+		expect(call.sinks.get('not-b')).toBeUndefined();
+		observer.close();
+	});
+
+	it('refuses jsonlPath and sink together (from JavaScript), ending the given sink and opening no file', () => {
+		const { observer, call } = setup();
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extension-stats-'));
+		const given = new InMemorySink({ id: 'both' });
+		// Only reachable without the type check: the settings type makes both a compile error.
+		const settings = { id: 'both', jsonlPath: path.join(dir, 'both.jsonl'), sink: given } as unknown as { id: string, sink: InMemorySink };
+
+		expect(call.createExtensionStats(settings)).toBeUndefined();
+		expect(given.ended).toBe(true);
+		expect(fs.existsSync(path.join(dir, 'both.jsonl'))).toBe(false);
+		expect(call.extensionStats.values.has('both')).toBe(false);
+		fs.rmSync(dir, { recursive: true, force: true });
+		observer.close();
+	});
+
+	it('never ends a descendant\'s sink: the observer cannot replace a call\'s sink under the same id', () => {
+		const { observer, call } = setup();
+		const callSink = call.sinks.create(InMemorySink, { id: 'shared' })!;
+		const given = new InMemorySink({ id: 'shared' });
+
+		expect(observer.createExtensionStats({ id: 'shared', sink: given })).toBeUndefined();
+		expect(callSink.ended).toBe(false);
+		expect(given.ended).toBe(true);
+		expect(call.sinks.get('shared')).toBe(callSink);
+		observer.close();
 	});
 });

@@ -10,7 +10,7 @@ import { ObservedMediasoupRouter, ObservedMediasoupRouterSettings } from './Obse
 import { SinkRegistry } from './sinks/SinkRegistry';
 import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
 import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
-import type { SinkConstructor } from './sinks/SinkRegistry';
+import type { Sink, SinkDestination } from './sinks/Sink';
 import { AvailableCallScopeDetectorsConfigs, AvailableObserverScopeDetectorsConfigs, Detectors } from './detectors/Detectors';
 import type { AvailableValidatorConfigs } from './validators/Validators';
 import type { ValidationReport, RunningValidator } from './validators/Validator';
@@ -231,35 +231,18 @@ export type ObserverConfig<AppData extends Record<string, unknown> = Record<stri
 	createClientAppData?: ClientAppDataFactory,
 
 	/**
-	 * Write every sample a client accepts to a JSONL file: return the file path for a newly-created
-	 * client, or `undefined` for no file. The directory must exist. The `JsonlFileSink` is added to
-	 * `observedCall.sinks` under the client id and is ended when the client closes; `client-sink-created`
-	 * announces it, so a `close` handler can upload or move the file once it is flushed.
-	 *
-	 * For any other destination, add your own sink under the client id instead, e.g. on
-	 * `client-added`: `observedCall.sinks.create(MySink, { id: observedClient.clientId, ... })`.
-	 *
-	 * Replaces `createClientSink` (removed in 1.3.0), and with it `createJsonlFileSinkFactory`.
-	 * To migrate:
+	 * The sink a newly-created client writes its samples to: `{ jsonlPath }` (a `JsonlFileSink` is
+	 * created at that path under the client id), `{ sink }` (a `Sink` whose `id` is `params.id`, the
+	 * client id), or `undefined` for none. The sink is added to `observedCall.sinks` and is ended
+	 * when the client closes; `client-sink-created` announces it.
 	 *
 	 * ```ts
-	 * // before (1.2): JSONL files
-	 * new Observer({ createClientSink: createJsonlFileSinkFactory({ directory: './stats' }) });
-	 * // after: return the path; `${callId}__${clientId}.jsonl` was the factory's default file name
-	 * new Observer({
-	 *   createClientJsonlSink: ({ observedCall, clientId }) => path.join('./stats', `${observedCall.callId}__${clientId}.jsonl`),
-	 * });
-	 *
-	 * // before (1.2): any other sink
-	 * new Observer({ createClientSink: ({ clientId, observedCall }) => new HttpSink(url(observedCall, clientId)) });
-	 * // after: create it under the client id when the client is added (HttpSink implements
-	 * // `ClientSampleSink`, takes `SinkSettings & { ... }` and emits `ended` from `end()`)
-	 * observer.on('client-added', ({ observedCall, observedClient }) => {
-	 *   observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url: url(observedCall, observedClient.clientId) });
-	 * });
+	 * createClientSink: ({ observedCall, clientId }) => ({ jsonlPath: `./stats/${observedCall.callId}__${clientId}.jsonl` }),
 	 * ```
+	 *
+	 * Called only when the client id is free as a sink id, so a clash opens no file.
 	 */
-	createClientJsonlSink?: (params: { observedCall: ObservedCall, clientId: string }) => string | undefined,
+	createClientSink?: (params: { id: string, observedCall: ObservedCall, clientId: string }) => SinkDestination<ClientSample> | undefined,
 
 	/**
 	 * Optional factory invoked when a call is created, producing the call's `RemoteTrackResolver`
@@ -741,7 +724,7 @@ export class Observer<AppData extends Record<string, unknown> = Record<string, u
 		this._notify('observer-closed', { ...this.eventScope });
 	}
 
-	public createExtensionStats<C extends SinkConstructor>(settings: CreateExtensionStatsSettings<C>): InstanceType<C> | undefined {
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
 		return this.extensionStats.create(settings);
 	}
 

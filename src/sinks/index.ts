@@ -1,5 +1,5 @@
 // Internal barrel for the sinks, re-exported from the package root.
-export type { Sink, SinkEvents, SinkSettings } from './Sink';
+export type { Sink, SinkEvents, SinkSettings, SinkDestination } from './Sink';
 export { SinkRegistry } from './SinkRegistry';
 export type { SinkConstructor, SinkCreateSettings } from './SinkRegistry';
 export type { ClientSampleSink, ClientSampleSinkEvents } from './ClientSampleSink';
