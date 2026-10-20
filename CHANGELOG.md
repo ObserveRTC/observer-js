@@ -173,6 +173,16 @@ call.extensionStats.values;                                         // Map<id, l
 - `ExtensionStatsRegistry`, `SinkConstructor`, `SinkCreateSettings<C>` and
   `CreateExtensionStatsSettings<T>` are exported.
 
+### `RollingJsonlFileSink` (new)
+
+A JSONL sink for long-lived owners, such as an observer's extension stats over days: it writes to a
+sequence of files and rolls to the next before a write that would exceed `maxBytes`, once the
+current file has been open for `maxAgeMs`, or on `roll()`. `path({ index, openedAt })` names each
+file, and `file-closed` (`path`, `index`) announces each finished one in order; `close` fires after
+the last. Limits are checked on write, so no timers run and an empty file is never rolled.
+`JsonlFileSink` is unchanged. Exported with `RollingJsonlFileSinkOptions`,
+`RollingJsonlFileSinkEvents` and `RollingJsonlFileInfo`.
+
 ### Fixed: outbound track republished on the same `MediaStreamTrack`
 
 A producer recreated on the same track (reconnection, toggling audio processing) left the

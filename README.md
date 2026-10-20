@@ -1975,6 +1975,7 @@ its id — refuse writes after it, and emit `close` / `error` for its destinatio
 | Export | Notes |
 |--------|-------|
 | `JsonlFileSink<T = ClientSample>` / `createJsonlFileSink<T>({ path, serializeSample? })` | appends one JSON line per record; wraps `fs.WriteStream` and re-emits its events; exposes `readonly path`. The directory **must exist** |
+| `RollingJsonlFileSink<T>` | JSONL over a sequence of files for long-lived owners: rolls on `maxBytes`, `maxAgeMs` or `roll()`; `file-closed` per finished file. See [Rolling files](#rolling-files) |
 | `InMemorySink` / `createInMemorySink(samples?)` | collects client samples into `.samples`; emits `close` on `end()` |
 
 ### Client samples
@@ -2100,6 +2101,43 @@ of extension stats `x` is the sink with id `x`. Consequently:
 and the extension stats' sinks are ended. The owner's other sinks end with its `sinks.clear()` as
 usual. `extensionStats.close()` can also be called directly; it ends only the extension stats'
 sinks.
+
+### Rolling files
+
+`JsonlFileSink` writes one file for the sink's whole life — right for calls and clients, which come
+and go. An owner that lives for days or months, such as the observer itself, needs its records cut
+into several files. `RollingJsonlFileSink` does that: it writes JSONL to a sequence of files, closing
+the current one and opening the next (*rolling*) before a write that would exceed `maxBytes`, once
+the current file has been open for `maxAgeMs`, or when `roll()` is called.
+
+```ts
+const sink = new RollingJsonlFileSink({
+  id: 'sfu-cpu',
+  path: ({ index, openedAt }) => `./stats/sfu-cpu-${openedAt}-${index}.jsonl`,
+  maxBytes: 100 * 1024 * 1024,
+  maxAgeMs: 60 * 60 * 1000,
+});
+
+sink.on('file-closed', (path, index) => uploadFile(path));   // flushed & fd closed → ready
+
+observer.createExtensionStats({ id: 'sfu-cpu', sink });
+setInterval(async () => observer.acceptExtensionStats('sfu-cpu', await readCpu()), 5_000).unref();
+```
+
+| Option / member | Meaning |
+|-----------------|---------|
+| `path({ index, openedAt })` | the path of each file, called when it is opened (`index` 0, 1, 2, …; `openedAt` = `Date.now()`). Must give a new path per `index` |
+| `maxBytes?`, `maxAgeMs?` | roll before a write that would make the file larger than `maxBytes`, or once it has been open for `maxAgeMs` |
+| `serializeSample?` | custom serializer; defaults to `JSON.stringify` |
+| `roll()` | close the current file and continue in a new one |
+| `path`, `index` | the file currently written to |
+
+- Nothing is dropped: each record goes to exactly one file.
+- The limits are checked on `write`, so the sink runs no timers: a file is not rolled while nothing
+  is written to it, and an empty file is never rolled (`roll()` on one is a no-op).
+- `file-closed` (`path`, `index`) fires for every finished file, in index order, the last one
+  included. `close` fires once, after `end()` has closed every file. The owner ends the sink as
+  usual — here when the observer closes.
 
 ### Other records: e.g. mediasoup pipe transport stats
 
