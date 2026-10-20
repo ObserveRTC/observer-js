@@ -37,6 +37,8 @@ export type RemoteTrackResolvers = {
  */
 export class RemoteTrackResolver {
 	private readonly _publisherIdToOutboundTrack = new Map<string, ObservedOutboundTrack>();
+	// The publisher id each outbound track was indexed under, so removal does not depend on its current attachments.
+	private readonly _outboundTrackPublisherIds = new Map<ObservedOutboundTrack, string>();
 	private readonly _subscriberIdToInboundTrack = new Map<string, ObservedInboundTrack>();
 
 	/**
@@ -96,6 +98,7 @@ export class RemoteTrackResolver {
 			observer.off('outbound-track-updated', onOutboundUpdated);
 			this._pendingInboundTracks.clear();
 			this._pendingOutboundTracks.clear();
+			this._outboundTrackPublisherIds.clear();
 		});
 
 		observer.on('inbound-track-added', onInboundAdded);
@@ -190,6 +193,7 @@ export class RemoteTrackResolver {
 		this._pendingOutboundTracks.delete(outboundTrack);
 
 		this._publisherIdToOutboundTrack.set(publisherId, outboundTrack);
+		this._outboundTrackPublisherIds.set(outboundTrack, publisherId);
 		// Unconsumed until a subscriber links below — a new publisher legitimately starts this way.
 		this.observedCall.unconsumedOutboundTracks.add(outboundTrack);
 
@@ -210,8 +214,9 @@ export class RemoteTrackResolver {
 	private _removeOutboundTrack(outboundTrack: ObservedOutboundTrack) {
 		this._pendingOutboundTracks.delete(outboundTrack);
 
-		const publisherId = this.resolvers.resolveOutboundTrackPublisherId(outboundTrack);
+		const publisherId = this._outboundTrackPublisherIds.get(outboundTrack);
 
+		this._outboundTrackPublisherIds.delete(outboundTrack);
 		// Only clear the map entry if it still points at this track (guards republish races).
 		if (publisherId && this._publisherIdToOutboundTrack.get(publisherId) === outboundTrack) {
 			this._publisherIdToOutboundTrack.delete(publisherId);

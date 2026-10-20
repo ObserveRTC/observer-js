@@ -1,4 +1,9 @@
 import { EventEmitter } from 'node:events';
+import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { Sink, ClientSinkParams } from './sinks/Sink';
+import type { ClientSample } from './schema/ClientSample';
 import { createLogger } from './common/logger';
 import { ObservedClient, ObservedClientEvents, ObservedClientSettings } from './ObservedClient';
 import { Observer } from './Observer';
@@ -107,6 +112,9 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 	/** Ancestry base shared by all Observer-bus events originating at this call. */
 	public readonly eventScope: ObservedCallScope;
+	public readonly sinks: SinkRegistry;
+	public readonly extensionStats: ExtensionStatsRegistry;
+
 	private closeTimer?: ReturnType<typeof setTimeout>;
 
 	public constructor(
@@ -119,6 +127,8 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 
 		this.eventScope = { observer: this.observer, observedCall: this };
 		this.callId = settings.callId;
+		this.sinks = new SinkRegistry(this.observer.sinks);
+		this.extensionStats = new ExtensionStatsRegistry(this.callId, this.sinks);
 		this.appData = (settings.appData ?? {}) as AppData;
 		this.scoreCalculator = new DefaultCallScoreCalculator(this);
 		this.detectors = new Detectors();
@@ -261,6 +271,10 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			if (client.leftAt) maxSampleTimestamps = Math.max(maxSampleTimestamps ?? client.leftAt, client.leftAt);
 		}
 
+		// After the clients, which ended their own sample sinks.
+		this.extensionStats.close();
+		this.sinks.clear();
+
 		if (this.startedAt === undefined) this.startedAt = minSampleTimestamps;
 		if (this.endedAt === undefined) this.endedAt = maxSampleTimestamps;
 
@@ -277,6 +291,18 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		this.activeIssuesRegistry.clear();
 		this.emit('close');
 		this._notify('call-closed', { ...this.eventScope });
+	}
+
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public getObservedClient<ClientAppData extends Record<string, unknown> = Record<string, unknown>>(clientId: string): ObservedClient<ClientAppData> | undefined {
@@ -359,11 +385,13 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 			this.closeTimer = undefined;
 		}
 
+		const clientSink = this._createClientSink(settings.clientId);
+
 		this.emit('newclient', result);
 		this._notify('client-added', { ...this.eventScope, observedClient: result });
 
-		if (result.sink) {
-			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: result.sink });
+		if (clientSink) {
+			this._notify('client-sink-created', { ...this.eventScope, observedClient: result, sink: clientSink });
 		}
 
 		if (wasEmpty) {
@@ -426,6 +454,39 @@ export class ObservedCall<AppData extends Record<string, unknown> = Record<strin
 		if (!client.leftAt) return;
 
 		this.endedAt = Math.max(this.endedAt ?? client.leftAt, client.leftAt);
+	}
+
+	private _createClientSink(clientId: string): Sink<ClientSample> | undefined {
+		const config = this.observer.config.saveClientSamples as {
+			jsonlPath?: (params: ClientSinkParams<ObservedCall>) => string | undefined,
+			sink?: (params: ClientSinkParams<ObservedCall>) => Sink<ClientSample> | undefined,
+		} | undefined;
+
+		if (!config || (!config.jsonlPath && !config.sink)) return undefined;
+		if (config.jsonlPath && config.sink) {
+			logger.warn('saveClientSamples: give either jsonlPath or sink, not both; no client samples are saved');
+
+			return undefined;
+		}
+
+		// Sink ids are unique per observer: checked before the factory runs, so a clash opens no file.
+		if (this.observer.sinks.get(clientId)) {
+			logger.warn('No sample sink for client %s in call %s: sink id %s is already in use', clientId, this.callId, clientId);
+
+			return undefined;
+		}
+
+		const params: ClientSinkParams<ObservedCall> = { id: clientId, observedCall: this, clientId };
+
+		if (config.jsonlPath) {
+			const jsonlPath = config.jsonlPath(params);
+
+			return jsonlPath === undefined ? undefined : this.sinks.createFromDestination(clientId, { jsonlPath });
+		}
+
+		const sink = config.sink?.(params);
+
+		return sink ? this.sinks.createFromDestination(clientId, { sink }) : undefined;
 	}
 
 	/** Emit an Observer-bus event scoped to this call. */

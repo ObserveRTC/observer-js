@@ -62,7 +62,7 @@ and emits a single, unified stream of typed events the application can react to.
 11. [Call summaries](#call-summaries)
 12. [Remote track resolution (mediasoup / SFU)](#remote-track-resolution-mediasoup--sfu)
 13. [Mediasoup router observation](#mediasoup-router-observation)
-14. [Sinks (per-client sample persistence)](#sinks-per-client-sample-persistence)
+14. [Sinks](#sinks)
 15. [Injecting data into a client](#injecting-data-into-a-client)
 16. [Logging](#logging)
 17. [Design notes](#design-notes)
@@ -83,14 +83,14 @@ yarn add @observertc/observer-js
 works the same whether your project is ESM or CommonJS — your import line is unchanged either way:
 
 ```ts
-import { Observer, ClientSample, createJsonlFileSinkFactory } from '@observertc/observer-js';
+import { Observer, ClientSample, JsonlFileSink } from '@observertc/observer-js';
 ```
 
 In an ESM project this resolves to the `.mjs` build; in a CommonJS project (where TypeScript
 compiles your `import` down to `require()`) it resolves to the `.js` build. Everything is exported
 from the single `@observertc/observer-js` entry. Written in TypeScript; ships type declarations for
 both formats (`dist/index.d.ts` for `require`, `dist/index.d.mts` for `import`). Runtime
-dependencies: `@bufbuild/protobuf`, `events`, `uuid`. The library does **not** bundle a logger or
+dependencies: `@bufbuild/protobuf`, `uuid`. The library does **not** bundle a logger or
 any transport — see [Logging](#logging).
 
 `ClientSample` and friends are re-exported from this package, and are also published as the
@@ -404,7 +404,7 @@ See [Mediasoup router observation](#mediasoup-router-observation) for the full d
 | Event | Extra | Fires when |
 |-------|-------|-----------|
 | `client-added` | — | a client is created |
-| `client-sink-created` | `{ sink: ClientSampleSink }` | a per-client sink was created (only when `createClientSink` returns one); fires right after `client-added` |
+| `client-sink-created` | `{ sink: Sink<ClientSample> }` | the client's sample sink was created through `saveClientSamples`; fires right after `client-added` |
 | `client-updated` | `{ sample: ClientSample, elapsedTimeInMs: number, context?: AcceptContext }` | the client processed a sample |
 | `client-closed` | — | the client closed |
 | `client-joined` | — | first `CLIENT_JOINED` event seen |
@@ -479,8 +479,11 @@ type ObserverConfig<AppData = Record<string, unknown>> = {
     // (incl. lazily by accept()). appData is application-owned; accept `context` never touches it.
     createCallAppData?: (p: { callId: string; observer: Observer; acceptCtx?: AcceptContext }) => Record<string, unknown>;
     createClientAppData?: (p: { clientId: string; observedCall: ObservedCall; acceptCtx?: AcceptContext }) => Record<string, unknown>;
-    // sink factory — produces a per-client sink that receives every accepted sample (see Sinks).
-    createClientSink?: (p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined;
+    // a JSONL file per client: return its path, or undefined for none (see Sinks).
+    // where each client's samples are saved: exactly one of jsonlPath / sink, each a per-client callback (see Sinks).
+    saveClientSamples?:
+      | { jsonlPath: (p: { id: string; clientId: string; observedCall: ObservedCall }) => string | undefined }
+      | { sink: (p: { id: string; clientId: string; observedCall: ObservedCall }) => Sink<ClientSample> | undefined };
     // remote-track-resolver factory — produces a call's RemoteTrackResolver (see Remote track resolution).
     createRemoteTrackResolver?: (observedCall: ObservedCall) => RemoteTrackResolver | undefined;
   };
@@ -591,7 +594,7 @@ Key members:
 
 - `readonly clientId: string`, `appData: AppData`, `readonly call: ObservedCall`
 - `readonly observedPeerConnections: Map<string, ObservedPeerConnection>`
-- `readonly sink?: ClientSampleSink` — the per-client sink (see [Sinks](#sinks-per-client-sample-persistence)), if `createClientSink` is configured; listen on it for `close`/`error`
+- `get sink(): Sink<ClientSample> | undefined` — the sink under its client id in `call.sinks` (see [Sinks](#sinks)); listen on it for `close`/`error`
 - **Injection API** (queue app data to be merged into the next sample processing):
   `injectEvent(ClientEvent)`, `injectIssue(ClientIssue)`, `injectMetaData(ClientMetaData)`,
   `injectExtensionStat(ExtensionStat)`, `injectAttachment(attachments: Record<string, unknown>)`
@@ -1905,127 +1908,256 @@ observer.on('mediasoup-router-removed', ({ observedMediasoupRouter }: ObservedMe
 
 ---
 
-## Sinks (per-client sample persistence)
+## Sinks
 
-A **sink** receives the samples a client accepts — for archival, streaming, or later offline
-replay. Each `ObservedClient` gets its **own** sink, produced by the
-`ObserverConfig.createClientSink` factory when the client is created (return `undefined` for no
-sink). The client pushes every accepted sample to its sink, and `end()`s it on close.
+A **sink** is a destination for records — client samples, a mediasoup transport's `getStats()`,
+anything the application wants to keep. Sinks are agnostic about what passes through them; their
+**lifecycle is owned by the object they are registered on**, through that object's `sinks`
+registry. The library never polls: what is written, and when, is the application's.
 
-### The `ClientSampleSink` base class
+| Registry | Ended when | Typical use |
+|----------|-----------|-------------|
+| `observer.sinks` | the observer closes | worker- or process-level stats |
+| `observedCall.sinks` | the call closes | each client's sample sink (under its client id), call-level stats |
+| `observedMediasoupRouter.sinks` | the router closes | e.g. one file per pipe transport |
 
-`ClientSampleSink` is an **abstract base class** (a typed `EventEmitter`). You create a sink by
-**subclassing it** and implementing `write` and `end`. It is **object-mode**: `write` receives
-the `ClientSample` *object*, so each sink decides how (or whether) to serialize it — JSON line,
-protobuf, a remote POST body, an in-memory push, etc.
+`observer.sinks` is the parent of every call's and router's registry. **Sink ids are unique per
+observer**: creating a sink with an id that any registry of the observer already holds is refused
+(`create` returns `undefined`, and nothing is constructed). A registry sees its own sinks and its descendants', so `observer.sinks.write(id, record)`
+reaches any sink, and `observer.close()` ends every sink that is left — including those of routers
+that are still open, since the observer does not close mediasoup routers.
+
+### `SinkRegistry`
+
+| Method | Does |
+|--------|------|
+| `create(SinkClass, settings)` | constructs `new SinkClass(settings)` and registers it under `settings.id` (generated when omitted); `undefined` if the id is taken |
+| `add(sink): boolean` | registers a sink constructed elsewhere under its own `id`; `false` if the id is taken (the sink stays yours to end). Prefer `create` for sinks that open a resource on construction: it checks the id first |
+| `createFromDestination(id, destination)` | registers the sink a `SinkDestination` describes under `id`: `{ jsonlPath }` creates a `JsonlFileSink` (the id is checked first), `{ sink }` adds your sink (its `id` must be `id`). `undefined` if refused; a refused `sink` is ended |
+| `owns(id): boolean` | whether `id` was added to this registry itself, not to a descendant |
+| `get<T>(id)` | the sink, if any (own or a descendant's) |
+| `write(id, record): boolean` | writes to the sink; `false` if there is none, or on backpressure |
+| `clear()` | ends every sink of the registry and its descendants |
+| `size`, `keys()`, `values()` | own and descendants' sinks |
+
+There is no `remove`: **`sink.end()` closes a sink and removes it from its registry**, which frees
+its id. The registry attaches an `error` listener to each sink, so a failing destination is logged
+and never crashes the process.
+
+### The `Sink<T>` interface
 
 ```ts
-import { ClientSampleSink, ClientSample } from '@observertc/observer-js';
+import type { Sink, SinkSettings } from '@observertc/observer-js';
 
-abstract class ClientSampleSink /* extends EventEmitter */ {
-  abstract write(sample: ClientSample): boolean;   // accept one sample; `false` = backpressure
-  abstract end(): void;                            // flush; emit `close` when the destination is ready
-
-  // typed events (inherited): the listener signature is inferred from the event name
-  on(event: 'close' | 'finish' | 'drain', listener: () => void): this;
-  on(event: 'error', listener: (err: Error) => void): this;
-  // ...and the matching `once` / `off` / `emit`
+interface Sink<T = unknown> {          // typically: class X extends EventEmitter implements Sink<T>
+  readonly id: string;                 // unique per observer
+  write(record: T): boolean;           // `false` once ended (nothing written), or on backpressure
+  end(): void;                         // idempotent; MUST emit `ended` synchronously, then flush and emit `close`
+  on / once / off(event, listener);    // the events below
 }
+
+type SinkSettings = { id: string };    // what `create` passes to the constructor, with your own settings
 ```
+
+An implementation must emit `ended` from `end()` — that is how its registry removes it and frees
+its id — refuse writes after it, and emit `close` / `error` for its destination.
 
 | Event | Meaning |
 |-------|---------|
+| `ended` | `end()` was called: no more writes, removed from its registry |
 | `close` | the destination is fully written and closed (e.g. a file flushed and its fd closed) — "ready" |
 | `error` | the destination failed |
 | `finish` | `end()` was processed and queued data flushed (before `close`) |
 | `drain` | the buffer drained after backpressure; safe to write more |
 
-The library calls `write(sample)` **synchronously** per accepted sample (it is not awaited),
-`end()`s the sink when the client closes, and attaches an `error` listener so a failing sink
-can't crash the process (it also catches throws from `write`/`end`). The application — which
-created the sink — listens for `close` (destination ready) and `error`. Because `write` isn't
-awaited in the `accept()` hot path, **backpressure and batching are the sink's concern**.
+`ClientSampleSink` is `Sink<ClientSample>`. Built-in implementations:
 
-### Built-in sinks
+| Export | Notes |
+|--------|-------|
+| `JsonlFileSink<T = ClientSample>` / `createJsonlFileSink<T>({ path, serializeSample? })` | appends one JSON line per record; wraps `fs.WriteStream` and re-emits its events; exposes `readonly path`. The directory **must exist** |
+| `RollingJsonlFileSink<T>` | JSONL over a sequence of files for long-lived owners: rolls on `maxBytes`, `maxAgeMs` or `roll()`; `file-closed` per finished file. See [Rolling files](#rolling-files) |
+| `InMemorySink` / `createInMemorySink(samples?)` | collects client samples into `.samples`; emits `close` on `end()` |
+
+### Client samples
+
+A client writes every accepted sample to the sink registered under its **client id** in its call's
+registry (`observedClient.sink` returns it), and ends that sink when it closes. The
+**`saveClientSamples`** config option decides it — exactly one of two per-client callbacks, the same
+`jsonlPath` / `sink` pair as `createExtensionStats` takes:
+
+| `saveClientSamples` | Called per client with `{ id, observedCall, clientId }`, returns | Sink |
+|---------------------|------------------------------------------------------------------|------|
+| `{ jsonlPath }` | the path of the client's file, or `undefined` | a `JsonlFileSink` at that path, created by the library under the client id |
+| `{ sink }` | your `Sink<ClientSample>`, or `undefined` | that sink; its `id` must be `id` |
 
 ```ts
-import { Observer, createJsonlFileSinkFactory } from '@observertc/observer-js';
-
 const observer = new Observer({
-  // one ./stats/<callId>__<clientId>.jsonl per client
-  createClientSink: createJsonlFileSinkFactory({ directory: './stats' }),
+  saveClientSamples: {
+    jsonlPath: ({ observedCall, clientId }) => `./stats/${observedCall.callId}__${clientId}.jsonl`,
+  },
 });
 
-// React when a sink is created for a client:
 observer.on('client-sink-created', ({ observedClient, sink }) => {
-  sink.on('close', () => {
-    // the file is fully flushed and its fd closed — ready to upload, move, etc.
-  });
+  if (sink instanceof JsonlFileSink) sink.once('close', () => uploadFile(sink.path));   // flushed & fd closed → ready
 });
 ```
 
-| Export | Signature | Notes |
-|--------|-----------|-------|
-| `createJsonlFileSinkFactory` | `({ directory, flags?, getFileName?, serializeSample? }) => ClientSampleSinkFactory` | per-client JSONL files; path defaults to `${callId}__${clientId}.jsonl` under `directory` (which **must exist**) |
-| `createJsonlFileSink` | `({ path, flags?, serializeSample? }) => ClientSampleSink` | a single JSONL file; wraps `fs.WriteStream` and re-emits its `close`/`finish`/`drain`/`error` |
-| `JsonlFileSink` | `class extends ClientSampleSink` | the underlying class; exposes `readonly path` so a `close` handler knows which file is ready |
-| `createInMemorySink` / `InMemorySink` | `(samples?: ClientSample[]) => InMemorySink` | collects the accepted **sample objects** into `.samples: ClientSample[]`; emits `close` on `end()` |
+**A client's sample sink id is its client id.** The `id` the callbacks receive is that id, and
+with `jsonlPath` the library uses it for you. Sink ids are unique per observer, so **client ids
+must be unique across the observer's open calls** — client monitors generate uuids, so this
+normally holds. A client whose id is already a sink id gets no sink, and a warning is logged.
 
-`serializeSample?: (sample: ClientSample) => string` overrides the default `JSON.stringify` for
-the JSONL sinks (e.g. to redact or reshape before writing).
+The callback is called only when the id is free, so a clash opens no file; `undefined` gives that
+client no sink. A returned sink with a different id is ended and not used. Giving both `jsonlPath`
+and `sink` is a compile error (and refused at runtime). For a JSONL file with a custom serializer,
+use `sink: ({ id }) => new JsonlFileSink({ id, path, serializeSample })`.
 
-### Reading sink-specific info (e.g. the file path)
-
-The bus hands you the sink as the base `ClientSampleSink`. To read information specific to a sink
-type — for a file sink, where it was written — **narrow with `instanceof`** and read the sink's
-public fields. `JsonlFileSink` exposes `path`:
+Any other destination works the same way — return your own implementation:
 
 ```ts
-import { JsonlFileSink } from '@observertc/observer-js';
-
-observer.on('client-sink-created', ({ observedClient, sink }) => {
-  if (sink instanceof JsonlFileSink) {
-    const { path } = sink;                          // the file this client's samples go to
-    sink.once('close', () => uploadFile(path));     // close = flushed & fd closed → ready
-  }
-});
-```
-
-The general pattern: each concrete sink exposes whatever it wants as `public readonly` fields, and
-consumers narrow (`instanceof YourSink`) to read them. Your own sinks do the same.
-
-### Writing your own sink
-
-Subclass `ClientSampleSink` and emit the lifecycle events yourself — for any non-file
-destination (a remote endpoint, a message queue, an object store, …):
-
-```ts
-import { ClientSampleSink, ClientSample, ClientSampleSinkFactory } from '@observertc/observer-js';
-
-class HttpSink extends ClientSampleSink {
+class HttpSink extends EventEmitter implements ClientSampleSink {
+  readonly id: string;
+  private readonly url: string;
   private buffer: ClientSample[] = [];
-  constructor(private readonly url: string) { super(); }
+  private ended = false;
 
+  constructor(settings: SinkSettings & { url: string }) {
+    super();
+    this.id = settings.id;
+    this.url = settings.url;
+  }
   write(sample: ClientSample): boolean {
+    if (this.ended) return false;
     this.buffer.push(sample);                  // batch; decide your own backpressure
     return true;
   }
   end(): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.emit('ended');                        // required: removes it from its registry
     fetch(this.url, { method: 'POST', body: JSON.stringify(this.buffer) })
       .then(() => this.emit('close'))          // signal "destination ready"
       .catch((err) => this.emit('error', err));
   }
 }
 
-const createClientSink: ClientSampleSinkFactory = ({ clientId, observedCall }) =>
-  new HttpSink(`https://stats.example.com/${observedCall.callId}/${clientId}`);
+new Observer({
+  saveClientSamples: {
+    sink: ({ id, clientId }) => new HttpSink({ id, url: `https://stats.example.com/${clientId}` }),   // id: the client id
+  },
+});
 
-const observer = new Observer({ createClientSink });
+// Or later, on `client-added`, if the client has no sink yet:
+// observedCall.sinks.create(HttpSink, { id: observedClient.clientId, url })
 ```
 
-`observedClient.sink?` exposes the created sink; the `client-sink-created` event delivers it on
-the bus with full ancestry. `ClientSampleSinkFactory` is
-`(p: { clientId: string; observedCall: ObservedCall }) => ClientSampleSink | undefined`.
+Client ids double as sink ids, so they must be unique across the observer's open calls (client
+monitors generate uuids). A client whose id is already a sink id gets no sample file, and a
+warning is logged.
+
+The library calls `write(sample)` **synchronously** per accepted sample (it is not awaited), so
+**backpressure and batching are the sink's concern**.
+
+### Extension stats
+
+Stats the library does not collect itself can be kept as **extension stats** on the object they
+belong to — `observer` (e.g. a mediasoup worker's resource usage), `observedCall` (an SFU's view of
+the call) or `observedMediasoupRouter` (a pipe transport's `getStats()`): the last data per id, and
+optionally a sink that receives every data. The API is the same on all three; a call is shown.
+
+```ts
+// Register the id, with a JSONL file that receives every data accepted for it.
+call.createExtensionStats({ id: `${call.callId}:sfu`, jsonlPath: './stats/sfu.jsonl' });
+
+// Or with a sink of your own; its id must be the extension stats id.
+call.createExtensionStats({ id: `${call.callId}:metrics`, sink: new HttpSink({ id: `${call.callId}:metrics`, url }) });
+
+// Your own polling: keep the last data, and write it to the sink with the same id, if any.
+call.acceptExtensionStats(`${call.callId}:sfu`, await collectSfuStats(call.callId));
+
+call.getExtensionStats<SfuStats>(`${call.callId}:sfu`);   // the last data
+call.extensionStats.values;                               // Map<id, last data>
+```
+
+| Method | Behaviour |
+|--------|-----------|
+| `createExtensionStats({ id, jsonlPath? \| sink? })` | Registers `id`, optionally with a sink — at most one of: `jsonlPath`, the path of a JSONL file, for which a `JsonlFileSink` is created under `id`; or `sink`, a `Sink` of your own, whose `id` must be `id`. Either ends and replaces a sink the owner itself already holds under `id`. Returns the sink, or `undefined`: with neither, on a closed owner, when `id` is already in `extensionStats.values` (created or accepted before), with a `sink` whose id differs, or when another object of the observer holds a sink with this id. Giving both is a compile error (refused at runtime). A refused `sink` is ended; for `jsonlPath`, the id is checked before the file is opened |
+| `acceptExtensionStats(id, data)` | Keeps `data` as the last data of `id` and writes it to the owner's sink with the same id, if there is one (a sink that throws is logged). `id` does not have to be created first. Dropped once the owner is closed |
+| `getExtensionStats<T>(id)` | The last data accepted for `id`, or `undefined` |
+| `extensionStats` | The owner's `ExtensionStatsRegistry`: `values` (`Map<id, last data>`), `closed`, `close()`, and `create` / `accept` / `get`, which the three methods above delegate to |
+
+**Extension stats ids share the sink id namespace, so they must be unique per observer**: the sink
+of extension stats `x` is the sink with id `x`. Consequently:
+
+- With `jsonlPath` or `sink`, a sink the owner itself already holds under the id is ended and replaced. A sink another object holds under it is never touched: no sink is created and the data
+  is only kept.
+- With neither, a sink you add later under the id (`sinks.create(SinkClass, { id, ... })` or
+  `sinks.add(sink)`) receives the data accepted from then on.
+- An id accepted before it was created can no longer be created with a sink; give it one with
+  `sinks.create` / `sinks.add` instead.
+
+**Lifecycle.** When the owner (the call, the router or the observer) closes, it closes its
+`extensionStats`: data accepted afterwards is dropped, `createExtensionStats` returns `undefined`,
+and the extension stats' sinks are ended. The owner's other sinks end with its `sinks.clear()` as
+usual. `extensionStats.close()` can also be called directly; it ends only the extension stats'
+sinks.
+
+### Rolling files
+
+`JsonlFileSink` writes one file for the sink's whole life — right for calls and clients, which come
+and go. An owner that lives for days or months, such as the observer itself, needs its records cut
+into several files. `RollingJsonlFileSink` does that: it writes JSONL to a sequence of files, closing
+the current one and opening the next (*rolling*) before a write that would exceed `maxBytes`, once
+the current file has been open for `maxAgeMs`, or when `roll()` is called.
+
+```ts
+const sink = new RollingJsonlFileSink({
+  id: 'sfu-cpu',
+  path: ({ index, openedAt }) => `./stats/sfu-cpu-${openedAt}-${index}.jsonl`,
+  maxBytes: 100 * 1024 * 1024,
+  maxAgeMs: 60 * 60 * 1000,
+});
+
+sink.on('file-closed', (path, index) => uploadFile(path));   // flushed & fd closed → ready
+
+observer.createExtensionStats({ id: 'sfu-cpu', sink });
+setInterval(async () => observer.acceptExtensionStats('sfu-cpu', await readCpu()), 5_000).unref();
+```
+
+| Option / member | Meaning |
+|-----------------|---------|
+| `path({ index, openedAt })` | the path of each file, called when it is opened (`index` 0, 1, 2, …; `openedAt` = `Date.now()`). Must give a new path per `index` |
+| `maxBytes?`, `maxAgeMs?` | roll before a write that would make the file larger than `maxBytes`, or once it has been open for `maxAgeMs` |
+| `serializeSample?` | custom serializer; defaults to `JSON.stringify` |
+| `roll()` | close the current file and continue in a new one |
+| `path`, `index` | the file currently written to |
+
+- Nothing is dropped: each record goes to exactly one file.
+- The limits are checked on `write`, so the sink runs no timers: a file is not rolled while nothing
+  is written to it, and an empty file is never rolled (`roll()` on one is a no-op).
+- `file-closed` (`path`, `index`) fires for every finished file, in index order, the last one
+  included. `close` fires once, after `end()` has closed every file. The owner ends the sink as
+  usual — here when the observer closes.
+
+### Other records: e.g. mediasoup pipe transport stats
+
+```ts
+const observedRouter = observer.createObservedMediasoupRouter({ router })!;
+
+observedRouter.on('transport-sample-added', ({ transport }) => {
+  if (transport.type !== 'pipe') return;
+
+  observedRouter.sinks.create(JsonlFileSink<PipeTransportStats[]>, { id: transport.id, path: `./stats/${transport.id}.jsonl` });
+
+  // Your own polling. A write to an ended sink returns false, so a late getStats() is harmless.
+  const timer = setInterval(async () => observedRouter.sinks.write(transport.id, await transport.getStats()), 5_000);
+
+  transport.observer.once('close', () => clearInterval(timer));
+});
+```
+
+The files are ended when the router closes, which is usually the lifetime you want for a pipe
+transport's stats. To end one earlier, call `end()` on it: `observedRouter.sinks.get(transport.id)?.end()`.
 
 ---
 
@@ -2036,7 +2168,7 @@ client-reported `ClientSample` — a room id or display name, an application-lev
 (*"recording started"*), a server-detected issue, an extension stat, or a device/meta item.
 `ObservedClient` exposes **injection** methods that merge such data into the client's sample stream,
 so it updates the live model **and** is persisted to the client's
-[sink](#sinks-per-client-sample-persistence) exactly like sampled data.
+[sink](#sinks) exactly like sampled data.
 
 | Method | Adds to the sample's | Surfaces as |
 |--------|----------------------|-------------|
@@ -2161,7 +2293,7 @@ event map + scope types), `detectors/` (`Detector`, `Detectors`, and one file pe
 `ActiveIssueTracker`, `ActiveIssuesRegistry`, `ObservedClientIssueRegistry`), `scores/`,
 `resolvers/` (remote-track resolvers), `utils/` (`stats`, `SlidingWindow`, `TrendTester`,
 `CallHealthAggregator`), `common/` (`logger`, `utils`, `Middleware`), `schema/`
-(sample/event/meta types), and `sinks/` (the `ClientSampleSink` base + `JsonlFileSink` /
+(sample/event/meta types), and `sinks/` (the `Sink` interface, `SinkRegistry` + `JsonlFileSink` /
 `InMemorySink`, re-exported from the package root).
 
 **Conventions to follow when developing further:**

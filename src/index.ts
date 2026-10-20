@@ -1,4 +1,4 @@
-export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory, AcceptMiddleware, AcceptMiddlewarePayload } from './Observer';
+export type { ObserverEvents, SampleRejectedReason, AcceptContext, CallAppDataFactory, ClientAppDataFactory, AcceptMiddleware, AcceptMiddlewarePayload, SaveClientSamplesConfig } from './Observer';
 export type {
 	ObserverEventBase,
 	ObservedCallScope,
@@ -295,21 +295,32 @@ export { TrendTester } from './utils/TrendTester';
 export type { TrendTesterConfig } from './utils/TrendTester';
 export { createLogger, setObserverLogger } from './common/logger';
 export type { Logger, ObserverLogger } from './common/logger';
-// Per-client sample sinks. `ClientSampleSink` is the base class to subclass for a custom
-// destination; `JsonlFileSink` / `InMemorySink` are the built-ins.
+// Sinks. `Sink<T>` (and `ClientSampleSink = Sink<ClientSample>`) is the interface to implement for a custom destination;
+// `JsonlFileSink` / `RollingJsonlFileSink` / `InMemorySink` are the built-ins; `SinkRegistry` owns their lifecycle.
 export {
-	ClientSampleSink,
+	SinkRegistry,
+	ExtensionStatsRegistry,
 	JsonlFileSink,
 	createJsonlFileSink,
-	createJsonlFileSinkFactory,
+	RollingJsonlFileSink,
 	InMemorySink,
 	createInMemorySink,
 } from './sinks';
 export type {
+	Sink,
+	SinkEvents,
+	SinkSettings,
+	SinkDestination,
+	ClientSinkParams,
+	SinkConstructor,
+	SinkCreateSettings,
+	CreateExtensionStatsSettings,
+	ClientSampleSink,
 	ClientSampleSinkEvents,
-	ClientSampleSinkFactory,
 	JsonlFileSinkOptions,
-	JsonlFileSinkFactoryOptions,
+	RollingJsonlFileSinkOptions,
+	RollingJsonlFileSinkEvents,
+	RollingJsonlFileInfo,
 } from './sinks';
 export { Middleware } from './common/Middleware';
 // `Observer.acceptMiddlewares` is a public field of this type, so the type has to be nameable.

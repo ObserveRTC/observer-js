@@ -11,7 +11,7 @@ import { normalizeScoreReasons, parseJsonAs, parseJsonObject } from './common/ut
 import { CalculatedScore } from './scores/CalculatedScore';
 import type { AcceptContext } from './Observer';
 import type { ObserverEvents, ObservedClientScope } from './ObserverEvents';
-import type { ClientSampleSink } from './sinks/ClientSampleSink';
+import type { Sink } from './sinks/Sink';
 import { percentileOfHistogram } from './utils/stats';
 import { ObservedClientIssueRegistry } from './issues/ObservedClientIssueRegistry';
 import { ActiveClientIssue, RESOLVED_ISSUE_SUFFIX, baseIssueType, isClientIssueResolutionEntry } from './issues/ActiveClientIssue';
@@ -76,9 +76,6 @@ export declare interface ObservedClient {
 export class ObservedClient<AppData extends Record<string, unknown> = Record<string, unknown>> extends EventEmitter {
 	public readonly clientId: string;
 	public readonly observedPeerConnections = new Map<string, ObservedPeerConnection>();
-
-	/** Per-client sink (from `ObserverConfig.createClientSink`), if any. */
-	public readonly sink?: ClientSampleSink;
 
 	/** Ancestry base shared by all Observer-bus events originating at this client. */
 	public readonly eventScope: ObservedClientScope;
@@ -253,7 +250,6 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		this.setMaxListeners(Infinity);
 
 		this.eventScope = { observer: call.observer, observedCall: call, observedClient: this };
-		this.sink = call.observer.config.createClientSink?.({ clientId: settings.clientId, observedCall: call });
 		this.clientId = settings.clientId;
 		this.appData = (settings.appData ?? {}) as AppData;
 
@@ -261,16 +257,18 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 			closeClientIfIdleForMs: settings.closeClientIfIdleForMs,
 		};
 
-		if (this.sink) {
-			const onError = (err: Error) => logger.warn('ClientSampleSink error for client %s: %o', this.clientId, err);
-
-			this.sink.once('close', () => this.sink?.off('error', onError));
-			this.sink.on('error', onError);
-		}
 		this.activeIssues = activeIssues;
 	}
 
 	/** The distinct `publicAddress`es currently known by this client's open peer connections. */
+	/**
+	 * The sink this client's samples are written to: whatever is registered under its client id in
+	 * `call.sinks` (the one created through `saveClientSamples`, or a sink the application added), if any.
+	 */
+	public get sink(): Sink<ClientSample> | undefined {
+		return this.call.sinks.get<Sink<ClientSample>>(this.clientId);
+	}
+
 	public get publicAddresses(): string[] {
 		const result = new Set<string>();
 
@@ -395,7 +393,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		try {
 			this.sink?.end();
 		} catch (err) {
-			logger.warn('ClientSampleSink.end failed for client %s: %o', this.clientId, err);
+			logger.warn('Sink end failed for client %s: %o', this.clientId, err);
 		}
 	}
 
@@ -649,7 +647,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		try {
 			this.sink?.write(sample);
 		} catch (err) {
-			logger.warn('ClientSampleSink.write failed for client %s: %o', this.clientId, err);
+			logger.warn('Sink write failed for client %s: %o', this.clientId, err);
 		}
 	}
 
@@ -1217,7 +1215,7 @@ export class ObservedClient<AppData extends Record<string, unknown> = Record<str
 		try {
 			this.sink?.write(finalSample);
 		} catch (err) {
-			logger.warn('ClientSampleSink.write failed during injection flush for client %s: %o', this.clientId, err);
+			logger.warn('Sink write failed during injection flush for client %s: %o', this.clientId, err);
 		}
 	}
 

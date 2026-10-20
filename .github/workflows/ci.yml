@@ -17,6 +17,9 @@ jobs:
           node-version: 22
           cache: yarn
 
+      - name: Test snapshot publisher
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Install
         run: yarn install --frozen-lockfile
 

@@ -12,6 +12,10 @@ import {
 	MediasoupPipeTransportSampleEventMap,
 } from './schema/MediasoupRouter';
 import { createLogger } from './common/logger';
+import { SinkRegistry } from './sinks/SinkRegistry';
+import { ExtensionStatsRegistry } from './sinks/ExtensionStatsRegistry';
+import type { CreateExtensionStatsSettings } from './sinks/ExtensionStatsRegistry';
+import type { Sink } from './sinks/Sink';
 
 const logger = createLogger('ObservedMediasoupRouter');
 
@@ -94,6 +98,9 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	public readonly webrtcTransportIds = new Set<string>();
 	public closed = false;
 
+	public readonly sinks: SinkRegistry;
+	public readonly extensionStats: ExtensionStatsRegistry;
+
 	// Id -> sample indexes over the arrays in `this.sample`, so an entity can be reached in O(1)
 	// instead of scanning (`sample.producers.find(...)`). They hold the *same* objects as the arrays.
 	private readonly _transportSamples = new Map<string, MediasoupTransportSample>();
@@ -103,14 +110,21 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 	private readonly _dataConsumerSamples = new Map<string, MediasoupDataConsumerSample>();
 	private readonly _enrich?: MediasoupSampleEnricher;
 
+	/**
+	 * @param parentSinks the parent of `sinks`: `observer.sinks`, passed by
+	 * `Observer.createObservedMediasoupRouter`. Internal; a router constructed directly has none.
+	 */
 	public constructor(
 		settings: ObservedMediasoupRouterSettings<AppData>,
+		parentSinks?: SinkRegistry,
 	) {
 		super();
 
 		this.router = settings.router;
 		this.appData = (settings.appData ?? {}) as AppData;
 		this._enrich = settings.enrich;
+		this.sinks = new SinkRegistry(parentSinks);
+		this.extensionStats = new ExtensionStatsRegistry(this.router.id, this.sinks);
 		this.sample = {
 			routerId: this.router.id,
 			attachments: settings.attachments ?? {},
@@ -204,7 +218,21 @@ export class ObservedMediasoupRouter<AppData extends Record<string, unknown> = R
 		this.closed = true;
 		if (this.sample.closedAt === undefined) this.sample.closedAt = Date.now();
 
+		this.extensionStats.close();
+		this.sinks.clear();
 		this.emit('close');
+	}
+
+	public createExtensionStats<T = unknown>(settings: CreateExtensionStatsSettings<T>): Sink<T> | undefined {
+		return this.extensionStats.create(settings);
+	}
+
+	public acceptExtensionStats(id: string, data: unknown): void {
+		this.extensionStats.accept(id, data);
+	}
+
+	public getExtensionStats<T>(id: string): T | undefined {
+		return this.extensionStats.get<T>(id);
 	}
 
 	public addTransport = (transport: types.Transport) => {
